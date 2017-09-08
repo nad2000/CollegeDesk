@@ -1,0 +1,181 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "lCN5vrLm4aVeMT4LP4nrmtiiISI=",
+			"path": "github.com/Bowery/prompt",
+			"revision": "753711fea478fa77bb2c83f6ec244b814d4a8bad",
+			"revisionTime": "2017-09-01T14:12:32Z"
+		},
+		{
+			"checksumSHA1": "6VGFARaK8zd23IAiDf7a+gglC8k=",
+			"path": "github.com/dchest/safefile",
+			"revision": "855e8d98f1852d48dde521e0522408d1fe7e836a",
+			"revisionTime": "2015-10-22T10:31:44Z"
+		},
+		{
+			"checksumSHA1": "3VJcSYFds0zeIO5opOs0AoKm3Mw=",
+			"path": "github.com/google/shlex",
+			"revision": "6f45313302b9c56850fc17f99e40caebce98c716",
+			"revisionTime": "2015-01-27T13:39:51Z"
+		},
+		{
+			"checksumSHA1": "eljaapCfm6h09IEjd97AM9Pdeuo=",
+			"path": "github.com/jinzhu/gorm",
+			"revision": "b1885a643b4977c9089d77eb07c0fd96591f94b8",
+			"revisionTime": "2017-09-04T14:39:19Z"
+		},
+		{
+			"checksumSHA1": "4VZ1gLZHMumRjV3fclS1aX8S1aQ=",
+			"path": "github.com/jinzhu/gorm/dialects/sqlite",
+			"revision": "b1885a643b4977c9089d77eb07c0fd96591f94b8",
+			"revisionTime": "2017-09-04T14:39:19Z"
+		},
+		{
+			"checksumSHA1": "VIp1lZm6joWhlNdwhady8u//qRw=",
+			"path": "github.com/jinzhu/inflection",
+			"revision": "1c35d901db3da928c72a72d8458480cc9ade058f",
+			"revisionTime": "2017-01-02T12:52:26Z"
+		},
+		{
+			"checksumSHA1": "NKvKUGq0lp/GjLS7Ffp7BAjcoTg=",
+			"path": "github.com/kardianos/govendor",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "EDbwTD6uQOx+c13If7Jxo9hFbs4=",
+			"path": "github.com/kardianos/govendor/cliprompt",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "h2DW7UVdLQezZ/bIO8coAymYJfE=",
+			"path": "github.com/kardianos/govendor/context",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "dOHKd4E20ITWqZsPWH4aeJ76QBU=",
+			"path": "github.com/kardianos/govendor/help",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "IykEJ4TqvyJkhw38fzH6pDJ5/VM=",
+			"path": "github.com/kardianos/govendor/internal/gt",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "o4kzxtOY8Zsu4WW5gtTt3R6LjUM=",
+			"path": "github.com/kardianos/govendor/internal/pathos",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "EhhUfeAlLL/QzVM2gwwGXv5ogAc=",
+			"path": "github.com/kardianos/govendor/internal/vfilepath",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "2Vg+J79rEhmtnprErQ7fTZdneIk=",
+			"path": "github.com/kardianos/govendor/internal/vos",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "htUbpr1XLqp+3MgVJZyUnmQVEtQ=",
+			"path": "github.com/kardianos/govendor/migrate",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "b+z44yevn7HU3Z+ixsPS88dBKUs=",
+			"path": "github.com/kardianos/govendor/pkgspec",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "B+3eGc34fJuF5dHsOSCa9dSdHQY=",
+			"path": "github.com/kardianos/govendor/prompt",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "IxhaEmrGrxDUyL43UrInPxHDjic=",
+			"path": "github.com/kardianos/govendor/run",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "bwT5csmFy3Vle+BSj8C+bIuIJUY=",
+			"path": "github.com/kardianos/govendor/vcs",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "a7fBBNrf1j2DncY4nvrvXoara6I=",
+			"path": "github.com/kardianos/govendor/vendorfile",
+			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",
+			"revisionTime": "2017-08-22T17:50:32Z"
+		},
+		{
+			"checksumSHA1": "HZz0DsJx9ikgTOz4yQ9LF3yX3gU=",
+			"path": "github.com/mattn/go-sqlite3",
+			"revision": "05548ff55570cdb9ac72ff4a25a3b5e77a6fb7e5",
+			"revisionTime": "2017-09-01T08:40:05Z"
+		},
+		{
+			"checksumSHA1": "RmL9wD49aRz+vCugwed0ccVTMeY=",
+			"path": "github.com/pkg/errors",
+			"revision": "c605e284fe17294bda444b34710735b29d1a9d90",
+			"revisionTime": "2017-05-05T04:36:39Z"
+		},
+		{
+			"checksumSHA1": "Ox14rsqfCCSwJtDnXw+/ksb/BvU=",
+			"path": "golang.org/x/crypto/bcrypt",
+			"revision": "81e90905daefcd6fd217b62423c0908922eadb30",
+			"revisionTime": "2017-08-25T20:24:07Z"
+		},
+		{
+			"checksumSHA1": "xPfwt1dqdvXLKVesMfw+qcuCNfs=",
+			"path": "golang.org/x/crypto/blowfish",
+			"revision": "81e90905daefcd6fd217b62423c0908922eadb30",
+			"revisionTime": "2017-08-25T20:24:07Z"
+		},
+		{
+			"checksumSHA1": "85tF+h700YYA4HKj3Ch8Z0pkh2c=",
+			"path": "golang.org/x/net/context",
+			"revision": "66aacef3dd8a676686c7ae3716979581e8b03c47",
+			"revisionTime": "2016-09-14T00:11:54Z"
+		},
+		{
+			"checksumSHA1": "lcbHM5NDEX1QZfzQRpFA089WgP4=",
+			"path": "golang.org/x/sys/unix",
+			"revision": "a45f55524b7ec57890cfa6c6bc06b47f877be0d1",
+			"revisionTime": "2017-09-06T22:16:59Z"
+		},
+		{
+			"checksumSHA1": "vAfK7wo9r5S0HlmVPCLEG1bTA6M=",
+			"path": "golang.org/x/tools/go/vcs",
+			"revision": "3b1faeda9afbcba128c2d794b38ffe7982141139",
+			"revisionTime": "2017-09-01T15:45:22Z"
+		},
+		{
+			"checksumSHA1": "538I8ghUdvZa25NxgMUDpq14Qic=",
+			"path": "gopkg.in/check.v1",
+			"revision": "20d25e2804050c1cd24a7eea1e7a6447dd0e74ec",
+			"revisionTime": "2016-12-08T18:13:25Z"
+		},
+		{
+			"checksumSHA1": "UhL+LmSkOZ8Vb8EDX3fW3DCp68g=",
+			"path": "gopkg.in/yaml.v2",
+			"revision": "eb3733d160e74a9c7e442f435eb3bea458e1d19f",
+			"revisionTime": "2017-08-12T16:00:11Z"
+		}
+	],
+	"rootPath": "extracting-cell-formula-blocks-from-excel-file-and-writing-to"
+}
