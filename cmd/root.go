@@ -1,0 +1,370 @@
+// Copyright © 2017 Radomirs Cirskis
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/jinzhu/gorm"
+
+	log "github.com/Sirupsen/logrus"
+	homedir "github.com/mitchellh/go-homedir"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/tealeg/xlsx"
+)
+
+const defaultColor = "FFFFFF00"
+
+// colCode - Excel column code
+func colCode(colIndex int) string {
+
+	if colIndex > 25 {
+		return colCode(colIndex/26-1) + colCode(colIndex%26)
+	}
+	return string(colIndex + int('A'))
+}
+
+func cellAddress(rowIndex, colIndex int) string {
+	return colCode(colIndex) + strconv.Itoa(rowIndex+1)
+}
+
+// Workbook - Excel file / workbook
+type Workbook struct {
+	ID       int
+	FileName string
+}
+
+// Worksheet - Excel workbook worksheet
+type Worksheet struct {
+	ID         int
+	WorkbookID int `gorm:"index"`
+	Name       string
+}
+
+// Block - the univormly filled with specific color block
+type Block struct {
+	ID          int
+	WorksheetID int `gorm:"index"`
+	Color       string
+	Range       string
+	Formula     string // first block cell formula
+
+	s struct{ r, c int } `gorm:"-"` // Top-left cell
+	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
+}
+
+func (b *Block) save() {
+	b.Range = b.address()
+	db.Save(b)
+}
+
+func (b *Block) address() string {
+	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
+}
+
+// fildWhole finds whole range of the specified color
+// starting with the set top-left cell.
+func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
+	b.e = b.s
+	for i, row := range sheet.Rows {
+
+		// skip all rows until the first block row
+		if i < b.s.r {
+			continue
+		}
+
+		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
+		// Range is discontinued or of a differnt color
+		if len(row.Cells) < b.e.c ||
+			row.Cells[b.e.c].GetStyle().Fill.FgColor != color {
+			log.Debugf("Reached the edge row of the block at row %d", i)
+			b.e.r = i - 1
+			break
+		} else {
+			b.e.r = i
+		}
+
+		for j, cell := range row.Cells {
+			// skip columns until the start:
+			if j < b.s.c {
+				continue
+			}
+
+			fgColor := cell.GetStyle().Fill.FgColor
+			// Reached the top-right corner:
+			if fgColor == color {
+				// log.Debugf("Found a cell belonging to the block at %d, %d: %#v", i, j, cell)
+				c := Cell{
+					BlockID: b.ID,
+					Formula: cell.Formula(),
+					Value:   cell.Value,
+					Range:   cellAddress(i, j),
+				}
+				db.Create(&c)
+				b.e.c = j
+			} else {
+				log.Debugf("Reached the edge column  of the block at column %d", j)
+				b.e.c = j - 1
+				break
+			}
+		}
+	}
+}
+
+func (b *Block) isInside(r, c int) bool {
+	return (b.s.r <= r &&
+		r <= b.e.r &&
+		b.s.c <= c &&
+		c <= b.e.c)
+}
+
+type blockList []Block
+
+// alreadyFound tests if the range containing the cell
+// coordinates hhas been already found.
+func (bl *blockList) alreadyFound(r, c int) bool {
+	for _, b := range *bl {
+		if b.isInside(r, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// Cell - a sigle cell of the block
+type Cell struct {
+	ID      int
+	BlockID int `gorm:"index"`
+	Range   string
+	Formula string
+	Value   string
+}
+
+var (
+	cfgFile string
+	db      *gorm.DB
+	debug   bool
+	verbose bool
+)
+
+// RootCmd represents the base command when called without any subcommands
+var RootCmd = &cobra.Command{
+	Use:   "extract-blocks",
+	Short: "Extracts Cell Formula Blocks from Excel file and writes to MySQL",
+	Long: `Conditions that define Cell Formula Block - 
+  (i) Any contiguous (unbroken) range of excel cells containing cell formula
+  (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
+  (iii) The formula in the range of cells should be the same except the changes due to relative cell references.`,
+	Run: extractBlocks,
+}
+
+func extractBlocks(cmd *cobra.Command, args []string) {
+
+	debugCmd(cmd)
+	color := flagString(cmd, "color")
+	for _, excelFileName := range args {
+		xlFile, err := xlsx.OpenFile(excelFileName)
+		if err != nil {
+			log.Error(err)
+		}
+		wb := Workbook{FileName: excelFileName}
+		db.Create(&wb)
+
+		if verbose {
+			log.Infof("*** Processing workbook: %s", excelFileName)
+		}
+
+		for _, sheet := range xlFile.Sheets {
+
+			if verbose {
+				log.Infof("Processing worksheet: %s", sheet.Name)
+			}
+
+			ws := Worksheet{Name: sheet.Name, WorkbookID: wb.ID}
+			db.Create(&ws)
+			blocks := blockList{}
+			sheetFillColors := []string{}
+
+			for i, row := range sheet.Rows {
+				if debug {
+					log.Printf("\n\nROW %d\n=========\n", i)
+				}
+				for j, cell := range row.Cells {
+
+					if blocks.alreadyFound(i, j) {
+						continue
+					}
+					style := cell.GetStyle()
+					fgColor := style.Fill.FgColor
+					if fgColor != "" {
+						for _, c := range sheetFillColors {
+							if c == fgColor {
+								goto MATCH
+							}
+						}
+						sheetFillColors = append(sheetFillColors, fgColor)
+					}
+				MATCH:
+
+					if fgColor == color {
+
+						b := Block{
+							WorksheetID: ws.ID,
+							Color:       color,
+							Formula:     cell.Formula(),
+						}
+						b.s.r, b.s.c = i, j
+
+						db.Create(&b)
+
+						b.findWhole(sheet, color)
+						b.save()
+						blocks = append(blocks, b)
+						if verbose {
+							log.Infof("Found block: %#v", b)
+						}
+
+					}
+				}
+				if debug {
+					log.Println()
+				}
+			}
+			if len(blocks) == 0 {
+				log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, excelFileName, color)
+				if len(sheetFillColors) > 0 {
+					log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+				}
+			}
+		}
+
+	}
+}
+
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the rootCmd.
+func Execute() {
+
+	var err error
+	db, err = gorm.Open("sqlite3", "test.db")
+	if err != nil {
+		log.Error(err)
+		log.Panic("failed to connect database")
+	}
+	defer db.Close()
+
+	// Migrate the schema
+	log.Debug("Add to automigrate...")
+	db.AutoMigrate(&Workbook{})
+	db.AutoMigrate(&Worksheet{})
+	db.AutoMigrate(&Block{})
+	db.AutoMigrate(&Cell{})
+
+	if err := RootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
+	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().BoolP("debug", "d", false, "Show full stack trace on error.")
+	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
+	RootCmd.PersistentFlags().StringP("user", "u", "", "The MySQL user name to use when connecting to the server.")
+	RootCmd.PersistentFlags().StringP("password", "p", "", "The password to use when connecting to the server.")
+	RootCmd.PersistentFlags().BoolP("force", "f", false, "Repeat extraction if files were already handle.")
+	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		// Use config file from the flag.
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory.
+		home, err := homedir.Dir()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		// Search config in home directory with name ".extract-blocks" (without extension).
+		viper.AddConfigPath(home)
+		viper.SetConfigName(".extract-blocks")
+	}
+
+	viper.AutomaticEnv() // read in environment variables that match
+
+	// If a config file is found, read it in.
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Println("Using config file:", viper.ConfigFileUsed())
+	}
+}
+
+func flagString(cmd *cobra.Command, name string) string {
+	return cmd.Flag(name).Value.String()
+}
+
+func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
+	val, err := cmd.Flags().GetStringSlice(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return
+}
+
+func flagStringArray(cmd *cobra.Command, name string) (val []string) {
+	val, err := cmd.Flags().GetStringArray(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return
+}
+
+func flagBool(cmd *cobra.Command, name string) (val bool) {
+	val, err := cmd.Flags().GetBool(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return
+}
+
+func flagInt(cmd *cobra.Command, name string) (val int) {
+	val, err := cmd.Flags().GetInt(name)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return
+}
+
+func debugCmd(cmd *cobra.Command) {
+	debug = flagBool(cmd, "debug")
+	verbose = flagBool(cmd, "verbose")
+
+	if debug {
+		log.SetLevel(log.DebugLevel)
+		title := fmt.Sprintf("Command %q called with flags:", cmd.Name())
+		log.Info(title)
+		log.Info(strings.Repeat("=", len(title)))
+		cmd.DebugFlags()
+	}
+}
