@@ -113,7 +113,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			fgColor := cell.GetStyle().Fill.FgColor
 			// Reached the top-right corner:
 			if fgColor == color {
-				// log.Debugf("Found a cell belonging to the block at %d, %d: %#v", i, j, cell)
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
@@ -185,14 +184,15 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	debugCmd(cmd)
 	var err error
 
-	user := flagString(cmd, "user")
-	if user == "" {
-		db, err = gorm.Open("sqlite3", "test.db")
+	mysql := flagString(cmd, "mysql")
+	if mysql == "" {
+		sqlite := flagString(cmd, "sqlite")
+		db, err = gorm.Open("sqlite3", sqlite)
+		log.Debugf("Connecting to Sqlite3 DB: %s", sqlite)
+	} else {
+		log.Debugf("Connecting to MySQL DB: %s", mysql)
+		db, err = gorm.Open("mysql", mysql)
 	}
-	// else {
-	// 	host -
-	// 	db, err = gorm.Open("mysql", "test.db")
-	// }
 
 	if err != nil {
 		log.Error(err)
@@ -303,8 +303,13 @@ func init() {
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	RootCmd.PersistentFlags().BoolP("debug", "d", false, "Show full stack trace on error.")
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
-	RootCmd.PersistentFlags().StringP("user", "u", "", "The MySQL user name to use when connecting to the server.")
-	RootCmd.PersistentFlags().StringP("password", "p", "", "The password to use when connecting to the server.")
+	RootCmd.PersistentFlags().StringP("mysql", "M", "", "MySQL connection string, e.g., https://github.com/go-sql-driver/mysql#examples.")
+	RootCmd.PersistentFlags().StringP("sqlite", "S", "blocks.db", "Sqlite3 database file.")
+	// RootCmd.PersistentFlags().StringP("user", "u", "", "The MySQL user name to use when connecting to the server.")
+	// RootCmd.PersistentFlags().StringP("password", "p", "", "The password to use when connecting to the server.")
+
+	// RootCmd.PersistentFlags().StringP("database", "D", "", "Database to use.")
+	// RootCmd.PersistentFlags().StringP("host", "H", "", "Connect to host.")
 	RootCmd.PersistentFlags().BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
 }
@@ -331,12 +336,17 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		log.Info("Using config file:", viper.ConfigFileUsed())
 	}
 }
 
 func flagString(cmd *cobra.Command, name string) string {
-	return cmd.Flag(name).Value.String()
+
+	value := cmd.Flag(name).Value.String()
+	if value != "" {
+		return value
+	}
+	return viper.Get(name).(string)
 }
 
 func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
