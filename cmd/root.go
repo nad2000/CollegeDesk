@@ -8,7 +8,7 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// WITHOUT WARRANTIES OR ONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
@@ -59,14 +59,18 @@ type Worksheet struct {
 
 // Block - the univormly filled with specific color block
 type Block struct {
-	ID          int
+	ID          int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
 	WorksheetID int `gorm:"index"`
 	Color       string
-	Range       string
-	Formula     string // first block cell formula
+	Range       string `gorm:"column:BlockCellRange"`
+	Formula     string `gorm:"column:BlockFormula"` // first block cell formula
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
+}
+
+func (b Block) TableName() string {
+	return "ExcelBlocks"
 }
 
 func (b *Block) save() {
@@ -167,7 +171,9 @@ var (
 var RootCmd = &cobra.Command{
 	Use:   "extract-blocks",
 	Short: "Extracts Cell Formula Blocks from Excel file and writes to MySQL",
-	Long: `Conditions that define Cell Formula Block - 
+	Long: `Extracts Cell Formula Blocks from Excel file and writes to MySQL.
+	
+Conditions that define Cell Formula Block - 
   (i) Any contiguous (unbroken) range of excel cells containing cell formula
   (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
   (iii) The formula in the range of cells should be the same except the changes due to relative cell references.`,
@@ -177,6 +183,30 @@ var RootCmd = &cobra.Command{
 func extractBlocks(cmd *cobra.Command, args []string) {
 
 	debugCmd(cmd)
+	var err error
+
+	user := flagString(cmd, "user")
+	if user == "" {
+		db, err = gorm.Open("sqlite3", "test.db")
+	}
+	// else {
+	// 	host -
+	// 	db, err = gorm.Open("mysql", "test.db")
+	// }
+
+	if err != nil {
+		log.Error(err)
+		log.Panic("failed to connect database")
+	}
+	defer db.Close()
+
+	// Migrate the schema
+	log.Debug("Add to automigrate...")
+	db.AutoMigrate(&Workbook{})
+	db.AutoMigrate(&Worksheet{})
+	db.AutoMigrate(&Block{})
+	db.AutoMigrate(&Cell{})
+
 	color := flagString(cmd, "color")
 	for _, excelFileName := range args {
 		xlFile, err := xlsx.OpenFile(excelFileName)
@@ -260,21 +290,6 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-
-	var err error
-	db, err = gorm.Open("sqlite3", "test.db")
-	if err != nil {
-		log.Error(err)
-		log.Panic("failed to connect database")
-	}
-	defer db.Close()
-
-	// Migrate the schema
-	log.Debug("Add to automigrate...")
-	db.AutoMigrate(&Workbook{})
-	db.AutoMigrate(&Worksheet{})
-	db.AutoMigrate(&Block{})
-	db.AutoMigrate(&Cell{})
 
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
