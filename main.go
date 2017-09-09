@@ -1,47 +1,25 @@
+// Copyright © 2017 Radomirs Cirskis
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
-	"github.com/jinzhu/gorm"
+	"extract-blocks/cmd"
+
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
-type Product struct {
-	gorm.Model
-	Code  string
-	Price uint
-}
-
-type Email struct {
-	ID         int
-	UserID     int    `gorm:"index"`                          // Foreign key (belongs to), tag `index` will create index for this column
-	Email      string `gorm:"type:varchar(100);unique_index"` // `type` set sql type, `unique_index` will create unique index for this column
-	Subscribed bool
-}
-
 func main() {
-	db, err := gorm.Open("sqlite3", "test.db")
-	if err != nil {
-		log.Panic("failed to connect database")
-	}
-	defer db.Close()
-
-	// Migrate the schema
-	log.Info("Add to automigrate...")
-	db.AutoMigrate(&Product{})
-	db.AutoMigrate(&Email{})
-
-	// Create
-	db.Create(&Product{Code: "L1212", Price: 1000})
-
-	// Read
-	var product Product
-	db.First(&product, 1)                   // find product with id 1
-	db.First(&product, "code = ?", "L1212") // find product with code l1212
-
-	// Update - update product's price to 2000
-	db.Model(&product).Update("Price", 2000)
-
-	// Delete - delete product
-	db.Delete(&product)
+	cmd.Execute()
 }
