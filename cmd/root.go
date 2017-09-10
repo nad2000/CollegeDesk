@@ -52,9 +52,10 @@ type Workbook struct {
 
 // Worksheet - Excel workbook worksheet
 type Worksheet struct {
-	ID         int
-	WorkbookID int `gorm:"index"`
-	Name       string
+	ID               int
+	WorkbookID       int `gorm:"index"`
+	Name             string
+	WorkbookFileName string
 }
 
 // Block - the univormly filled with specific color block
@@ -208,13 +209,23 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	db.AutoMigrate(&Cell{})
 
 	color := flagString(cmd, "color")
+	force := flagBool(cmd, "force")
 	for _, excelFileName := range args {
 		xlFile, err := xlsx.OpenFile(excelFileName)
 		if err != nil {
 			log.Error(err)
 		}
-		wb := Workbook{FileName: excelFileName}
-		db.Create(&wb)
+		var wb Workbook
+		result := db.FirstOrCreate(&wb, Workbook{FileName: excelFileName})
+
+		if !result.RecordNotFound() {
+			if !force {
+				log.Errorf("File %q was already processed.", excelFileName)
+				return
+			} else {
+				log.Warnf("File %q was already processed.", excelFileName)
+			}
+		}
 
 		if verbose {
 			log.Infof("*** Processing workbook: %s", excelFileName)
@@ -226,8 +237,12 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 				log.Infof("Processing worksheet: %s", sheet.Name)
 			}
 
-			ws := Worksheet{Name: sheet.Name, WorkbookID: wb.ID}
-			db.Create(&ws)
+			var ws Worksheet
+			db.FirstOrCreate(&ws, Worksheet{
+				Name:             sheet.Name,
+				WorkbookID:       wb.ID,
+				WorkbookFileName: wb.FileName,
+			})
 			blocks := blockList{}
 			sheetFillColors := []string{}
 
