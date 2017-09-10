@@ -46,8 +46,9 @@ func cellAddress(rowIndex, colIndex int) string {
 
 // Workbook - Excel file / workbook
 type Workbook struct {
-	ID       int
-	FileName string
+	ID         int
+	FileName   string
+	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID;AssociationForeignKey:Refer"`
 }
 
 // Worksheet - Excel workbook worksheet
@@ -56,6 +57,7 @@ type Worksheet struct {
 	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
+	Blocks           []Block
 }
 
 // Block - the univormly filled with specific color block
@@ -65,9 +67,14 @@ type Block struct {
 	Color       string
 	Range       string `gorm:"column:BlockCellRange"`
 	Formula     string `gorm:"column:BlockFormula"` // first block cell formula
+	Cells       []Cell
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
+}
+
+func (b Block) String() string {
+	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q}", b.Range, b.Color, b.Formula)
 }
 
 func (b Block) TableName() string {
@@ -207,6 +214,9 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	db.AutoMigrate(&Worksheet{})
 	db.AutoMigrate(&Block{})
 	db.AutoMigrate(&Cell{})
+	db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+	db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+	db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
 
 	color := flagString(cmd, "color")
 	force := flagBool(cmd, "force")
@@ -217,6 +227,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 		}
 		var wb Workbook
 		result := db.FirstOrCreate(&wb, Workbook{FileName: excelFileName})
+		// result := db.First(&wb, Workbook{FileName: excelFileName})
 
 		if !result.RecordNotFound() {
 			if !force {
@@ -224,6 +235,10 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 				return
 			} else {
 				log.Warnf("File %q was already processed.", excelFileName)
+				var worksheets []Worksheet
+				db.Model(&wb).Related(&worksheets)
+				log.Debugf("Deleting worksheets: %#v", worksheets)
+				db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 			}
 		}
 
@@ -282,7 +297,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 						b.save()
 						blocks = append(blocks, b)
 						if verbose {
-							log.Infof("Found block: %#v", b)
+							log.Infof("Found: %s", b)
 						}
 
 					}
