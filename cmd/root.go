@@ -361,7 +361,11 @@ func flagString(cmd *cobra.Command, name string) string {
 	if value != "" {
 		return value
 	}
-	return viper.Get(name).(string)
+	conf := viper.Get(name)
+	if conf == nil {
+		return ""
+	}
+	return conf.(string)
 }
 
 func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
