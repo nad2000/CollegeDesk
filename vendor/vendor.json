@@ -15,6 +15,12 @@
 			"revisionTime": "2015-10-22T10:31:44Z"
 		},
 		{
+			"checksumSHA1": "N5D1aYGZh5OUVArhFW0voidER3A=",
+			"path": "github.com/go-sql-driver/mysql",
+			"revision": "26471af196a17ee75a22e6481b5a5897fb16b081",
+			"revisionTime": "2017-08-22T21:48:09Z"
+		},
+		{
 			"checksumSHA1": "3VJcSYFds0zeIO5opOs0AoKm3Mw=",
 			"path": "github.com/google/shlex",
 			"revision": "6f45313302b9c56850fc17f99e40caebce98c716",
@@ -129,10 +135,34 @@
 			"revisionTime": "2017-09-01T08:40:05Z"
 		},
 		{
+			"checksumSHA1": "V/quM7+em2ByJbWBLOsEwnY3j/Q=",
+			"path": "github.com/mitchellh/go-homedir",
+			"revision": "b8bc1bf767474819792c23f32d8286a45736f1c6",
+			"revisionTime": "2016-12-03T19:45:07Z"
+		},
+		{
 			"checksumSHA1": "RmL9wD49aRz+vCugwed0ccVTMeY=",
 			"path": "github.com/pkg/errors",
 			"revision": "c605e284fe17294bda444b34710735b29d1a9d90",
 			"revisionTime": "2017-05-05T04:36:39Z"
+		},
+		{
+			"checksumSHA1": "233z49QwgSzdLglskKTSdI/CPQ8=",
+			"path": "github.com/spf13/cobra",
+			"revision": "b26b538f693051ac6518e65672de3144ce3fbedc",
+			"revisionTime": "2017-07-31T17:04:27Z"
+		},
+		{
+			"checksumSHA1": "XeB0yeQkOMI+CWrllrbTrg4iOEs=",
+			"path": "github.com/spf13/viper",
+			"revision": "25b30aa063fc18e48662b86996252eabdcf2f0c7",
+			"revisionTime": "2017-07-23T05:52:07Z"
+		},
+		{
+			"checksumSHA1": "k5xVPC/SVoPvn4AH5gIXOUAss/o=",
+			"path": "github.com/tealeg/xlsx",
+			"revision": "a06c872a6c402f194e9c817cf30f3840a75f8ffe",
+			"revisionTime": "2017-08-22T08:08:02Z"
 		},
 		{
 			"checksumSHA1": "Ox14rsqfCCSwJtDnXw+/ksb/BvU=",
