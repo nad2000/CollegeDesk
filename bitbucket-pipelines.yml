@@ -9,7 +9,7 @@ pipelines:
   default:
     - step:
         script: # Modify the commands below to build your repository.
-          - apt-get install upx-ucl
+          - apt install upx-ucl
           # - PACKAGE_PATH="${GOPATH}/src/bitbucket.org/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}"
           - PACKAGE_PATH="${GOPATH}/src/extract-blocks"
           - mkdir -pv "${PACKAGE_PATH}"
