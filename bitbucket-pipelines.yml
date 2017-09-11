@@ -9,11 +9,15 @@ pipelines:
   default:
     - step:
         script: # Modify the commands below to build your repository.
+          - sudo apt-get install upx-ucl
           # - PACKAGE_PATH="${GOPATH}/src/bitbucket.org/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}"
           - PACKAGE_PATH="${GOPATH}/src/extract-blocks"
           - mkdir -pv "${PACKAGE_PATH}"
           - tar -cO --exclude-vcs --exclude=bitbucket-pipelines.yml . | tar -xv -C "${PACKAGE_PATH}"
           - cd "${PACKAGE_PATH}"
-          - go get -v
-          - go build -v
-          - go test -v
+          # - go get -v
+          # - go build -v
+          - go build -v -o $(basename $PWD) main.go
+          - upx $(basename $PWD)
+          - ./$(basename $PWD) -v demo.xlsx
+          # - go test -v
