@@ -51,6 +51,25 @@ type Workbook struct {
 	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID;AssociationForeignKey:Refer"`
 }
 
+// reset deletes all underlying objects: worksheets, blocks, and cells
+func (wb *Workbook) reset() {
+
+	var worksheets []Worksheet
+	db.Model(&wb).Related(&worksheets)
+	log.Debugf("Deleting worksheets: %#v", worksheets)
+	for ws := range worksheets {
+		var blocks []Block
+		db.Model(&ws).Related(&blocks)
+		for _, b := range blocks {
+			log.Debugf("Deleting blocks: %#v", blocks)
+			db.Where("block_id = ?", b.ID).Delete(Cell{})
+			db.Delete(b)
+		}
+	}
+
+	db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
+}
+
 // Worksheet - Excel workbook worksheet
 type Worksheet struct {
 	ID               int
@@ -214,9 +233,11 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	db.AutoMigrate(&Worksheet{})
 	db.AutoMigrate(&Block{})
 	db.AutoMigrate(&Cell{})
-	db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
-	db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
-	db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+	if mysql != "" {
+		db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+		db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+	}
 
 	color := flagString(cmd, "color")
 	force := flagBool(cmd, "force")
@@ -235,10 +256,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 				return
 			} else {
 				log.Warnf("File %q was already processed.", excelFileName)
-				var worksheets []Worksheet
-				db.Model(&wb).Related(&worksheets)
-				log.Debugf("Deleting worksheets: %#v", worksheets)
-				db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
+				wb.reset()
 			}
 		}
 
