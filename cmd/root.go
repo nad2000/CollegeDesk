@@ -206,6 +206,20 @@ Conditions that define Cell Formula Block -
 	Run: extractBlocks,
 }
 
+func SetDb(db *gorm.DB) {
+	// Migrate the schema
+	log.Debug("Add to automigrate...")
+	db.AutoMigrate(&Workbook{})
+	db.AutoMigrate(&Worksheet{})
+	db.AutoMigrate(&Block{})
+	db.AutoMigrate(&Cell{})
+	if strings.HasPrefix(db.Dialect().GetName(), "myslq") {
+		db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+		db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+	}
+}
+
 func extractBlocks(cmd *cobra.Command, args []string) {
 
 	debugCmd(cmd)
@@ -223,21 +237,11 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 
 	if err != nil {
 		log.Error(err)
-		log.Panic("failed to connect database")
+		log.Fatalf("failed to connect database %q", mysql)
 	}
 	defer db.Close()
-
-	// Migrate the schema
-	log.Debug("Add to automigrate...")
-	db.AutoMigrate(&Workbook{})
-	db.AutoMigrate(&Worksheet{})
-	db.AutoMigrate(&Block{})
-	db.AutoMigrate(&Cell{})
-	if mysql != "" {
-		db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
-		db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
-		db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
-	}
+	SetDb(db)
+	//db.LogMode(true)
 
 	color := flagString(cmd, "color")
 	force := flagBool(cmd, "force")

@@ -29,8 +29,8 @@ func TestDemoFile(t *testing.T) {
 	defer db.Close()
 
 	db.First(&wb, cmd.Workbook{FileName: "demo.xlsx"})
-	result := db.Count(&cmd.Block{})
-	t.Log(result)
-	t.Log(wb.FileName)
-	t.Log("SUCCESS!")
+	if wb.FileName != "demo.xlsx" {
+		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
+		t.Fail()
+	}
 }
