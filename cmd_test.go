@@ -33,4 +33,13 @@ func TestDemoFile(t *testing.T) {
 		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
 		t.Fail()
 	}
+	var count int
+	db.Model(&cmd.Block{}).Count(&count)
+	if count != 3 {
+		t.Errorf("Expected 3 blocks, got: %d", count)
+	}
+	db.Model(&cmd.Cell{}).Count(&count)
+	if count != 30 {
+		t.Errorf("Expected 30 cells, got: %d", count)
+	}
 }
