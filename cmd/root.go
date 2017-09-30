@@ -17,7 +17,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/jinzhu/gorm"
@@ -31,17 +30,18 @@ import (
 
 const defaultColor = "FFFFFF00"
 
-// colCode - Excel column code
-func colCode(colIndex int) string {
+func cellAddress(rowIndex, colIndex int) string {
+	return xlsx.GetCellIDStringFromCoords(rowIndex, colIndex)
 
-	if colIndex > 25 {
-		return colCode(colIndex/26-1) + colCode(colIndex%26)
-	}
-	return string(colIndex + int('A'))
 }
 
-func cellAddress(rowIndex, colIndex int) string {
-	return colCode(colIndex) + strconv.Itoa(rowIndex+1)
+// relativeCellAddress converts cell ID into a relative R1C1 representation
+func RelativeCellAddress(rowIndex, colIndex int, cellID string) string {
+	x, y, err := xlsx.GetCoordsFromCellIDString(cellID)
+	if err != nil {
+		log.Fatalf("Failed to find coordinates for %q: %s", cellID, err.Error())
+	}
+	return fmt.Sprintf("R[%d]C[%d]", y-rowIndex, x-colIndex)
 }
 
 // Workbook - Excel file / workbook
@@ -81,12 +81,13 @@ type Worksheet struct {
 
 // Block - the univormly filled with specific color block
 type Block struct {
-	ID          int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
-	WorksheetID int `gorm:"index"`
-	Color       string
-	Range       string `gorm:"column:BlockCellRange"`
-	Formula     string `gorm:"column:BlockFormula"` // first block cell formula
-	Cells       []Cell
+	ID              int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
+	WorksheetID     int `gorm:"index"`
+	Color           string
+	Range           string `gorm:"column:BlockCellRange"`
+	Formula         string `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string // first block cell relative formula formula
+	Cells           []Cell
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -143,8 +144,9 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
-					Value:   cell.Value,
-					Range:   cellAddress(i, j),
+					//RelativeFormula: xlsx.GetCellIDStringFromCoords
+					Value: cell.Value,
+					Range: cellAddress(i, j),
 				}
 				db.Create(&c)
 				b.e.c = j
@@ -179,11 +181,16 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID      int
-	BlockID int `gorm:"index"`
-	Range   string
-	Formula string
-	Value   string
+	ID              int
+	BlockID         int `gorm:"index"`
+	Range           string
+	Formula         string
+	RelativeFormula string
+	Value           string
+}
+
+func (c *Cell) relativeFormula() string {
+	return "TODO"
 }
 
 var (

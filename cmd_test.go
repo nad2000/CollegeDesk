@@ -19,6 +19,25 @@ func init() {
 	wd, _ := os.Getwd()
 	log.Info("Running tests in: ", wd)
 	os.Setenv("TZ", "UTC")
+	if _, err := os.Stat(testDb); !os.IsNotExist(err) {
+		os.RemoveAll(testDb)
+	}
+}
+
+func TestR1C1(t *testing.T) {
+	for _, r := range []struct {
+		x, y       int
+		ID, expect string
+	}{
+		{0, 0, "A1", "R[0]C[0]"},
+		{1, 1, "A1", "R[-1]C[-1]"},
+		{3, 11, "A1", "R[-3]C[-11]"},
+		{111, 11, "$A1", "R[-111]C[-11]"}} {
+		relID := cmd.RelativeCellAddress(r.x, r.y, r.ID)
+		if relID != r.expect {
+			t.Errorf("Expecte %q for %#v; got %q", r.expect, r, relID)
+		}
+	}
 }
 
 func TestDemoFile(t *testing.T) {
