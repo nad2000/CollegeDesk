@@ -270,10 +270,9 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Error(err)
 		}
-		var wb Workbook
-		result := db.FirstOrCreate(&wb, Workbook{FileName: excelFileName})
-		// result := db.First(&wb, Workbook{FileName: excelFileName})
 
+		var wb Workbook
+		result := db.First(&wb, Workbook{FileName: excelFileName})
 		if !result.RecordNotFound() {
 			if !force {
 				log.Errorf("File %q was already processed.", excelFileName)
@@ -281,6 +280,9 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			}
 			log.Warnf("File %q was already processed.", excelFileName)
 			wb.reset()
+		} else {
+			wb = Workbook{FileName: excelFileName}
+			db.Create(&wb)
 		}
 
 		if verbose {
