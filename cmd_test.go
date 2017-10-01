@@ -40,6 +40,24 @@ func TestR1C1(t *testing.T) {
 	}
 }
 
+func TestRelativeFormulas(t *testing.T) {
+	for _, r := range []struct {
+		x, y       int
+		ID, expect string
+	}{
+		{
+			0, 0,
+			"A1 / B11 - 67 * $ZZ$123 % ZA$233",
+			"R[0]C[0] / R[10]C[1] - 67 * R[122]C[701] % R[232]C[676]",
+		},
+	} {
+		relID := cmd.RelativeFormula(r.x, r.y, r.ID)
+		if relID != r.expect {
+			t.Errorf("Expecte %q for %#v; got %q", r.expect, r, relID)
+		}
+	}
+}
+
 func TestDemoFile(t *testing.T) {
 	var wb cmd.Workbook
 	cmd.RootCmd.SetArgs([]string{"-S", testDb, "-d", "-f", "-v", "demo.xlsx"})
@@ -54,8 +72,8 @@ func TestDemoFile(t *testing.T) {
 	}
 	var count int
 	db.Model(&cmd.Block{}).Count(&count)
-	if count != 3 {
-		t.Errorf("Expected 3 blocks, got: %d", count)
+	if count != 22 {
+		t.Errorf("Expected 22 blocks, got: %d", count)
 	}
 	db.Model(&cmd.Cell{}).Count(&count)
 	if count != 30 {

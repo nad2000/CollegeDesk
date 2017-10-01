@@ -17,6 +17,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/jinzhu/gorm"
@@ -30,18 +31,31 @@ import (
 
 const defaultColor = "FFFFFF00"
 
+var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+
 func cellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(rowIndex, colIndex)
 
 }
 
-// relativeCellAddress converts cell ID into a relative R1C1 representation
+// RelativeCellAddress converts cell ID into a relative R1C1 representation
 func RelativeCellAddress(rowIndex, colIndex int, cellID string) string {
 	x, y, err := xlsx.GetCoordsFromCellIDString(cellID)
 	if err != nil {
 		log.Fatalf("Failed to find coordinates for %q: %s", cellID, err.Error())
 	}
 	return fmt.Sprintf("R[%d]C[%d]", y-rowIndex, x-colIndex)
+}
+
+// RelativeFormula transforms the cell formula into the relative in R1C1 notation
+func RelativeFormula(rowIndex, colIndex int, formula string) string {
+	cellIDs := cellIDRe.FindAllString(formula, -1)
+	for _, cellID := range cellIDs {
+		relCellID := RelativeCellAddress(rowIndex, colIndex, cellID)
+		log.Debugf("Replacing %q with %q at (%d, %d)", cellID, relCellID, rowIndex, colIndex)
+		formula = strings.Replace(formula, cellID, relCellID, -1)
+	}
+	return formula
 }
 
 // Workbook - Excel file / workbook
@@ -94,9 +108,11 @@ type Block struct {
 }
 
 func (b Block) String() string {
-	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q}", b.Range, b.Color, b.Formula)
+	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q, Relative Formula: %q}",
+		b.Range, b.Color, b.Formula, b.RelativeFormula)
 }
 
+// TableName overrides default table name for the model
 func (b Block) TableName() string {
 	return "ExcelBlocks"
 }
@@ -111,7 +127,7 @@ func (b *Block) address() string {
 }
 
 // fildWhole finds whole range of the specified color
-// starting with the set top-left cell.
+// and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 	b.e = b.s
 	for i, row := range sheet.Rows {
@@ -139,8 +155,9 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			}
 
 			fgColor := cell.GetStyle().Fill.FgColor
+			relFormula := RelativeFormula(i, j, cell.Formula())
 			// Reached the top-right corner:
-			if fgColor == color {
+			if fgColor == color && relFormula == b.RelativeFormula {
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
@@ -181,16 +198,11 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID              int
-	BlockID         int `gorm:"index"`
-	Range           string
-	Formula         string
-	RelativeFormula string
-	Value           string
-}
-
-func (c *Cell) relativeFormula() string {
-	return "TODO"
+	ID      int
+	BlockID int `gorm:"index"`
+	Range   string
+	Formula string
+	Value   string
 }
 
 var (
@@ -213,6 +225,7 @@ Conditions that define Cell Formula Block -
 	Run: extractBlocks,
 }
 
+// SetDb initializes DB
 func SetDb(db *gorm.DB) {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
@@ -265,10 +278,9 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			if !force {
 				log.Errorf("File %q was already processed.", excelFileName)
 				return
-			} else {
-				log.Warnf("File %q was already processed.", excelFileName)
-				wb.reset()
 			}
+			log.Warnf("File %q was already processed.", excelFileName)
+			wb.reset()
 		}
 
 		if verbose {
@@ -314,9 +326,10 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 					if fgColor == color {
 
 						b := Block{
-							WorksheetID: ws.ID,
-							Color:       color,
-							Formula:     cell.Formula(),
+							WorksheetID:     ws.ID,
+							Color:           color,
+							Formula:         cell.Formula(),
+							RelativeFormula: RelativeFormula(i, j, cell.Formula()),
 						}
 						b.s.r, b.s.c = i, j
 
