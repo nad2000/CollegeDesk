@@ -34,7 +34,7 @@ const defaultColor = "FFFFFF00"
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
 func cellAddress(rowIndex, colIndex int) string {
-	return xlsx.GetCellIDStringFromCoords(rowIndex, colIndex)
+	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
 
 }
 
@@ -140,7 +140,8 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
 		if len(row.Cells) < b.e.c ||
-			row.Cells[b.e.c].GetStyle().Fill.FgColor != color {
+			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
+			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
 			log.Debugf("Reached the edge row of the block at row %d", i)
 			b.e.r = i - 1
 			break
@@ -161,15 +162,16 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
-					//RelativeFormula: xlsx.GetCellIDStringFromCoords
-					Value: cell.Value,
-					Range: cellAddress(i, j),
+					Value:   cell.Value,
+					Range:   cellAddress(i, j),
 				}
 				db.Create(&c)
 				b.e.c = j
 			} else {
 				log.Debugf("Reached the edge column  of the block at column %d", j)
-				b.e.c = j - 1
+				if j > b.e.c {
+					b.e.c = j - 1
+				}
 				break
 			}
 		}
@@ -291,8 +293,13 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 
 		for _, sheet := range xlFile.Sheets {
 
+			if sheet.Hidden {
+				log.Infof("Skipping hidden worksheet %q", sheet.Name)
+				continue
+			}
+
 			if verbose {
-				log.Infof("Processing worksheet: %s", sheet.Name)
+				log.Infof("Processing worksheet %q", sheet.Name)
 			}
 
 			var ws Worksheet
@@ -305,9 +312,6 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			sheetFillColors := []string{}
 
 			for i, row := range sheet.Rows {
-				if debug {
-					log.Printf("\n\nROW %d\n=========\n", i)
-				}
 				for j, cell := range row.Cells {
 
 					if blocks.alreadyFound(i, j) {
@@ -345,9 +349,6 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 						}
 
 					}
-				}
-				if debug {
-					log.Println()
 				}
 			}
 			if len(blocks) == 0 {
