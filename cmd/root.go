@@ -44,7 +44,21 @@ func RelativeCellAddress(rowIndex, colIndex int, cellID string) string {
 	if err != nil {
 		log.Fatalf("Failed to find coordinates for %q: %s", cellID, err.Error())
 	}
-	return fmt.Sprintf("R[%d]C[%d]", y-rowIndex, x-colIndex)
+	var r1c1 string
+
+	if strings.Contains(cellID[1:], "$") {
+		r1c1 = fmt.Sprintf("R[%d]", y)
+	} else {
+		r1c1 = fmt.Sprintf("R[%+d]", y-rowIndex)
+	}
+
+	if cellID[0] == '$' {
+		r1c1 += fmt.Sprintf("C[%d]", x)
+	} else {
+		r1c1 += fmt.Sprintf("C[%+d]", x-colIndex)
+	}
+	//return fmt.Sprintf("R[%d]C[%d]", y-rowIndex, x-colIndex)
+	return r1c1
 }
 
 // RelativeFormula transforms the cell formula into the relative in R1C1 notation
@@ -139,7 +153,8 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
-		if len(row.Cells) < b.e.c ||
+		//log.Infof("*** b.e.c: %d, len: %d, %#v", b.e.c, len(row.Cells), row.Cells)
+		if len(row.Cells) <= b.e.c ||
 			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
 			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
 			log.Debugf("Reached the edge row of the block at row %d", i)

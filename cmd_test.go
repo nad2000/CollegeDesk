@@ -29,10 +29,10 @@ func TestR1C1(t *testing.T) {
 		x, y       int
 		ID, expect string
 	}{
-		{0, 0, "A1", "R[0]C[0]"},
+		{0, 0, "A1", "R[+0]C[+0]"},
 		{1, 1, "A1", "R[-1]C[-1]"},
 		{3, 11, "A1", "R[-3]C[-11]"},
-		{111, 11, "$A1", "R[-111]C[-11]"}} {
+		{111, 11, "$A1", "R[-111]C[0]"}} {
 		relID := cmd.RelativeCellAddress(r.x, r.y, r.ID)
 		if relID != r.expect {
 			t.Errorf("Expecte %q for %#v; got %q", r.expect, r, relID)
@@ -48,7 +48,7 @@ func TestRelativeFormulas(t *testing.T) {
 		{
 			0, 0,
 			"A1 / B11 - 67 * $ZZ$123 % ZA$233",
-			"R[0]C[0] / R[10]C[1] - 67 * R[122]C[701] % R[232]C[676]",
+			"R[+0]C[+0] / R[+10]C[+1] - 67 * R[122]C[701] % R[232]C[+676]",
 		},
 	} {
 		relID := cmd.RelativeFormula(r.x, r.y, r.ID)
@@ -72,8 +72,8 @@ func TestDemoFile(t *testing.T) {
 	}
 	var count int
 	db.Model(&cmd.Block{}).Count(&count)
-	if count != 22 {
-		t.Errorf("Expected 22 blocks, got: %d", count)
+	if count != 3 {
+		t.Errorf("Expected 3 blocks, got: %d", count)
 	}
 	db.Model(&cmd.Cell{}).Count(&count)
 	if count != 30 {
