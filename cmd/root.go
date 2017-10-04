@@ -26,7 +26,8 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tealeg/xlsx"
+	//"github.com/tealeg/xlsx"
+	"github.com/nad2000/xlsx"
 )
 
 const defaultColor = "FFFFFF00"
@@ -140,9 +141,22 @@ func (b *Block) address() string {
 	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
 }
 
+//  getCellComment returns cell comment text value
+func getCellComment(file *xlsx.File, cellID string) string {
+	if file.Comments != nil {
+		for _, c := range file.Comments {
+			if cellID == c.Ref {
+				return c.Text
+			}
+		}
+	}
+	return ""
+}
+
 // fildWhole finds whole range of the specified color
 // and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
+
 	b.e = b.s
 	for i, row := range sheet.Rows {
 
@@ -174,11 +188,18 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			relFormula := RelativeFormula(i, j, cell.Formula())
 			// Reached the top-right corner:
 			if fgColor == color && relFormula == b.RelativeFormula {
+				cellID := cellAddress(i, j)
+				commentText := ""
+				comment, ok := sheet.Comment[cellID]
+				if ok {
+					commentText = comment.Text
+				}
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
 					Value:   cell.Value,
-					Range:   cellAddress(i, j),
+					Range:   cellID,
+					Comment: commentText,
 				}
 				db.Create(&c)
 				b.e.c = j
@@ -220,6 +241,7 @@ type Cell struct {
 	Range   string
 	Formula string
 	Value   string
+	Comment string
 }
 
 var (
