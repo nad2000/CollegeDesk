@@ -19,6 +19,7 @@ type Sheet struct {
 	SheetViews  []SheetView
 	SheetFormat SheetFormat
 	AutoFilter  *AutoFilter
+	Comment     map[string]*comment
 }
 
 type SheetView struct {

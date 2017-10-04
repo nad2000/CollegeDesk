@@ -225,10 +225,12 @@
 			"revisionTime": "2017-05-23T03:00:23Z"
 		},
 		{
-			"checksumSHA1": "9mScA1+2NR86dxvq90q6G02bcC4=",
+			"checksumSHA1": "zZyDS+4wAnBWxe8pBsEpXPzvtD0=",
 			"path": "github.com/nad2000/xlsx",
-			"revision": "466a0a69fccec6236a79c9214acb5502dbc6fa9a",
-			"revisionTime": "2017-09-26T07:13:59Z"
+			"revision": "ee554bb19a79329194be00b42fd4d5f06e65178a",
+			"revisionTime": "2017-10-04T04:42:45Z",
+			"version": "cell-comment-reading",
+			"versionExact": "cell-comment-reading"
 		},
 		{
 			"checksumSHA1": "zZg0J0MqvnqXVYo644QDvnUinrc=",
