@@ -225,6 +225,12 @@
 			"revisionTime": "2017-05-23T03:00:23Z"
 		},
 		{
+			"checksumSHA1": "9mScA1+2NR86dxvq90q6G02bcC4=",
+			"path": "github.com/nad2000/xlsx",
+			"revision": "466a0a69fccec6236a79c9214acb5502dbc6fa9a",
+			"revisionTime": "2017-09-26T07:13:59Z"
+		},
+		{
 			"checksumSHA1": "zZg0J0MqvnqXVYo644QDvnUinrc=",
 			"path": "github.com/pelletier/go-toml",
 			"revision": "69d355db5304c0f7f809a2edc054553e7142f016",
