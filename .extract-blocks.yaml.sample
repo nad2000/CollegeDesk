@@ -1,1 +1,10 @@
-mysql: root:p455w0rd@tcp(172.17.0.3:3306)/mysql
+# DB connection URL:
+# For MySQL:
+#url: mysql://root:p455w0rd@tcp(172.17.0.3:3306)/mysql
+# OR (without specifying the driver) falls back to "mysql":
+#url: root:p455w0rd@tcp(172.17.0.3:3306)/mysql
+# For sqlite3:
+url: sqlite:blocks.db
+#url: sqlite3:blocks.db
+color: FFFFFF00
+force: -

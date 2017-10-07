@@ -15,10 +15,12 @@
 package cmd
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jinzhu/gorm"
 
@@ -30,9 +32,21 @@ import (
 	"github.com/nad2000/xlsx"
 )
 
-const defaultColor = "FFFFFF00"
+const (
+	defaultColor = "FFFFFF00"
+	defaultURL   = "sqlite://blocks.db"
+)
 
-var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+var (
+	cfgFile  string
+	db       *gorm.DB
+	debug    bool
+	verbose  bool
+	testing  bool
+	force    bool
+	color    string
+	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+)
 
 func cellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
@@ -73,10 +87,46 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 	return formula
 }
 
+// Source - student answer file sources
+type Source struct {
+	ID           int    `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
+	S3BucketName string `gorm:"column:S3BucketName"`
+	S3Key        string `gorm:"column:S3Key"`
+	FileName     string `gorm:"column:FileName"`
+	ContentType  string `gorm:"column:ContentType"`
+	FileSile     int    `gorm:"column:FileSile"`
+}
+
+// TableName overrides default table name for the model
+func (Source) TableName() string {
+	return "FileSource"
+}
+
+// Answer - student submitted answers
+type Answer struct {
+	ID             int         `gorm:"column:StudentAnswerID;primary_key;AUTO_INCREMENT"`
+	AssignmentID   int         `gorm:"column:StudentAssignmentID"`
+	QuestionID     int         `gorm:"column:QuestionID"`
+	MCQOptionID    int         `gorm:"column:MCQOptionID"`
+	ShortAnswer    string      `gorm:"column:ShortAnswerText"`
+	AttachmentName string      `gorm:"column:AttachmentName"`
+	AttachmentLink string      `gorm:"column:AttachmentLink"`
+	Marks          string      `gorm:"column:Marks"`
+	SubmissionTime time.Time   `gorm:"column:SubmissionTime"`
+	Worksheets     []Worksheet `gorm:"ForeignKey:StudentAnswerID;AssociationForeignKey:Refer"`
+	Source         Source
+}
+
+// TableName overrides default table name for the model
+func (Answer) TableName() string {
+	return "StudentAnswers"
+}
+
 // Workbook - Excel file / workbook
 type Workbook struct {
 	ID         int
 	FileName   string
+	CreatedAt  time.Time
 	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID;AssociationForeignKey:Refer"`
 }
 
@@ -105,7 +155,7 @@ type Worksheet struct {
 	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block
+	Blocks           []Block `gorm:"ForeignKey:worksheet_id;AssociationForeignKey:Refer"`
 }
 
 // Block - the univormly filled with specific color block
@@ -116,7 +166,7 @@ type Block struct {
 	Range           string `gorm:"column:BlockCellRange"`
 	Formula         string `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string // first block cell relative formula formula
-	Cells           []Cell
+	Cells           []Cell `gorm:"ForeignKey:block_id;AssociationForeignKey:Refer"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -244,13 +294,6 @@ type Cell struct {
 	Comment string
 }
 
-var (
-	cfgFile string
-	db      *gorm.DB
-	debug   bool
-	verbose bool
-)
-
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "extract-blocks",
@@ -258,9 +301,13 @@ var RootCmd = &cobra.Command{
 	Long: `Extracts Cell Formula Blocks from Excel file and writes to MySQL.
 	
 Conditions that define Cell Formula Block - 
-  (i) Any contiguous (unbroken) range of excel cells containing cell formula
-  (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
-  (iii) The formula in the range of cells should be the same except the changes due to relative cell references.`,
+    (i) Any contiguous (unbroken) range of excel cells containing cell formula
+   (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
+  (iii) The formula in the range of cells should be the same except the changes due to relative cell references.
+  
+Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
+where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
+More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
 	Run: extractBlocks,
 }
 
@@ -268,135 +315,170 @@ Conditions that define Cell Formula Block -
 func SetDb(db *gorm.DB) {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
+	db.AutoMigrate(&Answer{})
 	db.AutoMigrate(&Workbook{})
 	db.AutoMigrate(&Worksheet{})
 	db.AutoMigrate(&Block{})
 	db.AutoMigrate(&Cell{})
-	if strings.HasPrefix(db.Dialect().GetName(), "myslq") {
+	if strings.HasPrefix(db.Dialect().GetName(), "mysql") {
+		db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "worksheets(StudentAnswerID)", "CASCADE", "CASCADE")
 		db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
 		db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
 		db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
 	}
 }
 
+func RowsToProcess(db *gorm.DB) (*sql.Rows, error) {
+
+	currentTime := time.Now()
+	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
+	return db.Table("FileSources").Select(
+		"FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").Joins(
+		"JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").Where(
+		"FileName IS NOT NULL").Where(
+		"FileName != ''").Where(
+		"FileName LIKE '%.xlsx'").Where(
+		"SubmissionTime <= ?", currentTime).Rows()
+}
+
 func extractBlocks(cmd *cobra.Command, args []string) {
 
 	debugCmd(cmd)
 	var err error
+	testing = flagBool(cmd, "test")
+	force = flagBool(cmd, "force")
+	color = flagString(cmd, "color")
 
-	mysql := flagString(cmd, "mysql")
-	if mysql == "" {
-		sqlite := flagString(cmd, "sqlite")
-		db, err = gorm.Open("sqlite3", sqlite)
-		log.Debugf("Connecting to Sqlite3 DB: %s", sqlite)
-	} else {
-		log.Debugf("Connecting to MySQL DB: %s", mysql)
-		db, err = gorm.Open("mysql", mysql)
+	url := flagString(cmd, "url")
+	parts := strings.Split(flagString(cmd, "url"), "://")
+	if len(parts) < 2 {
+		log.Warnf("Driver name not given in %q, assuming 'mysql'.", url)
+		parts = []string{"mysql", parts[0]}
 	}
 
+	switch parts[0] {
+	case "sqlite", "sqlite3":
+		log.Debugf("Connecting to Sqlite3 DB: %q.", parts[1])
+		parts[0] = "sqlite3"
+	case "mysql":
+		log.Debugf("Connecting to MySQL DB: %q.", parts[1])
+	default:
+		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
+	}
+	db, err = gorm.Open(parts[0], parts[1])
 	if err != nil {
 		log.Error(err)
-		log.Fatalf("failed to connect database %q", mysql)
+		log.Fatalf("failed to connect database %q", url)
 	}
 	defer db.Close()
 	SetDb(db)
 	//db.LogMode(true)
 
-	color := flagString(cmd, "color")
-	force := flagBool(cmd, "force")
-	for _, excelFileName := range args {
-		xlFile, err := xlsx.OpenFile(excelFileName)
-		if err != nil {
-			log.Error(err)
+	if testing {
+		for _, excelFileName := range args {
+			extractBlocksFromFile(excelFileName)
 		}
+	} else {
+		// TODO: select file links from StudentAnswers and download them form S3 buckets..."
+		rows, err := RowsToProcess(db)
+		if err != nil {
+			log.Fatalf("Failed to query DB: %s", err.Error())
+		}
+		log.Info(rows)
+	}
+}
 
-		var wb Workbook
-		result := db.First(&wb, Workbook{FileName: excelFileName})
-		if !result.RecordNotFound() {
-			if !force {
-				log.Errorf("File %q was already processed.", excelFileName)
-				return
-			}
-			log.Warnf("File %q was already processed.", excelFileName)
-			wb.reset()
-		} else {
-			wb = Workbook{FileName: excelFileName}
-			db.Create(&wb)
+func extractBlocksFromFile(fileName string) (wb Workbook) {
+	xlFile, err := xlsx.OpenFile(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	result := db.First(&wb, Workbook{FileName: fileName})
+	if !result.RecordNotFound() {
+		if !force {
+			log.Errorf("File %q was already processed.", fileName)
+			return
+		}
+		log.Warnf("File %q was already processed.", fileName)
+		wb.reset()
+	} else {
+		wb = Workbook{FileName: fileName}
+		db.Create(&wb)
+	}
+
+	if verbose {
+		log.Infof("*** Processing workbook: %s", fileName)
+	}
+
+	for _, sheet := range xlFile.Sheets {
+
+		if sheet.Hidden {
+			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+			continue
 		}
 
 		if verbose {
-			log.Infof("*** Processing workbook: %s", excelFileName)
+			log.Infof("Processing worksheet %q", sheet.Name)
 		}
 
-		for _, sheet := range xlFile.Sheets {
+		var ws Worksheet
+		db.FirstOrCreate(&ws, Worksheet{
+			Name:             sheet.Name,
+			WorkbookID:       wb.ID,
+			WorkbookFileName: wb.FileName,
+		})
+		blocks := blockList{}
+		sheetFillColors := []string{}
 
-			if sheet.Hidden {
-				log.Infof("Skipping hidden worksheet %q", sheet.Name)
-				continue
-			}
+		for i, row := range sheet.Rows {
+			for j, cell := range row.Cells {
 
-			if verbose {
-				log.Infof("Processing worksheet %q", sheet.Name)
-			}
-
-			var ws Worksheet
-			db.FirstOrCreate(&ws, Worksheet{
-				Name:             sheet.Name,
-				WorkbookID:       wb.ID,
-				WorkbookFileName: wb.FileName,
-			})
-			blocks := blockList{}
-			sheetFillColors := []string{}
-
-			for i, row := range sheet.Rows {
-				for j, cell := range row.Cells {
-
-					if blocks.alreadyFound(i, j) {
-						continue
-					}
-					style := cell.GetStyle()
-					fgColor := style.Fill.FgColor
-					if fgColor != "" {
-						for _, c := range sheetFillColors {
-							if c == fgColor {
-								goto MATCH
-							}
-						}
-						sheetFillColors = append(sheetFillColors, fgColor)
-					}
-				MATCH:
-
-					if fgColor == color {
-
-						b := Block{
-							WorksheetID:     ws.ID,
-							Color:           color,
-							Formula:         cell.Formula(),
-							RelativeFormula: RelativeFormula(i, j, cell.Formula()),
-						}
-						b.s.r, b.s.c = i, j
-
-						db.Create(&b)
-
-						b.findWhole(sheet, color)
-						b.save()
-						blocks = append(blocks, b)
-						if verbose {
-							log.Infof("Found: %s", b)
-						}
-
-					}
+				if blocks.alreadyFound(i, j) {
+					continue
 				}
-			}
-			if len(blocks) == 0 {
-				log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, excelFileName, color)
-				if len(sheetFillColors) > 0 {
-					log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+				style := cell.GetStyle()
+				fgColor := style.Fill.FgColor
+				if fgColor != "" {
+					for _, c := range sheetFillColors {
+						if c == fgColor {
+							goto MATCH
+						}
+					}
+					sheetFillColors = append(sheetFillColors, fgColor)
+				}
+			MATCH:
+
+				if fgColor == color {
+
+					b := Block{
+						WorksheetID:     ws.ID,
+						Color:           color,
+						Formula:         cell.Formula(),
+						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+					}
+					b.s.r, b.s.c = i, j
+
+					db.Create(&b)
+
+					b.findWhole(sheet, color)
+					b.save()
+					blocks = append(blocks, b)
+					if verbose {
+						log.Infof("Found: %s", b)
+					}
+
 				}
 			}
 		}
-
+		if len(blocks) == 0 {
+			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+			if len(sheetFillColors) > 0 {
+				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+			}
+		}
 	}
+	return
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -412,18 +494,17 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
-	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.Flags().BoolP("test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
 	RootCmd.PersistentFlags().BoolP("debug", "d", false, "Show full stack trace on error.")
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
-	RootCmd.PersistentFlags().StringP("mysql", "M", "", "MySQL connection string, e.g., https://github.com/go-sql-driver/mysql#examples.")
-	RootCmd.PersistentFlags().StringP("sqlite", "S", "blocks.db", "Sqlite3 database file.")
-	// RootCmd.PersistentFlags().StringP("user", "u", "", "The MySQL user name to use when connecting to the server.")
-	// RootCmd.PersistentFlags().StringP("password", "p", "", "The password to use when connecting to the server.")
-
-	// RootCmd.PersistentFlags().StringP("database", "D", "", "Database to use.")
-	// RootCmd.PersistentFlags().StringP("host", "H", "", "Connect to host.")
+	RootCmd.PersistentFlags().StringP("url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
 	RootCmd.PersistentFlags().BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
+
+	viper.BindPFlag("url", RootCmd.PersistentFlags().Lookup("url"))
+	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
+	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
+
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -435,8 +516,7 @@ func initConfig() {
 		// Find home directory.
 		home, err := homedir.Dir()
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
 		// Search config in home directory with name ".extract-blocks" (without extension).

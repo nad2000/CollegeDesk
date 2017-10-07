@@ -60,7 +60,8 @@ func TestRelativeFormulas(t *testing.T) {
 
 func TestDemoFile(t *testing.T) {
 	var wb cmd.Workbook
-	cmd.RootCmd.SetArgs([]string{"-S", testDb, "-d", "-f", "-v", "demo.xlsx"})
+	cmd.RootCmd.SetArgs([]string{
+		"-U", "sqlite3://" + testDb, "-t", "-d", "-f", "-v", "demo.xlsx"})
 	cmd.Execute()
 	db, _ := gorm.Open("sqlite3", testDb)
 	defer db.Close()
