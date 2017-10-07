@@ -95,6 +95,7 @@ type Source struct {
 	FileName     string `gorm:"column:FileName"`
 	ContentType  string `gorm:"column:ContentType"`
 	FileSile     int    `gorm:"column:FileSile"`
+	Answers      []Answer
 }
 
 // TableName overrides default table name for the model
@@ -109,12 +110,11 @@ type Answer struct {
 	QuestionID     int         `gorm:"column:QuestionID"`
 	MCQOptionID    int         `gorm:"column:MCQOptionID"`
 	ShortAnswer    string      `gorm:"column:ShortAnswerText"`
-	AttachmentName string      `gorm:"column:AttachmentName"`
-	AttachmentLink string      `gorm:"column:AttachmentLink"`
 	Marks          string      `gorm:"column:Marks"`
 	SubmissionTime time.Time   `gorm:"column:SubmissionTime"`
+	FileID         int         `gorm:"column:FileID"`
 	Worksheets     []Worksheet `gorm:"ForeignKey:StudentAnswerID;AssociationForeignKey:Refer"`
-	Source         Source
+	Source         Source      `gorm:"ForeignKey:FileID"`
 }
 
 // TableName overrides default table name for the model
@@ -315,6 +315,7 @@ More examples on connection parameter you can find at: https://github.com/go-sql
 func SetDb(db *gorm.DB) {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
+	db.AutoMigrate(&Source{})
 	db.AutoMigrate(&Answer{})
 	db.AutoMigrate(&Workbook{})
 	db.AutoMigrate(&Worksheet{})
