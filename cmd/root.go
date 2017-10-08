@@ -94,13 +94,13 @@ type Source struct {
 	S3Key        string `gorm:"column:S3Key"`
 	FileName     string `gorm:"column:FileName"`
 	ContentType  string `gorm:"column:ContentType"`
-	FileSile     int    `gorm:"column:FileSile"`
+	FileSize     int    `gorm:"column:FileSize"`
 	Answers      []Answer
 }
 
 // TableName overrides default table name for the model
 func (Source) TableName() string {
-	return "FileSource"
+	return "FileSources"
 }
 
 // Answer - student submitted answers

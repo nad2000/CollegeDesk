@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"os"
 	"path"
+	"strings"
 	"testing"
 
 	log "github.com/Sirupsen/logrus"
@@ -80,4 +81,45 @@ func TestDemoFile(t *testing.T) {
 	if count != 30 {
 		t.Errorf("Expected 30 cells, got: %d", count)
 	}
+}
+
+func TestRowsToProcess(t *testing.T) {
+
+	db, _ := gorm.Open("sqlite3", testDb)
+	cmd.SetDb(db)
+	//db.LogMode(true)
+	defer db.Close()
+
+	f1 := cmd.Source{FileName: "test.xlsx"}
+	db.Create(&f1)
+	db.Create(&cmd.Answer{FileID: f1.ID})
+	f2 := cmd.Source{FileName: "test2.xlsx"}
+	db.Create(&f2)
+	db.Create(&cmd.Answer{FileID: f2.ID})
+	ignore := cmd.Source{FileName: "ignore.abc"}
+	db.Create(&ignore)
+	db.Create(&cmd.Answer{FileID: ignore.ID})
+
+	rows, _ := cmd.RowsToProcess(db)
+	type Result struct {
+		FileID          int    `gorm:"column:FileID"`
+		S3BucketName    string `gorm:"column:S3BucketName"`
+		S3Key           string `gorm:"column:S3Key"`
+		FileName        string `gorm:"column:FileName"`
+		StudentAnswerID int    `gorm:"column:StudentAnswerID"`
+	}
+
+	rowCount := 0
+	for rows.Next() {
+		rowCount += 1
+		var r Result
+		db.ScanRows(rows, &r)
+		if !strings.HasSuffix(r.FileName, ".xlsx") {
+			t.Errorf("Expected only .xlsx extensions, got %q", r.FileName)
+		}
+	}
+	if rowCount != 2 {
+		t.Errorf("Expected 2 rows, got %d", rowCount)
+	}
+
 }
