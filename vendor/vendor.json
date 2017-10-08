@@ -117,6 +117,12 @@
 			"revisionTime": "2017-01-02T12:52:26Z"
 		},
 		{
+			"checksumSHA1": "FsX08FYGCGbiN81y42u/7dQ0a8I=",
+			"path": "github.com/jinzhu/now",
+			"revision": "d939ba741945c047cac69c329c5fb0d6b4a06520",
+			"revisionTime": "2017-02-12T11:26:55Z"
+		},
+		{
 			"checksumSHA1": "NKvKUGq0lp/GjLS7Ffp7BAjcoTg=",
 			"path": "github.com/kardianos/govendor",
 			"revision": "126578d49bc157cfacd669b64c52efcf957c227a",

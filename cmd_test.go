@@ -5,6 +5,9 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jinzhu/now"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -15,6 +18,11 @@ import (
 )
 
 var testDb string = path.Join(os.TempDir(), "extract-block-test.db")
+
+func parseTime(str string) *time.Time {
+	t := now.New(time.Now().UTC()).MustParse(str)
+	return &t
+}
 
 func init() {
 	wd, _ := os.Getwd()
@@ -83,43 +91,61 @@ func TestDemoFile(t *testing.T) {
 	}
 }
 
-func TestRowsToProcess(t *testing.T) {
-
-	db, _ := gorm.Open("sqlite3", testDb)
-	cmd.SetDb(db)
+func createTestDB() *gorm.DB {
+	db, _ = gorm.Open("sqlite3", testDb)
+	cmd.Db = db
+	cmd.SetDb()
 	//db.LogMode(true)
-	defer db.Close()
-
-	f1 := cmd.Source{FileName: "test.xlsx"}
-	db.Create(&f1)
-	db.Create(&cmd.Answer{FileID: f1.ID})
-	f2 := cmd.Source{FileName: "test2.xlsx"}
-	db.Create(&f2)
-	db.Create(&cmd.Answer{FileID: f2.ID})
-	ignore := cmd.Source{FileName: "ignore.abc"}
-	db.Create(&ignore)
-	db.Create(&cmd.Answer{FileID: ignore.ID})
-
-	rows, _ := cmd.RowsToProcess(db)
-	type Result struct {
-		FileID          int    `gorm:"column:FileID"`
-		S3BucketName    string `gorm:"column:S3BucketName"`
-		S3Key           string `gorm:"column:S3Key"`
-		FileName        string `gorm:"column:FileName"`
-		StudentAnswerID int    `gorm:"column:StudentAnswerID"`
+	fileNames := []string{
+		"demo.xlsx",
+		"Sample3_A2E1.xlsx",
+		"Sample4_A2E1.xlsx",
+		"test2.xlsx",
+		"test.xlsx",
 	}
 
-	rowCount := 0
-	for rows.Next() {
-		rowCount += 1
-		var r Result
-		db.ScanRows(rows, &r)
+	for _, fn := range fileNames {
+		f := cmd.Source{FileName: fn}
+		db.Create(&f)
+		db.Create(&cmd.Answer{FileID: f.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+	}
+
+	ignore := cmd.Source{FileName: "ignore.abc"}
+	db.Create(&ignore)
+	db.Create(&cmd.Answer{FileID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+
+	return db
+}
+
+var db *gorm.DB
+
+func testRowsToProcess(t *testing.T) {
+
+	rows, _ := cmd.RowsToProcess()
+
+	for _, r := range rows {
 		if !strings.HasSuffix(r.FileName, ".xlsx") {
 			t.Errorf("Expected only .xlsx extensions, got %q", r.FileName)
 		}
 	}
-	if rowCount != 2 {
-		t.Errorf("Expected 2 rows, got %d", rowCount)
+	if len(rows) != 5 {
+		t.Errorf("Expected 5 rows, got %d", len(rows))
 	}
 
+}
+
+func testHandleAnswers(t *testing.T) {
+
+	cmd.HandleAnswers(func(FileName, S3BucketName, S3Key string) (string, error) {
+		return FileName, nil
+	})
+}
+
+func TestProcessing(t *testing.T) {
+
+	db = createTestDB()
+	defer db.Close()
+
+	t.Run("RowsToProcess", testRowsToProcess)
+	t.Run("TestHandleAnswers", testHandleAnswers)
 }

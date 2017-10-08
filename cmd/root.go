@@ -15,7 +15,6 @@
 package cmd
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"regexp"
@@ -39,7 +38,7 @@ const (
 
 var (
 	cfgFile  string
-	db       *gorm.DB
+	Db       *gorm.DB
 	debug    bool
 	verbose  bool
 	testing  bool
@@ -134,19 +133,19 @@ type Workbook struct {
 func (wb *Workbook) reset() {
 
 	var worksheets []Worksheet
-	db.Model(&wb).Related(&worksheets)
+	Db.Model(&wb).Related(&worksheets)
 	log.Debugf("Deleting worksheets: %#v", worksheets)
 	for ws := range worksheets {
 		var blocks []Block
-		db.Model(&ws).Related(&blocks)
+		Db.Model(&ws).Related(&blocks)
 		for _, b := range blocks {
 			log.Debugf("Deleting blocks: %#v", blocks)
-			db.Where("block_id = ?", b.ID).Delete(Cell{})
-			db.Delete(b)
+			Db.Where("block_id = ?", b.ID).Delete(Cell{})
+			Db.Delete(b)
 		}
 	}
 
-	db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
+	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
 // Worksheet - Excel workbook worksheet
@@ -184,7 +183,7 @@ func (b Block) TableName() string {
 
 func (b *Block) save() {
 	b.Range = b.address()
-	db.Save(b)
+	Db.Save(b)
 }
 
 func (b *Block) address() string {
@@ -251,7 +250,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					Range:   cellID,
 					Comment: commentText,
 				}
-				db.Create(&c)
+				Db.Create(&c)
 				b.e.c = j
 			} else {
 				log.Debugf("Reached the edge column  of the block at column %d", j)
@@ -312,34 +311,62 @@ More examples on connection parameter you can find at: https://github.com/go-sql
 }
 
 // SetDb initializes DB
-func SetDb(db *gorm.DB) {
+func SetDb() {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
-	db.AutoMigrate(&Source{})
-	db.AutoMigrate(&Answer{})
-	db.AutoMigrate(&Workbook{})
-	db.AutoMigrate(&Worksheet{})
-	db.AutoMigrate(&Block{})
-	db.AutoMigrate(&Cell{})
-	if strings.HasPrefix(db.Dialect().GetName(), "mysql") {
-		db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "worksheets(StudentAnswerID)", "CASCADE", "CASCADE")
-		db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
-		db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
-		db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+	Db.AutoMigrate(&Source{})
+	Db.AutoMigrate(&Answer{})
+	Db.AutoMigrate(&Workbook{})
+	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&Block{})
+	Db.AutoMigrate(&Cell{})
+	if strings.HasPrefix(Db.Dialect().GetName(), "mysql") {
+		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "worksheets(StudentAnswerID)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
 	}
 }
 
-func RowsToProcess(db *gorm.DB) (*sql.Rows, error) {
+type RowsToProcessResult struct {
+	FileID          int    `gorm:"column:FileID"`
+	S3BucketName    string `gorm:"column:S3BucketName"`
+	S3Key           string `gorm:"column:S3Key"`
+	FileName        string `gorm:"column:FileName"`
+	StudentAnswerID int    `gorm:"column:StudentAnswerID"`
+}
+
+func RowsToProcess() ([]RowsToProcessResult, error) {
 
 	currentTime := time.Now()
+	midnight := time.Date(
+		currentTime.Year(),
+		currentTime.Month(),
+		currentTime.Day(),
+		0, 0, 0, 0, time.UTC)
+
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-	return db.Table("FileSources").Select(
+	rows, err := Db.Table("FileSources").Select(
 		"FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").Joins(
 		"JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").Where(
 		"FileName IS NOT NULL").Where(
 		"FileName != ''").Where(
 		"FileName LIKE '%.xlsx'").Where(
-		"SubmissionTime <= ?", currentTime).Rows()
+		"SubmissionTime <= ?", midnight).Rows()
+	defer rows.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var results []RowsToProcessResult
+	for rows.Next() {
+		var r RowsToProcessResult
+		Db.ScanRows(rows, &r)
+		results = append(results, r)
+	}
+
+	return results, nil
 }
 
 func extractBlocks(cmd *cobra.Command, args []string) {
@@ -366,13 +393,13 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	default:
 		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
 	}
-	db, err = gorm.Open(parts[0], parts[1])
+	Db, err = gorm.Open(parts[0], parts[1])
 	if err != nil {
 		log.Error(err)
 		log.Fatalf("failed to connect database %q", url)
 	}
-	defer db.Close()
-	SetDb(db)
+	defer Db.Close()
+	SetDb()
 	//db.LogMode(true)
 
 	if testing {
@@ -380,12 +407,36 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			extractBlocksFromFile(excelFileName)
 		}
 	} else {
-		// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-		rows, err := RowsToProcess(db)
+	}
+}
+
+// HandleAnswers - iterates through student answers and retrievs answer workbooks
+// it thaks the funcion that actuatualy performs file download from S3 bucket
+// and returns the downloades file name or an error.
+func HandleAnswers(
+	retrieveFile func(FileName, S3BucketName, S3Key string) (string, error)) {
+
+	rows, err := RowsToProcess()
+	if err != nil {
+		log.Fatalf("Failed to retrieve list of source files to process: %s", err.Error())
+	}
+	var fileCount int
+	for _, r := range rows {
+		log.Infof("Downloading %q form %q", r.FileName, r.S3BucketName)
+		fileName, err := retrieveFile(r.FileName, r.S3BucketName, r.S3Key)
 		if err != nil {
-			log.Fatalf("Failed to query DB: %s", err.Error())
+			log.Errorf(
+				"Failed to retrieve file %q from %q: %s",
+				r.FileName, r.S3BucketName, err.Error())
+			continue
 		}
-		log.Info(rows)
+		log.Infof("Processing %q", fileName)
+		extractBlocksFromFile(fileName)
+		fileCount += 1
+	}
+	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
+	if len(rows) != fileCount {
+		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
 	}
 }
 
@@ -395,7 +446,7 @@ func extractBlocksFromFile(fileName string) (wb Workbook) {
 		log.Fatal(err)
 	}
 
-	result := db.First(&wb, Workbook{FileName: fileName})
+	result := Db.First(&wb, Workbook{FileName: fileName})
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -405,7 +456,7 @@ func extractBlocksFromFile(fileName string) (wb Workbook) {
 		wb.reset()
 	} else {
 		wb = Workbook{FileName: fileName}
-		db.Create(&wb)
+		Db.Create(&wb)
 	}
 
 	if verbose {
@@ -424,7 +475,7 @@ func extractBlocksFromFile(fileName string) (wb Workbook) {
 		}
 
 		var ws Worksheet
-		db.FirstOrCreate(&ws, Worksheet{
+		Db.FirstOrCreate(&ws, Worksheet{
 			Name:             sheet.Name,
 			WorkbookID:       wb.ID,
 			WorkbookFileName: wb.FileName,
@@ -460,7 +511,7 @@ func extractBlocksFromFile(fileName string) (wb Workbook) {
 					}
 					b.s.r, b.s.c = i, j
 
-					db.Create(&b)
+					Db.Create(&b)
 
 					b.findWhole(sheet, color)
 					b.save()
