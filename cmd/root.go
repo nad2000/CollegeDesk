@@ -17,6 +17,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -37,7 +38,11 @@ const (
 )
 
 var (
-	cfgFile  string
+	awsRegion          string
+	awsAccessKeyID     string
+	awsSecretAccessKey string
+	cfgFile            string
+	// Db - shared DB connection
 	Db       *gorm.DB
 	debug    bool
 	verbose  bool
@@ -328,6 +333,7 @@ func SetDb() {
 	}
 }
 
+// RowsToProcessResult stores query resut
 type RowsToProcessResult struct {
 	FileID          int    `gorm:"column:FileID"`
 	S3BucketName    string `gorm:"column:S3BucketName"`
@@ -336,6 +342,7 @@ type RowsToProcessResult struct {
 	StudentAnswerID int    `gorm:"column:StudentAnswerID"`
 }
 
+// RowsToProcess returns answer file sources
 func RowsToProcess() ([]RowsToProcessResult, error) {
 
 	currentTime := time.Now()
@@ -376,6 +383,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	testing = flagBool(cmd, "test")
 	force = flagBool(cmd, "force")
 	color = flagString(cmd, "color")
+	region := flagString(cmd, "region")
 
 	url := flagString(cmd, "url")
 	parts := strings.Split(flagString(cmd, "url"), "://")
@@ -403,18 +411,20 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	//db.LogMode(true)
 
 	if testing {
+		// read up the file list from the arguments
 		for _, excelFileName := range args {
 			extractBlocksFromFile(excelFileName)
 		}
 	} else {
+		downloader := NewS3Downloader(region)
+		HandleAnswers(&downloader)
 	}
 }
 
 // HandleAnswers - iterates through student answers and retrievs answer workbooks
 // it thaks the funcion that actuatualy performs file download from S3 bucket
 // and returns the downloades file name or an error.
-func HandleAnswers(
-	retrieveFile func(FileName, S3BucketName, S3Key string) (string, error)) {
+func HandleAnswers(downloader FileDownloader) error {
 
 	rows, err := RowsToProcess()
 	if err != nil {
@@ -422,22 +432,26 @@ func HandleAnswers(
 	}
 	var fileCount int
 	for _, r := range rows {
-		log.Infof("Downloading %q form %q", r.FileName, r.S3BucketName)
-		fileName, err := retrieveFile(r.FileName, r.S3BucketName, r.S3Key)
+		destinationName := path.Join(os.TempDir(), r.FileName)
+		log.Infof(
+			"Downloading %q (%q) form %q into %q",
+			r.S3Key, r.FileName, r.S3BucketName, destinationName)
+		fileName, err := downloader.DownloadFile(r.FileName, r.S3BucketName, r.S3Key, destinationName)
 		if err != nil {
 			log.Errorf(
-				"Failed to retrieve file %q from %q: %s",
-				r.FileName, r.S3BucketName, err.Error())
+				"Failed to retrieve file %q from %q into %q: %s",
+				r.S3Key, r.S3BucketName, destinationName, err.Error())
 			continue
 		}
 		log.Infof("Processing %q", fileName)
 		extractBlocksFromFile(fileName)
-		fileCount += 1
+		fileCount++
 	}
 	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
 	if len(rows) != fileCount {
 		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
 	}
+	return nil
 }
 
 func extractBlocksFromFile(fileName string) (wb Workbook) {
@@ -553,9 +567,18 @@ func init() {
 	RootCmd.PersistentFlags().BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
 
+	RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
+	// RootCmd.PersistentFlags().String("aws-region", "", "AWS Region.")
+	// RootCmd.PersistentFlags().String("aws-access-key-id", "", "AWS Access Key ID.")
+	// RootCmd.PersistentFlags().String("aws-secret-access-key", "", "AWS Secret Access Key.")
+
 	viper.BindPFlag("url", RootCmd.PersistentFlags().Lookup("url"))
 	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
 	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
+	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
+	// viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
+	// viper.BindPFlag("aws-access-key-id", RootCmd.PersistentFlags().Lookup("aws-access-key-id"))
+	// viper.BindPFlag("aws-secret-access-key", RootCmd.PersistentFlags().Lookup("aws-secret-access-key"))
 
 }
 

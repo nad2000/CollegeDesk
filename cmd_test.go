@@ -134,11 +134,15 @@ func testRowsToProcess(t *testing.T) {
 
 }
 
-func testHandleAnswers(t *testing.T) {
+type testDownloader struct{}
 
-	cmd.HandleAnswers(func(FileName, S3BucketName, S3Key string) (string, error) {
-		return FileName, nil
-	})
+func (d *testDownloader) DownloadFile(sourceName, s3BucketName, s3Key, dest string) (string, error) {
+	return sourceName, nil
+}
+
+func testHandleAnswers(t *testing.T) {
+	td := testDownloader{}
+	cmd.HandleAnswers(&td)
 }
 
 func TestProcessing(t *testing.T) {
