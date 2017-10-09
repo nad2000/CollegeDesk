@@ -188,9 +188,9 @@ func nextRandomName() string {
 }
 
 func testS3Downloader(t *testing.T) {
-	// if testing.Short() {
-	// 	t.Skip("Skipping S3 downloaer testing...")
-	// }
+	if testing.Short() {
+		t.Skip("Skipping S3 downloaer testing...")
+	}
 
 	d := cmd.NewS3Downloader("us-east-1", "rad")
 	destName := nextRandomName() + ".xlsx"
