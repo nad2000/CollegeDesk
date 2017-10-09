@@ -107,9 +107,16 @@ func createTestDB() *gorm.DB {
 	}
 
 	for _, fn := range fileNames {
-		f := cmd.Source{FileName: fn}
+		f := cmd.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
 		db.Create(&f)
-		db.Create(&cmd.Answer{FileID: f.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+		db.Create(&cmd.Answer{
+			FileID:         f.ID,
+			SubmissionTime: *parseTime("2017-01-01 14:42"),
+		})
 	}
 
 	ignore := cmd.Source{FileName: "ignore.abc"}
@@ -154,6 +161,7 @@ func TestProcessing(t *testing.T) {
 
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("TestHandleAnswers", testHandleAnswers)
+	t.Run("TestS3Downloader", testS3Downloader)
 }
 
 // Random number state.
@@ -179,7 +187,7 @@ func nextRandomName() string {
 	return strconv.Itoa(int(1e9 + r%1e9))[1:]
 }
 
-func TestS3Downloader(t *testing.T) {
+func testS3Downloader(t *testing.T) {
 	// if testing.Short() {
 	// 	t.Skip("Skipping S3 downloaer testing...")
 	// }

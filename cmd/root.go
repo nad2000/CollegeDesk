@@ -384,7 +384,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	force = flagBool(cmd, "force")
 	color = flagString(cmd, "color")
 	profile := flagString(cmd, "aws-profile")
-	retion := flagString(cmd, "aws-profile")
+	region := flagString(cmd, "aws-region")
 
 	url := flagString(cmd, "url")
 	parts := strings.Split(flagString(cmd, "url"), "://")
@@ -417,7 +417,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			extractBlocksFromFile(excelFileName)
 		}
 	} else {
-		downloader := NewS3Downloader(retion, profile)
+		downloader := NewS3Downloader(region, profile)
 		HandleAnswers(downloader)
 	}
 }
@@ -437,7 +437,8 @@ func HandleAnswers(downloader FileDownloader) error {
 		log.Infof(
 			"Downloading %q (%q) form %q into %q",
 			r.S3Key, r.FileName, r.S3BucketName, destinationName)
-		fileName, err := downloader.DownloadFile(r.FileName, r.S3BucketName, r.S3Key, destinationName)
+		fileName, err := downloader.DownloadFile(
+			r.FileName, r.S3BucketName, r.S3Key, destinationName)
 		if err != nil {
 			log.Errorf(
 				"Failed to retrieve file %q from %q into %q: %s",
@@ -569,7 +570,7 @@ func init() {
 	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
 
 	RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
-	RootCmd.PersistentFlags().String("aws-region", "", "AWS Region.")
+	RootCmd.PersistentFlags().String("aws-region", "ap-south-1", "AWS Region.")
 	// RootCmd.PersistentFlags().String("aws-access-key-id", "", "AWS Access Key ID.")
 	// RootCmd.PersistentFlags().String("aws-secret-access-key", "", "AWS Secret Access Key.")
 
@@ -577,8 +578,8 @@ func init() {
 	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
 	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
 	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
-	viper.BindEnv("aws-region", "AWS_REGION")
 	viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
+	viper.BindEnv("aws-region", "AWS_REGION")
 	// viper.BindPFlag("aws-access-key-id", RootCmd.PersistentFlags().Lookup("aws-access-key-id"))
 	// viper.BindPFlag("aws-secret-access-key", RootCmd.PersistentFlags().Lookup("aws-secret-access-key"))
 
