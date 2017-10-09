@@ -3,7 +3,9 @@ package cmd_test
 import (
 	"os"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -136,7 +138,7 @@ func testRowsToProcess(t *testing.T) {
 
 type testDownloader struct{}
 
-func (d *testDownloader) DownloadFile(sourceName, s3BucketName, s3Key, dest string) (string, error) {
+func (d testDownloader) DownloadFile(sourceName, s3BucketName, s3Key, dest string) (string, error) {
 	return sourceName, nil
 }
 
@@ -152,4 +154,49 @@ func TestProcessing(t *testing.T) {
 
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("TestHandleAnswers", testHandleAnswers)
+}
+
+// Random number state.
+// We generate random temporary file names so that there's a good
+// chance the file doesn't exist yet - keeps the number of tries in
+// TempFile to a minimum.
+var rand uint32
+var randmu sync.Mutex
+
+func reseed() uint32 {
+	return uint32(time.Now().UnixNano() + int64(os.Getpid()))
+}
+
+func nextRandomName() string {
+	randmu.Lock()
+	r := rand
+	if r == 0 {
+		r = reseed()
+	}
+	r = r*1664525 + 1013904223 // constants from Numerical Recipes
+	rand = r
+	randmu.Unlock()
+	return strconv.Itoa(int(1e9 + r%1e9))[1:]
+}
+
+func TestS3Downloader(t *testing.T) {
+	// if testing.Short() {
+	// 	t.Skip("Skipping S3 downloaer testing...")
+	// }
+
+	d := cmd.NewS3Downloader("us-east-1", "rad")
+	destName := nextRandomName() + ".xlsx"
+	t.Logf("Downloading into %q", destName)
+	_, err := d.DownloadFile("test.xlsx", "studentanswers", "test.xlsx", destName)
+	if err != nil {
+		t.Error(err)
+	}
+	stat, err := os.Stat(destName)
+	if os.IsNotExist(err) {
+		t.Errorf("Expected to have file %q", destName)
+	}
+	if stat.Size() < 1000 {
+		t.Errorf("Expected at least 5kB size file, got: %d bytes", stat.Size())
+	}
+
 }

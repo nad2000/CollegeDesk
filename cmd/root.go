@@ -383,7 +383,8 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	testing = flagBool(cmd, "test")
 	force = flagBool(cmd, "force")
 	color = flagString(cmd, "color")
-	region := flagString(cmd, "region")
+	profile := flagString(cmd, "aws-profile")
+	retion := flagString(cmd, "aws-profile")
 
 	url := flagString(cmd, "url")
 	parts := strings.Split(flagString(cmd, "url"), "://")
@@ -416,8 +417,8 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			extractBlocksFromFile(excelFileName)
 		}
 	} else {
-		downloader := NewS3Downloader(region)
-		HandleAnswers(&downloader)
+		downloader := NewS3Downloader(retion, profile)
+		HandleAnswers(downloader)
 	}
 }
 
@@ -568,7 +569,7 @@ func init() {
 	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
 
 	RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
-	// RootCmd.PersistentFlags().String("aws-region", "", "AWS Region.")
+	RootCmd.PersistentFlags().String("aws-region", "", "AWS Region.")
 	// RootCmd.PersistentFlags().String("aws-access-key-id", "", "AWS Access Key ID.")
 	// RootCmd.PersistentFlags().String("aws-secret-access-key", "", "AWS Secret Access Key.")
 
@@ -576,7 +577,8 @@ func init() {
 	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
 	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
 	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
-	// viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
+	viper.BindEnv("aws-region", "AWS_REGION")
+	viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
 	// viper.BindPFlag("aws-access-key-id", RootCmd.PersistentFlags().Lookup("aws-access-key-id"))
 	// viper.BindPFlag("aws-secret-access-key", RootCmd.PersistentFlags().Lookup("aws-secret-access-key"))
 
