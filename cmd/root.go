@@ -38,19 +38,23 @@ const (
 )
 
 var (
-	awsRegion          string
 	awsAccessKeyID     string
+	awsRegion          string
 	awsSecretAccessKey string
+	cellIDRe           = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 	cfgFile            string
-	// Db - shared DB connection
-	Db       *gorm.DB
-	debug    bool
-	verbose  bool
-	testing  bool
-	force    bool
-	color    string
-	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+	color              string
+	debug              bool
+	force              bool
+	profile            string
+	region             string
+	testing            bool
+	url                string
+	verbose            bool
 )
+
+// Db - shared DB connection
+var Db *gorm.DB
 
 func cellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
@@ -94,11 +98,11 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 // Source - student answer file sources
 type Source struct {
 	ID           int    `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
-	S3BucketName string `gorm:"column:S3BucketName"`
-	S3Key        string `gorm:"column:S3Key"`
-	FileName     string `gorm:"column:FileName"`
-	ContentType  string `gorm:"column:ContentType"`
-	FileSize     int    `gorm:"column:FileSize"`
+	S3BucketName string `gorm:"column:S3BucketName;size:100"`
+	S3Key        string `gorm:"column:S3Key;size:100"`
+	FileName     string `gorm:"column:FileName;size:100"`
+	ContentType  string `gorm:"column:ContentType;size:100"`
+	FileSize     int64  `gorm:"column:FileSize"`
 	Answers      []Answer
 }
 
@@ -113,7 +117,7 @@ type Answer struct {
 	AssignmentID   int         `gorm:"column:StudentAssignmentID"`
 	QuestionID     int         `gorm:"column:QuestionID"`
 	MCQOptionID    int         `gorm:"column:MCQOptionID"`
-	ShortAnswer    string      `gorm:"column:ShortAnswerText"`
+	ShortAnswer    string      `gorm:"column:ShortAnswerText;type:text"`
 	Marks          string      `gorm:"column:Marks"`
 	SubmissionTime time.Time   `gorm:"column:SubmissionTime"`
 	FileID         int         `gorm:"column:FileID"`
@@ -312,7 +316,7 @@ Conditions that define Cell Formula Block -
 Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
 where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
-	Run: extractBlocks,
+	// Run: extractBlocks,
 }
 
 // SetDb initializes DB
@@ -380,11 +384,10 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 
 	debugCmd(cmd)
 	var err error
-	testing = flagBool(cmd, "test")
 	force = flagBool(cmd, "force")
 	color = flagString(cmd, "color")
-	profile := flagString(cmd, "aws-profile")
-	region := flagString(cmd, "aws-region")
+	profile = flagString(cmd, "aws-profile")
+	region = flagString(cmd, "aws-region")
 
 	url := flagString(cmd, "url")
 	parts := strings.Split(flagString(cmd, "url"), "://")
@@ -554,7 +557,7 @@ func extractBlocksFromFile(fileName string) (wb Workbook) {
 func Execute() {
 
 	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		os.Exit(1)
 	}
 }
@@ -562,21 +565,16 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
-	RootCmd.Flags().BoolP("test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
-	RootCmd.PersistentFlags().BoolP("debug", "d", false, "Show full stack trace on error.")
-	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
-	RootCmd.PersistentFlags().StringP("url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
-	RootCmd.PersistentFlags().BoolP("force", "f", false, "Repeat extraction if files were already handle.")
-	RootCmd.PersistentFlags().StringP("color", "c", defaultColor, "The block filling color.")
-
-	RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
-	RootCmd.PersistentFlags().String("aws-region", "ap-south-1", "AWS Region.")
+	RootCmd.PersistentFlags().BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
+	RootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Show full stack trace on error.")
+	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
+	// RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
+	RootCmd.PersistentFlags().StringVar(&profile, "aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
+	// RootCmd.PersistentFlags().String("aws-region", "ap-south-1", "AWS Region.")
+	RootCmd.PersistentFlags().StringVar(&region, "aws-region", "ap-south-1", "AWS Region.")
 	// RootCmd.PersistentFlags().String("aws-access-key-id", "", "AWS Access Key ID.")
 	// RootCmd.PersistentFlags().String("aws-secret-access-key", "", "AWS Secret Access Key.")
 
-	viper.BindPFlag("url", RootCmd.PersistentFlags().Lookup("url"))
-	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
-	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
 	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
 	viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
 	viper.BindEnv("aws-region", "AWS_REGION")
@@ -607,63 +605,5 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		log.Info("Using config file:", viper.ConfigFileUsed())
-	}
-}
-
-func flagString(cmd *cobra.Command, name string) string {
-
-	value := cmd.Flag(name).Value.String()
-	if value != "" {
-		return value
-	}
-	conf := viper.Get(name)
-	if conf == nil {
-		return ""
-	}
-	return conf.(string)
-}
-
-func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringSlice(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagStringArray(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringArray(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagBool(cmd *cobra.Command, name string) (val bool) {
-	val, err := cmd.Flags().GetBool(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagInt(cmd *cobra.Command, name string) (val int) {
-	val, err := cmd.Flags().GetInt(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func debugCmd(cmd *cobra.Command) {
-	debug = flagBool(cmd, "debug")
-	verbose = flagBool(cmd, "verbose")
-
-	if debug {
-		log.SetLevel(log.DebugLevel)
-		title := fmt.Sprintf("Command %q called with flags:", cmd.Name())
-		log.Info(title)
-		log.Info(strings.Repeat("=", len(title)))
-		cmd.DebugFlags()
 	}
 }

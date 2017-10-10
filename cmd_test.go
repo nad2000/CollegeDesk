@@ -72,7 +72,7 @@ func TestRelativeFormulas(t *testing.T) {
 func TestDemoFile(t *testing.T) {
 	var wb cmd.Workbook
 	cmd.RootCmd.SetArgs([]string{
-		"-U", "sqlite3://" + testDb, "-t", "-d", "-f", "-v", "demo.xlsx"})
+		"run", "-U", "sqlite3://" + testDb, "-t", "-d", "-f", "-v", "demo.xlsx"})
 	cmd.Execute()
 	db, _ := gorm.Open("sqlite3", testDb)
 	defer db.Close()
@@ -188,6 +188,7 @@ func nextRandomName() string {
 }
 
 func testS3Downloader(t *testing.T) {
+
 	if testing.Short() {
 		t.Skip("Skipping S3 downloaer testing...")
 	}

@@ -51,6 +51,40 @@ func NewS3Downloader(region, profile string) S3Downloader {
 	return d
 }
 
+// S3Entry S3 entry returned by List
+type S3Entry struct {
+	Name, Owner, Repr string
+	Size              int64
+}
+
+// List lists content of a S3 bucket
+func (d S3Downloader) List(
+	bucket, prefix string) ([]S3Entry, error) {
+
+	params := &s3.ListObjectsInput{
+		Bucket: aws.String(bucket),
+		Prefix: aws.String(prefix),
+	}
+
+	resp, err := d.s3Downloader.S3.ListObjects(params)
+	if err != nil {
+		return nil, err
+	}
+
+	list := make([]S3Entry, len(resp.Contents))
+	for i, key := range resp.Contents {
+
+		list[i].Name = *key.Key
+		list[i].Size = *key.Size
+		list[i].Repr = key.String()
+		owner := key.Owner
+		if owner != nil {
+			list[i].Owner = *owner.DisplayName
+		}
+	}
+	return list, nil
+}
+
 // DownloadFile downloads a file form the given bucket to the destination file.
 func (d S3Downloader) DownloadFile(
 	SourceName, S3BucketName, S3Key, DestinationFileName string) (string, error) {
