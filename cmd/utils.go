@@ -9,6 +9,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+func createS3Downloader() S3Downloader {
+	if awsAccessKeyID != "" && awsSecretAccessKey != "" {
+		return NewS3DownloaderWithCredentials(
+			awsAccessKeyID, awsSecretAccessKey, awsRegion)
+	}
+	return NewS3Downloader(awsRegion, awsProfile)
+}
+
 func flagString(cmd *cobra.Command, name string) string {
 
 	value := cmd.Flag(name).Value.String()

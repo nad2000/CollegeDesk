@@ -39,12 +39,13 @@ More examples on connection parameter you can find at: https://github.com/go-sql
 
 func init() {
 	RootCmd.AddCommand(runCmd)
+	flags := runCmd.Flags()
 
-	runCmd.PersistentFlags().StringVarP(&url, "url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
-	runCmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "Repeat extraction if files were already handle.")
-	runCmd.PersistentFlags().StringVarP(&color, "color", "c", defaultColor, "The block filling color.")
+	flags.StringP("url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
+	flags.BoolP("force", "f", false, "Repeat extraction if files were already handle.")
+	flags.StringP("color", "c", defaultColor, "The block filling color.")
 
-	viper.BindPFlag("url", RootCmd.PersistentFlags().Lookup("url"))
-	viper.BindPFlag("color", RootCmd.PersistentFlags().Lookup("color"))
-	viper.BindPFlag("force", RootCmd.PersistentFlags().Lookup("force"))
+	viper.BindPFlag("url", flags.Lookup("url"))
+	viper.BindPFlag("color", flags.Lookup("color"))
+	viper.BindPFlag("force", flags.Lookup("force"))
 }

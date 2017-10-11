@@ -39,6 +39,7 @@ const (
 
 var (
 	awsAccessKeyID     string
+	awsProfile         string
 	awsRegion          string
 	awsSecretAccessKey string
 	cellIDRe           = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
@@ -46,7 +47,6 @@ var (
 	color              string
 	debug              bool
 	force              bool
-	profile            string
 	region             string
 	testing            bool
 	url                string
@@ -316,7 +316,9 @@ Conditions that define Cell Formula Block -
 Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
 where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
-	// Run: extractBlocks,
+	// Run: func(c *cobra.Command, args []Args) {
+
+	// },
 }
 
 // SetDb initializes DB
@@ -380,14 +382,22 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 	return results, nil
 }
 
+func getConfig() {
+	awsProfile = viper.GetString("aws-profile")
+	awsRegion = viper.GetString("aws-region")
+	awsAccessKeyID = viper.GetString("aws-access-key-id")
+	awsSecretAccessKey = viper.GetString("aws-secret-access-key")
+	url = viper.GetString("url")
+	color = viper.GetString("color")
+	force = viper.GetBool("force")
+}
+
 func extractBlocks(cmd *cobra.Command, args []string) {
 
+	getConfig()
 	debugCmd(cmd)
+
 	var err error
-	force = flagBool(cmd, "force")
-	color = flagString(cmd, "color")
-	profile = flagString(cmd, "aws-profile")
-	region = flagString(cmd, "aws-region")
 
 	url := flagString(cmd, "url")
 	parts := strings.Split(flagString(cmd, "url"), "://")
@@ -420,7 +430,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			extractBlocksFromFile(excelFileName)
 		}
 	} else {
-		downloader := NewS3Downloader(region, profile)
+		downloader := createS3Downloader()
 		HandleAnswers(downloader)
 	}
 }
@@ -564,23 +574,26 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
-	RootCmd.PersistentFlags().BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
-	RootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Show full stack trace on error.")
-	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
+	flags := RootCmd.PersistentFlags()
+	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
+	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
+	flags.BoolVarP(&debug, "debug", "d", false, "Show full stack trace on error.")
+	flags.BoolVarP(&verbose, "verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
 	// RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
-	RootCmd.PersistentFlags().StringVar(&profile, "aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
+	flags.String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
 	// RootCmd.PersistentFlags().String("aws-region", "ap-south-1", "AWS Region.")
-	RootCmd.PersistentFlags().StringVar(&region, "aws-region", "ap-south-1", "AWS Region.")
-	// RootCmd.PersistentFlags().String("aws-access-key-id", "", "AWS Access Key ID.")
-	// RootCmd.PersistentFlags().String("aws-secret-access-key", "", "AWS Secret Access Key.")
+	flags.String("aws-region", "ap-south-1", "AWS Region.")
+	flags.String("aws-access-key-id", "", "AWS Access Key ID.")
+	flags.String("aws-secret-access-key", "", "AWS Secret Access Key.")
 
 	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
 	viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
+	viper.BindPFlag("aws-access-key-id", RootCmd.PersistentFlags().Lookup("aws-access-key-id"))
+	viper.BindPFlag("aws-secret-access-key", RootCmd.PersistentFlags().Lookup("aws-secret-access-key"))
 	viper.BindEnv("aws-region", "AWS_REGION")
-	// viper.BindPFlag("aws-access-key-id", RootCmd.PersistentFlags().Lookup("aws-access-key-id"))
-	// viper.BindPFlag("aws-secret-access-key", RootCmd.PersistentFlags().Lookup("aws-secret-access-key"))
-
+	viper.BindEnv("aws-access-key-id", "AWS_ACCESS_KEY_ID")
+	viper.BindEnv("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
+	viper.SetDefault("aws-region", "ap-south-1")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -597,6 +610,8 @@ func initConfig() {
 
 		// Search config in home directory with name ".extract-blocks" (without extension).
 		viper.AddConfigPath(home)
+		viper.AddConfigPath(".")
+		viper.SetConfigType("yaml")
 		viper.SetConfigName(".extract-blocks")
 	}
 
@@ -605,5 +620,9 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		log.Info("Using config file:", viper.ConfigFileUsed())
+	} else {
+		if !strings.Contains(err.Error(), "Not Found") {
+			log.Error(err)
+		}
 	}
 }

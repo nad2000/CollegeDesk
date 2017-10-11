@@ -1,3 +1,6 @@
+##
+## Copy this file into $HOME/.extract-blocks.yaml or the current directory
+##
 # DB connection URL:
 # For MySQL:
 #url: mysql://root:p455w0rd@tcp(172.17.0.3:3306)/mysql
@@ -7,4 +10,8 @@
 url: sqlite:blocks.db
 #url: sqlite3:blocks.db
 color: FFFFFF00
-force: -
+force: true
+aws-region: REGION
+aws-access-key-id: KEY_ID
+aws-secret-access-key: SECRET
+

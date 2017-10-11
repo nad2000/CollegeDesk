@@ -28,11 +28,12 @@ var lsbCmd = &cobra.Command{
 	Long:  `List the content of a S3 bucket.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
+		getConfig()
 		debugCmd(cmd)
 		bucket := flagString(cmd, "bucket")
 		prefix := flagString(cmd, "prefix")
 
-		downloader := NewS3Downloader(region, profile)
+		downloader := createS3Downloader()
 		list, err := downloader.List(bucket, prefix)
 		if err != nil {
 			log.Fatalf("Error occured listing %q: %s", bucket, err.Error())

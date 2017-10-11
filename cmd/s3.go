@@ -16,6 +16,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -36,12 +37,28 @@ func (d *S3Downloader) setUp(region, profile string) {
 		profile = "default"
 	}
 	log.Debugf("Using region: %q, profile: %q", region, profile)
+
 	sess := session.Must(session.NewSessionWithOptions(
 		session.Options{
 			Profile: profile,
 			Config:  aws.Config{Region: aws.String(region)},
 		}))
 	d.s3Downloader = s3manager.NewDownloader(sess)
+}
+
+// NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
+func NewS3DownloaderWithCredentials(accessKeyID, secretAccessKey, region string) S3Downloader {
+	d := S3Downloader{}
+	creds := credentials.NewStaticCredentials(accessKeyID, secretAccessKey, "")
+	_, err := creds.Get()
+	if err != nil {
+		log.Fatalf("Bad AWS credentials: %s", err.Error())
+	}
+	cfg := aws.NewConfig().WithRegion(region).WithCredentials(creds)
+
+	sess := session.Must(session.NewSessionWithOptions(session.Options{Config: *cfg}))
+	d.s3Downloader = s3manager.NewDownloader(sess)
+	return d
 }
 
 // NewS3Downloader instantiates an AWS S3 file downloader
