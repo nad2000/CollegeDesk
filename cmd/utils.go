@@ -63,8 +63,14 @@ func flagInt(cmd *cobra.Command, name string) (val int) {
 }
 
 func debugCmd(cmd *cobra.Command) {
-	debug = flagBool(cmd, "debug")
-	verbose = flagBool(cmd, "verbose")
+
+	if debugLevel > 0 {
+		debug = true
+	}
+
+	if verboseLevel > 0 {
+		verbose = true
+	}
 
 	if debug {
 		log.SetLevel(log.DebugLevel)
@@ -72,5 +78,6 @@ func debugCmd(cmd *cobra.Command) {
 		log.Info(title)
 		log.Info(strings.Repeat("=", len(title)))
 		cmd.DebugFlags()
+		viper.Debug()
 	}
 }

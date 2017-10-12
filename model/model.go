@@ -1,6 +1,8 @@
 package models
 
 import (
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"regexp"
 	"strings"
@@ -14,6 +16,13 @@ import (
 
 // Db - shared DB connection
 var Db *gorm.DB
+
+// VerboseLevel - the level of verbosity
+var VerboseLevel int
+
+// DebugLevel - the level of verbosity of the debug information
+var DebugLevel int
+
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
 func cellAddress(rowIndex, colIndex int) string {
@@ -49,21 +58,69 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 	cellIDs := cellIDRe.FindAllString(formula, -1)
 	for _, cellID := range cellIDs {
 		relCellID := RelativeCellAddress(rowIndex, colIndex, cellID)
-		log.Debugf("Replacing %q with %q at (%d, %d)", cellID, relCellID, rowIndex, colIndex)
+		if DebugLevel > 1 {
+			log.Debugf("Replacing %q with %q at (%d, %d)", cellID, relCellID, rowIndex, colIndex)
+		}
 		formula = strings.Replace(formula, cellID, relCellID, -1)
 	}
 	return formula
 }
 
+// QuestionType - workaround for MySQL EMUM(...)
+type QuestionType string
+
+// Scan - workaround for MySQL EMUM(...)
+func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.(string)); return nil }
+
+// Value - workaround for MySQL EMUM(...)
+func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
+
+// Question - questions
+type Question struct {
+	ID                int            `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
+	QuestionType      QuestionType   `gorm:"column:QuestionType"`
+	QuestionSequence  int            `gorm:"column:QuestionSequence;not null"`
+	QuestionText      string         `gorm:"column:QuestionText;type:text;not null"`
+	AnswerExplanation sql.NullString `gorm:"column:AnswerExplanation;type:text"`
+	MaxScore          float32        `gorm:"column:MaxScore;type:float;not null"`
+	FileID            sql.NullInt64  `gorm:"column:FileID;type:int"`
+	AuthorUserID      int            `gorm:"colum:AuthorUserID;not null"`
+	WasCompared       bool           `gorm:"column:was_compared;type:tinyint(1)"`
+	Answers           []Answer       `gorm:"ForeignKey:QuestionID;AssociationForeignKey:Refer"`
+	Source            Source         `gorm:"ForeignKey:FileID"`
+}
+
+// TableName overrides default table name for the model
+func (Question) TableName() string {
+	return "Questions"
+}
+
+// QuestionExcelData - extracted celles from question Workbooks
+type QuestionExcelData struct {
+	ID         int      `gorm:"primary_key;AUTO_INCREMENT"`
+	QuestionID int      `gorm:"column:QuestionID"`
+	SheetName  string   `gorm:"column:SheetName"`
+	CellRange  string   `gorm:"column:CellRange"`
+	Value      string   `gorm:"column:Value"`
+	Comment    string   `gorm:"column:Comment"`
+	Formula    string   `gorm:"column:Formula"`
+	Question   Question `gorm:"ForeignKey:QuestionID"`
+}
+
+// TableName overrides default table name for the model
+func (QuestionExcelData) TableName() string {
+	return "QuestionExcelData"
+}
+
 // Source - student answer file sources
 type Source struct {
-	ID           int    `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
-	S3BucketName string `gorm:"column:S3BucketName;size:100"`
-	S3Key        string `gorm:"column:S3Key;size:100"`
-	FileName     string `gorm:"column:FileName;size:100"`
-	ContentType  string `gorm:"column:ContentType;size:100"`
-	FileSize     int64  `gorm:"column:FileSize"`
-	Answers      []Answer
+	ID           int      `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
+	S3BucketName string   `gorm:"column:S3BucketName;size:100"`
+	S3Key        string   `gorm:"column:S3Key;size:100"`
+	FileName     string   `gorm:"column:FileName;size:100"`
+	ContentType  string   `gorm:"column:ContentType;size:100"`
+	FileSize     int64    `gorm:"column:FileSize"`
+	Answers      []Answer `gorm:"ForeignKey:FileID;AssociationForeignKey:Refer"`
 }
 
 // TableName overrides default table name for the model
@@ -83,6 +140,7 @@ type Answer struct {
 	FileID         int         `gorm:"column:FileID"`
 	Worksheets     []Worksheet `gorm:"ForeignKey:StudentAnswerID;AssociationForeignKey:Refer"`
 	Source         Source      `gorm:"ForeignKey:FileID"`
+	Question       Question    `gorm:"ForeignKey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -284,6 +342,8 @@ func SetDb() {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
 	Db.AutoMigrate(&Source{})
+	Db.AutoMigrate(&Question{})
+	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})

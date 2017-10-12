@@ -44,11 +44,13 @@ var (
 	cfgFile            string
 	color              string
 	debug              bool
+	debugLevel         int
 	force              bool
 	region             string
 	testing            bool
 	url                string
 	verbose            bool
+	verboseLevel       int
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -93,6 +95,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 		log.Fatalf("failed to connect database %q", url)
 	}
 	defer Db.Close()
+	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
 	//db.LogMode(true)
 
 	if testing {
@@ -155,8 +158,9 @@ func init() {
 	flags := RootCmd.PersistentFlags()
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
 	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
-	flags.BoolVarP(&debug, "debug", "d", false, "Show full stack trace on error.")
-	flags.BoolVarP(&verbose, "verbose", "v", false, "Verbose mode. Produce more output about what the program does.")
+	//flags.BoolSliceP("debug", "d", []bool{}, "Show full stack trace on error.")
+	flags.CountVarP(&debugLevel, "debug", "d", "Show full stack trace on error.")
+	flags.CountVarP(&verboseLevel, "verbose", "v", "Verbose mode. Produce more output about what the program does.")
 	// RootCmd.PersistentFlags().String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
 	flags.String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
 	// RootCmd.PersistentFlags().String("aws-region", "ap-south-1", "AWS Region.")
