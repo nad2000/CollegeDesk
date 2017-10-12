@@ -14,6 +14,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 
 	"extract-blocks/cmd"
+	model "extract-blocks/model"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -44,7 +45,7 @@ func TestR1C1(t *testing.T) {
 		{1, 1, "A1", "R[-1]C[-1]"},
 		{3, 11, "A1", "R[-3]C[-11]"},
 		{111, 11, "$A1", "R[-111]C[0]"}} {
-		relID := cmd.RelativeCellAddress(r.x, r.y, r.ID)
+		relID := model.RelativeCellAddress(r.x, r.y, r.ID)
 		if relID != r.expect {
 			t.Errorf("Expecte %q for %#v; got %q", r.expect, r, relID)
 		}
@@ -62,7 +63,7 @@ func TestRelativeFormulas(t *testing.T) {
 			"R[+0]C[+0] / R[+10]C[+1] - 67 * R[122]C[701] % R[232]C[+676]",
 		},
 	} {
-		relID := cmd.RelativeFormula(r.x, r.y, r.ID)
+		relID := model.RelativeFormula(r.x, r.y, r.ID)
 		if relID != r.expect {
 			t.Errorf("Expecte %q for %#v; got %q", r.expect, r, relID)
 		}
@@ -70,33 +71,33 @@ func TestRelativeFormulas(t *testing.T) {
 }
 
 func TestDemoFile(t *testing.T) {
-	var wb cmd.Workbook
+	var wb model.Workbook
 	cmd.RootCmd.SetArgs([]string{
 		"run", "-U", "sqlite3://" + testDb, "-t", "-d", "-f", "-v", "demo.xlsx"})
 	cmd.Execute()
 	db, _ := gorm.Open("sqlite3", testDb)
 	defer db.Close()
 
-	db.First(&wb, cmd.Workbook{FileName: "demo.xlsx"})
+	db.First(&wb, model.Workbook{FileName: "demo.xlsx"})
 	if wb.FileName != "demo.xlsx" {
 		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
 		t.Fail()
 	}
 	var count int
-	db.Model(&cmd.Block{}).Count(&count)
+	db.Model(&model.Block{}).Count(&count)
 	if count != 3 {
 		t.Errorf("Expected 3 blocks, got: %d", count)
 	}
-	db.Model(&cmd.Cell{}).Count(&count)
+	db.Model(&model.Cell{}).Count(&count)
 	if count != 30 {
 		t.Errorf("Expected 30 cells, got: %d", count)
 	}
 }
 
 func createTestDB() *gorm.DB {
-	db, _ = gorm.Open("sqlite3", testDb)
+	db, _ = model.OpenDb("sqlite3://" + testDb)
 	cmd.Db = db
-	cmd.SetDb()
+
 	//db.LogMode(true)
 	fileNames := []string{
 		"demo.xlsx",
@@ -107,21 +108,21 @@ func createTestDB() *gorm.DB {
 	}
 
 	for _, fn := range fileNames {
-		f := cmd.Source{
+		f := model.Source{
 			FileName:     fn,
 			S3BucketName: "studentanswers",
 			S3Key:        fn,
 		}
 		db.Create(&f)
-		db.Create(&cmd.Answer{
+		db.Create(&model.Answer{
 			FileID:         f.ID,
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 	}
 
-	ignore := cmd.Source{FileName: "ignore.abc"}
+	ignore := model.Source{FileName: "ignore.abc"}
 	db.Create(&ignore)
-	db.Create(&cmd.Answer{FileID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+	db.Create(&model.Answer{FileID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	return db
 }
@@ -130,7 +131,7 @@ var db *gorm.DB
 
 func testRowsToProcess(t *testing.T) {
 
-	rows, _ := cmd.RowsToProcess()
+	rows, _ := model.RowsToProcess()
 
 	for _, r := range rows {
 		if !strings.HasSuffix(r.FileName, ".xlsx") {

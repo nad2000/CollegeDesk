@@ -91,7 +91,7 @@ func (d S3Downloader) List(
 	list := make([]S3Entry, len(resp.Contents))
 	for i, key := range resp.Contents {
 
-		log.Debugf("i=%d, %#v", i, key)
+		//log.Debugf("i=%d, %#v", i, key)
 		list[i].Name = *key.Key
 		list[i].Size = *key.Size
 		list[i].Repr = key.String()
@@ -102,7 +102,6 @@ func (d S3Downloader) List(
 			} else if owner.ID != nil {
 				list[i].Owner = *owner.ID
 			}
-
 		}
 	}
 	return list, nil
