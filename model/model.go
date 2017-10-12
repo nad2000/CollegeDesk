@@ -70,24 +70,30 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 type QuestionType string
 
 // Scan - workaround for MySQL EMUM(...)
-func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.(string)); return nil }
+func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.([]byte)); return nil }
 
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
 
+// NewNullInt64 - a helper function that makes nullable from a plain int
+func NewNullInt64(value int) sql.NullInt64 {
+	return sql.NullInt64{Valid: true, Int64: int64(value)}
+}
+
 // Question - questions
 type Question struct {
-	ID                int            `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
-	QuestionType      QuestionType   `gorm:"column:QuestionType"`
-	QuestionSequence  int            `gorm:"column:QuestionSequence;not null"`
-	QuestionText      string         `gorm:"column:QuestionText;type:text;not null"`
-	AnswerExplanation sql.NullString `gorm:"column:AnswerExplanation;type:text"`
-	MaxScore          float32        `gorm:"column:MaxScore;type:float;not null"`
-	FileID            sql.NullInt64  `gorm:"column:FileID;type:int"`
-	AuthorUserID      int            `gorm:"colum:AuthorUserID;not null"`
-	WasCompared       bool           `gorm:"column:was_compared;type:tinyint(1)"`
-	Answers           []Answer       `gorm:"ForeignKey:QuestionID;AssociationForeignKey:Refer"`
-	Source            Source         `gorm:"ForeignKey:FileID"`
+	ID                 int                 `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
+	QuestionType       QuestionType        `gorm:"column:QuestionType"`
+	QuestionSequence   int                 `gorm:"column:QuestionSequence;not null"`
+	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
+	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
+	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
+	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
+	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
+	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
+	Source             Source              `gorm:"ForeignKey:FileID"`
+	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -95,9 +101,63 @@ func (Question) TableName() string {
 	return "Questions"
 }
 
+// ImportFile imports form Excel file QuestionExcleData
+func (q *Question) ImportFile(fileName string) error {
+	xlFile, err := xlsx.OpenFile(fileName)
+
+	if err != nil {
+		return err
+	}
+
+	if VerboseLevel > 0 {
+		log.Infof("Processing workbook: %s", fileName)
+	}
+
+	for _, sheet := range xlFile.Sheets {
+
+		if sheet.Hidden {
+			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+			continue
+		}
+
+		if VerboseLevel > 0 {
+			log.Infof("Processing worksheet %q", sheet.Name)
+		}
+
+		for i, row := range sheet.Rows {
+			for j, cell := range row.Cells {
+
+				var commentText string
+
+				cellRange := cellAddress(i, j)
+				commen, ok := sheet.Comment[cellRange]
+				if ok {
+					commentText = commen.Text
+				} else {
+					commentText = ""
+				}
+				var qed QuestionExcelData
+
+				Db.FirstOrCreate(&qed, QuestionExcelData{
+					QuestionID: q.ID,
+					SheetName:  sheet.Name,
+					CellRange:  cellRange,
+					Value:      cell.Value,
+					Formula:    cell.Formula(),
+					Comment:    commentText,
+				})
+				if Db.Error != nil {
+					return Db.Error
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // QuestionExcelData - extracted celles from question Workbooks
 type QuestionExcelData struct {
-	ID         int      `gorm:"primary_key;AUTO_INCREMENT"`
+	ID         int      `gorm:"column:Id;primary_key;AUTO_INCREMENT"`
 	QuestionID int      `gorm:"column:QuestionID"`
 	SheetName  string   `gorm:"column:SheetName"`
 	CellRange  string   `gorm:"column:CellRange"`
@@ -114,13 +174,14 @@ func (QuestionExcelData) TableName() string {
 
 // Source - student answer file sources
 type Source struct {
-	ID           int      `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
-	S3BucketName string   `gorm:"column:S3BucketName;size:100"`
-	S3Key        string   `gorm:"column:S3Key;size:100"`
-	FileName     string   `gorm:"column:FileName;size:100"`
-	ContentType  string   `gorm:"column:ContentType;size:100"`
-	FileSize     int64    `gorm:"column:FileSize"`
-	Answers      []Answer `gorm:"ForeignKey:FileID;AssociationForeignKey:Refer"`
+	ID           int        `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
+	S3BucketName string     `gorm:"column:S3BucketName;size:100"`
+	S3Key        string     `gorm:"column:S3Key;size:100"`
+	FileName     string     `gorm:"column:FileName;size:100"`
+	ContentType  string     `gorm:"column:ContentType;size:100"`
+	FileSize     int64      `gorm:"column:FileSize"`
+	Answers      []Answer   `gorm:"ForeignKey:FileID"`
+	Questions    []Question `gorm:"ForeignKey:FileID"`
 }
 
 // TableName overrides default table name for the model
@@ -153,7 +214,7 @@ type Workbook struct {
 	ID         int
 	FileName   string
 	CreatedAt  time.Time
-	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID;AssociationForeignKey:Refer"`
+	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID"`
 }
 
 // Reset deletes all underlying objects: worksheets, blocks, and cells
@@ -181,7 +242,7 @@ type Worksheet struct {
 	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block `gorm:"ForeignKey:worksheet_id;AssociationForeignKey:Refer"`
+	Blocks           []Block `gorm:"ForeignKey:worksheet_id"`
 }
 
 // Block - the univormly filled with specific color block
@@ -192,7 +253,7 @@ type Block struct {
 	Range           string `gorm:"column:BlockCellRange"`
 	Formula         string `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string // first block cell relative formula formula
-	Cells           []Cell `gorm:"ForeignKey:block_id;AssociationForeignKey:Refer"`
+	Cells           []Cell `gorm:"ForeignKey:block_id"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -332,8 +393,10 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 		log.Fatalf("failed to connect database %q", url)
 	}
 	Db = db
+	if DebugLevel > 1 {
+		db.LogMode(true)
+	}
 	SetDb()
-	//db.LogMode(true)
 	return
 }
 
@@ -357,9 +420,21 @@ func SetDb() {
 	}
 }
 
+// QuestionsToProcess returns list of questions that need to be processed
+func QuestionsToProcess() ([]Question, error) {
+
+	var questions []Question
+	(Db.Joins(
+		`JOIN FileSources 
+			ON FileSources.FileID = Questions.FileID AND 
+			FileSources.FileName LIKE '%.xlsx'`).Find(
+		&questions))
+	return questions, Db.Error
+}
+
 // RowsToProcessResult stores query resut
 type RowsToProcessResult struct {
-	FileID          int    `gorm:"column:FileID"`
+	ID              int    `gorm:"column:FileID"`
 	S3BucketName    string `gorm:"column:S3BucketName"`
 	S3Key           string `gorm:"column:S3Key"`
 	FileName        string `gorm:"column:FileName"`

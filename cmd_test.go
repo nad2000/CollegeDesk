@@ -20,7 +20,7 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
-var testDb string = path.Join(os.TempDir(), "extract-block-test.db")
+var testDb = path.Join(os.TempDir(), "extract-block-test.db")
 
 func parseTime(str string) *time.Time {
 	t := now.New(time.Now().UTC()).MustParse(str)
@@ -124,10 +124,68 @@ func createTestDB() *gorm.DB {
 	db.Create(&ignore)
 	db.Create(&model.Answer{FileID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
 
+	//db.LogMode(true)
+	for i := 101; i < 110; i++ {
+		fn := "question" + strconv.Itoa(i)
+		if i < 104 {
+			fn += ".xlsx"
+		} else {
+			fn += ".ignore"
+		}
+		f := model.Source{
+			ID:           i,
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		db.Create(&model.Question{
+			//FileID:           sql.NullInt64{Int64: int64(i), Valid: true},
+			FileID:           model.NewNullInt64(i),
+			QuestionType:     model.QuestionType("FileUpload"),
+			QuestionSequence: 123,
+			QuestionText:     "QuestionText...",
+			MaxScore:         9999.99,
+			AuthorUserID:     123456789,
+			WasCompared:      true,
+		})
+
+	}
+
 	return db
 }
 
 var db *gorm.DB
+
+func testQuestionsToProcess(t *testing.T) {
+
+	var rows []model.Question
+	db.Find(&rows)
+	for _, r := range rows {
+		var s model.Source
+		db.Model(&r).Related(&s, "FileID")
+	}
+	if len(rows) != 9 {
+		t.Errorf("Expected 9 question rows, got %d", len(rows))
+	}
+
+	questions, err := model.QuestionsToProcess()
+	if err != nil {
+		t.Error(err)
+		t.Fail()
+	}
+	for _, r := range questions {
+		var s model.Source
+		db.Model(&r).Related(&s, "FileID")
+		if !strings.HasSuffix(s.FileName, ".xlsx") {
+			t.Errorf("Wrong extension: %q, expected: '.xlsx'", s.FileName)
+		}
+	}
+	if len(questions) != 3 {
+		t.Errorf("Expected 3 rows, got %d", len(questions))
+	}
+
+}
 
 func testRowsToProcess(t *testing.T) {
 
@@ -160,6 +218,7 @@ func TestProcessing(t *testing.T) {
 	db = createTestDB()
 	defer db.Close()
 
+	t.Run("QuestionsToProcess", testQuestionsToProcess)
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("TestHandleAnswers", testHandleAnswers)
 	t.Run("TestS3Downloader", testS3Downloader)

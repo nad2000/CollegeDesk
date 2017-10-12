@@ -9,12 +9,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-func createS3Downloader() S3Downloader {
-	if awsAccessKeyID != "" && awsSecretAccessKey != "" {
+func createS3Downloader() (d S3Downloader) {
+	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {
+		return NewS3Downloader(awsRegion, awsProfile)
+	} else if awsAccessKeyID != "" && awsSecretAccessKey != "" {
 		return NewS3DownloaderWithCredentials(
 			awsAccessKeyID, awsSecretAccessKey, awsRegion)
 	}
-	return NewS3Downloader(awsRegion, awsProfile)
+	log.Fatal("AWS credential information missing!")
+	return
 }
 
 func flagString(cmd *cobra.Command, name string) string {
