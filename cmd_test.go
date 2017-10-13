@@ -252,8 +252,24 @@ func TestProcessing(t *testing.T) {
 
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
 	t.Run("RowsToProcess", testRowsToProcess)
-	t.Run("TestHandleAnswers", testHandleAnswers)
-	t.Run("TestS3Downloader", testS3Downloader)
+	t.Run("HandleAnswers", testHandleAnswers)
+	t.Run("S3Downloader", testS3Downloader)
+	t.Run("Questions", testQuestions)
+}
+
+func testQuestions(t *testing.T) {
+
+	cmd.RootCmd.SetArgs([]string{"questions", "-U", url})
+	cmd.Execute()
+
+	db, _ := model.OpenDb(url)
+	defer db.Close()
+
+	var count int
+	db.Model(&model.QuestionExcelData{}).Count(&count)
+	if count != 72 {
+		t.Errorf("Expected 72 blocks, got: %d", count)
+	}
 }
 
 // Random number state.
