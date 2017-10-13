@@ -224,14 +224,18 @@ type Workbook struct {
 func (wb *Workbook) Reset() {
 
 	var worksheets []Worksheet
-	result := Db.Model(&wb).Related(&worksheets)
+	result := Db.Where("workbook_id = ?", wb.ID).Find(&worksheets)
 	if result.Error != nil {
 		log.Error(result.Error)
 	}
 	log.Debugf("Deleting worksheets: %#v", worksheets)
-	for ws := range worksheets {
+	for _, ws := range worksheets {
 		var blocks []Block
 		Db.Model(&ws).Related(&blocks)
+		result := Db.Where("worksheet_id = ?", ws.ID).Find(&blocks)
+		if result.Error != nil {
+			log.Error(result.Error)
+		}
 		for _, b := range blocks {
 			log.Debugf("Deleting blocks: %#v", blocks)
 			Db.Where("block_id = ?", b.ID).Delete(Cell{})

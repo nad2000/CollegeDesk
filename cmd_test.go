@@ -202,10 +202,6 @@ var db *gorm.DB
 
 func testQuestionsToProcess(t *testing.T) {
 
-	if testing.Short() {
-		t.Skip("Skipping 'questions' testing...")
-	}
-
 	var rows []model.Question
 	db.Find(&rows)
 	for _, r := range rows {
@@ -273,6 +269,10 @@ func TestProcessing(t *testing.T) {
 }
 
 func testQuestions(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip("Skipping 'questions' testing...")
+	}
 
 	cmd.RootCmd.SetArgs([]string{"questions", "-U", url})
 	cmd.Execute()
