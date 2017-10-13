@@ -45,6 +45,7 @@ var (
 	color              string
 	debug              bool
 	debugLevel         int
+	dest               string
 	force              bool
 	region             string
 	testing            bool
@@ -67,9 +68,7 @@ Conditions that define Cell Formula Block -
 Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
 where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
-	// Run: func(c *cobra.Command, args []Args) {
-
-	// },
+	// Run: func(c *cobra.Command, args []Args) {},
 }
 
 func getConfig() {
@@ -80,6 +79,10 @@ func getConfig() {
 	url = viper.GetString("url")
 	color = viper.GetString("color")
 	force = viper.GetBool("force")
+	dest = viper.GetString("dest")
+	if !strings.HasPrefix(dest, "/") {
+		dest += "/"
+	}
 }
 
 func extractBlocks(cmd *cobra.Command, args []string) {
@@ -120,7 +123,7 @@ func HandleAnswers(downloader FileDownloader) error {
 	}
 	var fileCount int
 	for _, r := range rows {
-		destinationName := path.Join(os.TempDir(), r.FileName)
+		destinationName := path.Join(dest, r.FileName)
 		log.Infof(
 			"Downloading %q (%q) form %q into %q",
 			r.S3Key, r.FileName, r.S3BucketName, destinationName)
@@ -133,7 +136,7 @@ func HandleAnswers(downloader FileDownloader) error {
 			continue
 		}
 		log.Infof("Processing %q", fileName)
-		model.ExtractBlocksFromFile(fileName, color, force, verbose)
+		model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID)
 		fileCount++
 	}
 	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
@@ -167,6 +170,7 @@ func init() {
 	flags.String("aws-region", "ap-south-1", "AWS Region.")
 	flags.String("aws-access-key-id", "", "AWS Access Key ID.")
 	flags.String("aws-secret-access-key", "", "AWS Secret Access Key.")
+	flags.String("dest", os.TempDir(), "The destionation directory for download files from AWS S3.")
 
 	viper.BindPFlag("aws-profile", RootCmd.PersistentFlags().Lookup("aws-profile"))
 	viper.BindPFlag("aws-region", RootCmd.PersistentFlags().Lookup("aws-region"))
@@ -176,6 +180,7 @@ func init() {
 	viper.BindEnv("aws-access-key-id", "AWS_ACCESS_KEY_ID")
 	viper.BindEnv("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
 	viper.SetDefault("aws-region", "ap-south-1")
+	viper.SetDefault("dest", os.TempDir())
 }
 
 // initConfig reads in config file and ENV variables if set.

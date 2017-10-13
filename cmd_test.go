@@ -12,15 +12,19 @@ import (
 	"github.com/jinzhu/now"
 
 	log "github.com/Sirupsen/logrus"
+	flag "github.com/spf13/pflag"
 
 	"extract-blocks/cmd"
 	model "extract-blocks/model"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 var testDb = path.Join(os.TempDir(), "extract-block-test.db")
+var defaultURL = "sqlite3://" + testDb
+var url string
 
 func parseTime(str string) *time.Time {
 	t := now.New(time.Now().UTC()).MustParse(str)
@@ -34,6 +38,13 @@ func init() {
 	if _, err := os.Stat(testDb); !os.IsNotExist(err) {
 		os.RemoveAll(testDb)
 	}
+	flag.StringVar(&url, "url", defaultURL, "Test database URL")
+	flag.Parse()
+	databaseURL, ok := os.LookupEnv("DATABASE_URL")
+	if ok {
+		url = databaseURL
+	}
+	log.Info("DATABASE URL: ", url)
 }
 
 func TestR1C1(t *testing.T) {
@@ -71,14 +82,21 @@ func TestRelativeFormulas(t *testing.T) {
 }
 
 func TestDemoFile(t *testing.T) {
+	deletData()
 	var wb model.Workbook
 	cmd.RootCmd.SetArgs([]string{
-		"run", "-U", "sqlite3://" + testDb, "-t", "-d", "-f", "-v", "demo.xlsx"})
+		"run", "-U", url, "-t", "-f", "demo.xlsx"})
 	cmd.Execute()
-	db, _ := gorm.Open("sqlite3", testDb)
+
+	db, _ := model.OpenDb(url)
 	defer db.Close()
 
-	db.First(&wb, model.Workbook{FileName: "demo.xlsx"})
+	result := db.First(&wb, "file_name = ?", "demo.xlsx")
+	if result.Error != nil {
+		t.Error(result.Error)
+		t.Fail()
+	}
+
 	if wb.FileName != "demo.xlsx" {
 		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
 		t.Fail()
@@ -94,10 +112,24 @@ func TestDemoFile(t *testing.T) {
 	}
 }
 
+func deletData() {
+
+	if db == nil || db.DB() == nil {
+		db, _ = model.OpenDb(url)
+		defer db.Close()
+	}
+
+	db.Delete(&model.Workbook{})
+	db.Delete(&model.Question{})
+	db.Delete(&model.Answer{})
+	db.Delete(&model.Source{})
+}
+
 func createTestDB() *gorm.DB {
-	db, _ = model.OpenDb("sqlite3://" + testDb)
+	db, _ = model.OpenDb(url)
 	cmd.Db = db
 
+	deletData()
 	//db.LogMode(true)
 	fileNames := []string{
 		"demo.xlsx",

@@ -91,6 +91,7 @@ type Question struct {
 	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
 	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
+	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
@@ -191,17 +192,17 @@ func (Source) TableName() string {
 
 // Answer - student submitted answers
 type Answer struct {
-	ID             int         `gorm:"column:StudentAnswerID;primary_key;AUTO_INCREMENT"`
-	AssignmentID   int         `gorm:"column:StudentAssignmentID"`
-	QuestionID     int         `gorm:"column:QuestionID"`
-	MCQOptionID    int         `gorm:"column:MCQOptionID"`
-	ShortAnswer    string      `gorm:"column:ShortAnswerText;type:text"`
-	Marks          string      `gorm:"column:Marks"`
-	SubmissionTime time.Time   `gorm:"column:SubmissionTime"`
-	FileID         int         `gorm:"column:FileID"`
-	Worksheets     []Worksheet `gorm:"ForeignKey:StudentAnswerID;AssociationForeignKey:Refer"`
-	Source         Source      `gorm:"ForeignKey:FileID"`
-	Question       Question    `gorm:"ForeignKey:QuestionID"`
+	ID             int           `gorm:"column:StudentAnswerID;primary_key;AUTO_INCREMENT"`
+	AssignmentID   int           `gorm:"column:StudentAssignmentID"`
+	QuestionID     sql.NullInt64 `gorm:"column:QuestionID;type:int"`
+	MCQOptionID    int           `gorm:"column:MCQOptionID"`
+	ShortAnswer    string        `gorm:"column:ShortAnswerText;type:text"`
+	Marks          string        `gorm:"column:Marks"`
+	SubmissionTime time.Time     `gorm:"column:SubmissionTime"`
+	FileID         int           `gorm:"column:FileID"`
+	Worksheets     []Worksheet   `gorm:"ForeignKey:AnswerID"`
+	Source         Source        `gorm:"ForeignKey:FileID"`
+	Question       Question      `gorm:"ForeignKey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -211,17 +212,22 @@ func (Answer) TableName() string {
 
 // Workbook - Excel file / workbook
 type Workbook struct {
-	ID         int
+	ID         int `gorm:"primary_key"`
 	FileName   string
 	CreatedAt  time.Time
-	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID"`
+	AnswerID   sql.NullInt64 `gorm:"index;type:int"`
+	Answer     Answer        `gorm:"ForeignKey:AnswerID"`
+	Worksheets []Worksheet   `gorm:"ForeignKey:WorkbookID"`
 }
 
 // Reset deletes all underlying objects: worksheets, blocks, and cells
 func (wb *Workbook) Reset() {
 
 	var worksheets []Worksheet
-	Db.Model(&wb).Related(&worksheets)
+	result := Db.Model(&wb).Related(&worksheets)
+	if result.Error != nil {
+		log.Error(result.Error)
+	}
 	log.Debugf("Deleting worksheets: %#v", worksheets)
 	for ws := range worksheets {
 		var blocks []Block
@@ -232,7 +238,6 @@ func (wb *Workbook) Reset() {
 			Db.Delete(b)
 		}
 	}
-
 	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
@@ -242,7 +247,10 @@ type Worksheet struct {
 	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block `gorm:"ForeignKey:worksheet_id"`
+	AnswerID         sql.NullInt64 `gorm:"index;type:int"`
+	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
+	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
+	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
 }
 
 // Block - the univormly filled with specific color block
@@ -250,10 +258,11 @@ type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
 	WorksheetID     int `gorm:"index"`
 	Color           string
-	Range           string `gorm:"column:BlockCellRange"`
-	Formula         string `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string // first block cell relative formula formula
-	Cells           []Cell `gorm:"ForeignKey:block_id"`
+	Range           string    `gorm:"column:BlockCellRange"`
+	Formula         string    `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string    // first block cell relative formula formula
+	Cells           []Cell    `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet `gorm:"ForeignKey:WorksheetID"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -338,7 +347,13 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					Range:   cellID,
 					Comment: commentText,
 				}
+				if DebugLevel > 1 {
+					log.Debugf("Inserting %#v", c)
+				}
 				Db.Create(&c)
+				if Db.Error != nil {
+					log.Error("Error occured: ", Db.Error.Error())
+				}
 				b.e.c = j
 			} else {
 				log.Debugf("Reached the edge column  of the block at column %d", j)
@@ -404,6 +419,7 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 func SetDb() {
 	// Migrate the schema
 	log.Debug("Add to automigrate...")
+	worksheetsExists := Db.HasTable("worksheets")
 	Db.AutoMigrate(&Source{})
 	Db.AutoMigrate(&Question{})
 	Db.AutoMigrate(&QuestionExcelData{})
@@ -412,11 +428,19 @@ func SetDb() {
 	Db.AutoMigrate(&Worksheet{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
-	if strings.HasPrefix(Db.Dialect().GetName(), "mysql") {
-		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "worksheets(StudentAnswerID)", "CASCADE", "CASCADE")
+	if strings.HasPrefix(Db.Dialect().GetName(), "mysql") && !worksheetsExists {
+		log.Debug("Adding a constraint to Wroksheets -> Answers...")
+		Db.Model(&Worksheet{}).AddForeignKey("answer_id", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
+		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
 		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+		log.Debug("Adding a constraint to Questions...")
+		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		log.Debug("Adding a constraint to QuestionExcelData...")
+		Db.Model(&QuestionExcelData{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -425,9 +449,9 @@ func QuestionsToProcess() ([]Question, error) {
 
 	var questions []Question
 	(Db.Joins(
-		`JOIN FileSources 
-			ON FileSources.FileID = Questions.FileID AND 
-			FileSources.FileName LIKE '%.xlsx'`).Find(
+		"JOIN FileSources ON FileSources.FileID = Questions.FileID").Where(
+		"IsProcessed = ?", 0).Where(
+		"FileSources.FileName LIKE ?", "%.xlsx").Find(
 		&questions))
 	return questions, Db.Error
 }
@@ -489,13 +513,18 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool) (wb Workbook) {
+func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook) {
 	xlFile, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	result := Db.First(&wb, Workbook{FileName: fileName})
+	var answerID sql.NullInt64
+	if len(answerIDs) > 0 {
+		answerID = NewNullInt64(answerIDs[0])
+	}
+
+	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -504,8 +533,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool) (wb Work
 		log.Warnf("File %q was already processed.", fileName)
 		wb.Reset()
 	} else {
-		wb = Workbook{FileName: fileName}
-		Db.Create(&wb)
+		wb = Workbook{FileName: fileName, AnswerID: answerID}
+		result = Db.Create(&wb)
+		if result.Error != nil {
+			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
+		}
+		if DebugLevel > 1 {
+			log.Debugf("Ceated workbook entry %#v", wb)
+		}
 	}
 
 	if verbose {
@@ -528,7 +563,11 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool) (wb Work
 			Name:             sheet.Name,
 			WorkbookID:       wb.ID,
 			WorkbookFileName: wb.FileName,
+			AnswerID:         answerID,
 		})
+		if Db.Error != nil {
+			log.Fatalf("Failed to create worksheet entry: %s", Db.Error.Error())
+		}
 		blocks := blockList{}
 		sheetFillColors := []string{}
 
@@ -561,6 +600,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool) (wb Work
 					b.s.r, b.s.c = i, j
 
 					Db.Create(&b)
+					if DebugLevel > 1 {
+						log.Debugf("Created %#v", b)
+					}
 
 					b.findWhole(sheet, color)
 					b.save()

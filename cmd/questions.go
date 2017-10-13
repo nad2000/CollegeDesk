@@ -16,7 +16,6 @@ package cmd
 
 import (
 	model "extract-blocks/model"
-	"os"
 	"path"
 
 	log "github.com/Sirupsen/logrus"
@@ -61,7 +60,7 @@ func HandleQuestions(downloader FileDownloader) error {
 	for _, q := range rows {
 		var s model.Source
 		Db.Model(&q).Related(&s, "FileID")
-		destinationName := path.Join(os.TempDir(), s.FileName)
+		destinationName := path.Join(dest, s.FileName)
 		log.Infof(
 			"Downloading %q (%q) form %q into %q",
 			s.S3Key, s.FileName, s.S3BucketName, destinationName)
@@ -76,7 +75,15 @@ func HandleQuestions(downloader FileDownloader) error {
 		log.Infof("Processing %q", fileName)
 		err = q.ImportFile(fileName)
 		if err != nil {
-			log.Errorf("Failed to import %q for the question %#v", fileName, q)
+			log.Errorf(
+				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
+			continue
+		}
+		q.IsProcessed = true
+		Db.Save(&q)
+		if Db.Error != nil {
+			log.Errorf(
+				"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
 			continue
 		}
 		fileCount++
