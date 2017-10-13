@@ -448,12 +448,12 @@ func SetDb() {
 func QuestionsToProcess() ([]Question, error) {
 
 	var questions []Question
-	(Db.Joins(
+	result := (Db.Joins(
 		"JOIN FileSources ON FileSources.FileID = Questions.FileID").Where(
 		"IsProcessed = ?", 0).Where(
 		"FileSources.FileName LIKE ?", "%.xlsx").Find(
 		&questions))
-	return questions, Db.Error
+	return questions, result.Error
 }
 
 // RowsToProcessResult stores query resut

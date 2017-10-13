@@ -41,11 +41,9 @@ func init() {
 	RootCmd.AddCommand(runCmd)
 	flags := runCmd.Flags()
 
-	flags.StringP("url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
 	flags.BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	flags.StringP("color", "c", defaultColor, "The block filling color.")
 
-	viper.BindPFlag("url", flags.Lookup("url"))
 	viper.BindPFlag("color", flags.Lookup("color"))
 	viper.BindPFlag("force", flags.Lookup("force"))
 }

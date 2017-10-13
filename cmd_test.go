@@ -45,6 +45,13 @@ func init() {
 		url = databaseURL
 	}
 	log.Info("DATABASE URL: ", url)
+	if strings.HasPrefix(url, "sqlite") {
+		parts := strings.Split(url, "://")
+		dbFileName := parts[len(parts)-1]
+		if _, err := os.Stat(dbFileName); !os.IsNotExist(err) {
+			os.RemoveAll(dbFileName)
+		}
+	}
 }
 
 func TestR1C1(t *testing.T) {
@@ -119,7 +126,11 @@ func deletData() {
 		defer db.Close()
 	}
 
+	db.Delete(&model.Cell{})
+	db.Delete(&model.Block{})
+	db.Delete(&model.Worksheet{})
 	db.Delete(&model.Workbook{})
+	db.Delete(&model.QuestionExcelData{})
 	db.Delete(&model.Question{})
 	db.Delete(&model.Answer{})
 	db.Delete(&model.Source{})
@@ -190,6 +201,10 @@ func createTestDB() *gorm.DB {
 var db *gorm.DB
 
 func testQuestionsToProcess(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip("Skipping 'questions' testing...")
+	}
 
 	var rows []model.Question
 	db.Find(&rows)
@@ -262,8 +277,10 @@ func testQuestions(t *testing.T) {
 	cmd.RootCmd.SetArgs([]string{"questions", "-U", url})
 	cmd.Execute()
 
-	db, _ := model.OpenDb(url)
-	defer db.Close()
+	if db == nil || db.DB() == nil {
+		db, _ := model.OpenDb(url)
+		defer db.Close()
+	}
 
 	var count int
 	db.Model(&model.QuestionExcelData{}).Count(&count)
@@ -302,8 +319,7 @@ func testS3Downloader(t *testing.T) {
 	}
 
 	d := cmd.NewS3Downloader("us-east-1", "rad")
-	destName := nextRandomName() + ".xlsx"
-	t.Logf("Downloading into %q", destName)
+	destName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	_, err := d.DownloadFile("test.xlsx", "studentanswers", "test.xlsx", destName)
 	if err != nil {
 		t.Error(err)
