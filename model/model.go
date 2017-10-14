@@ -419,20 +419,50 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 	return
 }
 
+// MySQLQuestion - questions
+type MySQLQuestion struct {
+	ID                 int                 `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
+	QuestionType       QuestionType        `gorm:"column:QuestionType;type:ENUM('ShortAnswer','MCQ','FileUpload')"`
+	QuestionSequence   int                 `gorm:"column:QuestionSequence;not null"`
+	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
+	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
+	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
+	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
+	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
+	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
+	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
+	Source             Source              `gorm:"ForeignKey:FileID"`
+	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+}
+
+// TableName overrides default table name for the model
+func (MySQLQuestion) TableName() string {
+	return "Questions"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
+	isMySQL := strings.HasPrefix(Db.Dialect().GetName(), "mysql")
 	log.Debug("Add to automigrate...")
 	worksheetsExists := Db.HasTable("worksheets")
 	Db.AutoMigrate(&Source{})
-	Db.AutoMigrate(&Question{})
+	if isMySQL {
+		// Modify struct tag for MySQL
+		Db.AutoMigrate(&MySQLQuestion{})
+	} else {
+		Db.AutoMigrate(&Question{})
+	}
+
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
-	if strings.HasPrefix(Db.Dialect().GetName(), "mysql") && !worksheetsExists {
+	if isMySQL && !worksheetsExists {
+		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
 		Db.Model(&Worksheet{}).AddForeignKey("answer_id", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Cells...")

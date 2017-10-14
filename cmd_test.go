@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"flag"
 	"os"
 	"path"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"github.com/jinzhu/now"
 
 	log "github.com/Sirupsen/logrus"
-	flag "github.com/spf13/pflag"
 
 	"extract-blocks/cmd"
 	model "extract-blocks/model"
@@ -40,9 +40,11 @@ func init() {
 	}
 	flag.StringVar(&url, "url", defaultURL, "Test database URL")
 	flag.Parse()
-	databaseURL, ok := os.LookupEnv("DATABASE_URL")
-	if ok {
-		url = databaseURL
+	if url == defaultURL {
+		databaseURL, ok := os.LookupEnv("DATABASE_URL")
+		if ok {
+			url = databaseURL
+		}
 	}
 	log.Info("DATABASE URL: ", url)
 	if strings.HasPrefix(url, "sqlite") {
