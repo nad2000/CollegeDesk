@@ -515,7 +515,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
-		Where("FileName LIKE ?", "'%.xlsx'").
+		Where("FileName LIKE ?", "%.xlsx").
 		Where("SubmissionTime <= ?", midnight).Rows()
 	defer rows.Close()
 
