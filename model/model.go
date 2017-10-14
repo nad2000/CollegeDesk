@@ -482,11 +482,11 @@ func SetDb() {
 func QuestionsToProcess() ([]Question, error) {
 
 	var questions []Question
-	result := (Db.Joins(
-		"JOIN FileSources ON FileSources.FileID = Questions.FileID").Where(
-		"IsProcessed = ?", 0).Where(
-		"FileSources.FileName LIKE ?", "%.xlsx").Find(
-		&questions))
+	result := (Db.
+		Joins("JOIN FileSources ON FileSources.FileID = Questions.FileID").
+		Where("IsProcessed = ?", 0).
+		Where("FileSources.FileName LIKE ?", "%.xlsx").
+		Find(&questions))
 	return questions, result.Error
 }
 
@@ -510,13 +510,13 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 		0, 0, 0, 0, time.UTC)
 
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-	rows, err := Db.Table("FileSources").Select(
-		"FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").Joins(
-		"JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").Where(
-		"FileName IS NOT NULL").Where(
-		"FileName != ''").Where(
-		"FileName LIKE '%.xlsx'").Where(
-		"SubmissionTime <= ?", midnight).Rows()
+	rows, err := Db.Table("FileSources").
+		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
+		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
+		Where("FileName IS NOT NULL").
+		Where("FileName != ?", "").
+		Where("FileName LIKE ?", "'%.xlsx'").
+		Where("SubmissionTime <= ?", midnight).Rows()
 	defer rows.Close()
 
 	if err != nil {
