@@ -262,11 +262,12 @@ type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
 	WorksheetID     int `gorm:"index"`
 	Color           string
-	Range           string    `gorm:"column:BlockCellRange"`
-	Formula         string    `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string    // first block cell relative formula formula
-	Cells           []Cell    `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet `gorm:"ForeignKey:WorksheetID"`
+	Range           string     `gorm:"column:BlockCellRange"`
+	Formula         string     `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string     // first block cell relative formula formula
+	Cells           []Cell     `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet  `gorm:"ForeignKey:WorksheetID"`
+	Comments        []*Comment `gorm:"many2many:BlockCommentMapping;association_foreignkey:ExcelCommentID;foreignkey:ExcelBlockID;association_joinable_foreignkey:ExcelCommentID;joinable_foreignkey:ExcelBlockID"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -441,6 +442,18 @@ func (MySQLQuestion) TableName() string {
 	return "Questions"
 }
 
+// Comment - added comments  with marks
+type Comment struct {
+	ID     int      `gorm:"column:CommentID;primary_key;AUTO_INCREMENT"`
+	Text   string   `gorm:"column:CommentText"`
+	Blocks []*Block `gorm:"many2many:BlockCommentMapping;association_foreignkey:ExcelBlockID;foreignkey:ExcelCommentID;association_joinable_foreignkey:ExcelBlockID;joinable_foreignkey:ExcelCommentID"`
+}
+
+// TableName overrides default table name for the model
+func (Comment) TableName() string {
+	return "Comments"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -461,6 +474,7 @@ func SetDb() {
 	Db.AutoMigrate(&Worksheet{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
+	Db.AutoMigrate(&Comment{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")

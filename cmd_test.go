@@ -128,6 +128,7 @@ func deletData() {
 		defer db.Close()
 	}
 
+	db.Delete(&model.Comment{})
 	db.Delete(&model.Cell{})
 	db.Delete(&model.Block{})
 	db.Delete(&model.Worksheet{})
