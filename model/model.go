@@ -82,7 +82,7 @@ func NewNullInt64(value int) sql.NullInt64 {
 
 // Question - questions
 type Question struct {
-	ID                 int                 `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
+	ID                 int                 `gorm:"column:QuestionID;primary_key:true;AUTO_INCREMENT"`
 	QuestionType       QuestionType        `gorm:"column:QuestionType"`
 	QuestionSequence   int                 `gorm:"column:QuestionSequence;not null"`
 	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
@@ -158,7 +158,7 @@ func (q *Question) ImportFile(fileName string) error {
 
 // QuestionExcelData - extracted celles from question Workbooks
 type QuestionExcelData struct {
-	ID         int      `gorm:"column:Id;primary_key;AUTO_INCREMENT"`
+	ID         int      `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
 	QuestionID int      `gorm:"column:QuestionID"`
 	SheetName  string   `gorm:"column:SheetName"`
 	CellRange  string   `gorm:"column:CellRange"`
@@ -175,7 +175,7 @@ func (QuestionExcelData) TableName() string {
 
 // Source - student answer file sources
 type Source struct {
-	ID           int        `gorm:"column:FileID;primary_key;AUTO_INCREMENT"`
+	ID           int        `gorm:"column:FileID;primary_key:true;AUTO_INCREMENT"`
 	S3BucketName string     `gorm:"column:S3BucketName;size:100"`
 	S3Key        string     `gorm:"column:S3Key;size:100"`
 	FileName     string     `gorm:"column:FileName;size:100"`
@@ -192,7 +192,7 @@ func (Source) TableName() string {
 
 // Answer - student submitted answers
 type Answer struct {
-	ID             int           `gorm:"column:StudentAnswerID;primary_key;AUTO_INCREMENT"`
+	ID             int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
 	AssignmentID   int           `gorm:"column:StudentAssignmentID"`
 	QuestionID     sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	MCQOptionID    int           `gorm:"column:MCQOptionID"`
@@ -212,7 +212,7 @@ func (Answer) TableName() string {
 
 // Workbook - Excel file / workbook
 type Workbook struct {
-	ID         int `gorm:"primary_key"`
+	ID         int `gorm:"primary_key:true"`
 	FileName   string
 	CreatedAt  time.Time
 	AnswerID   sql.NullInt64 `gorm:"index;type:int"`
@@ -259,15 +259,14 @@ type Worksheet struct {
 
 // Block - the univormly filled with specific color block
 type Block struct {
-	ID              int `gorm:"column:ExcelBlockID;primary_key;AUTO_INCREMENT"`
+	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	WorksheetID     int `gorm:"index"`
 	Color           string
-	Range           string     `gorm:"column:BlockCellRange"`
-	Formula         string     `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string     // first block cell relative formula formula
-	Cells           []Cell     `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet  `gorm:"ForeignKey:WorksheetID"`
-	Comments        []*Comment `gorm:"many2many:BlockCommentMapping;association_foreignkey:ExcelCommentID;foreignkey:ExcelBlockID;association_joinable_foreignkey:ExcelCommentID;joinable_foreignkey:ExcelBlockID"`
+	Range           string    `gorm:"column:BlockCellRange"`
+	Formula         string    `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string    // first block cell relative formula formula
+	Cells           []Cell    `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet `gorm:"ForeignKey:WorksheetID"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -422,7 +421,7 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 
 // MySQLQuestion - questions
 type MySQLQuestion struct {
-	ID                 int                 `gorm:"column:QuestionID;primary_key;AUTO_INCREMENT"`
+	ID                 int                 `gorm:"column:QuestionID;primary_key:true;AUTO_INCREMENT"`
 	QuestionType       QuestionType        `gorm:"column:QuestionType;type:ENUM('ShortAnswer','MCQ','FileUpload')"`
 	QuestionSequence   int                 `gorm:"column:QuestionSequence;not null"`
 	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
@@ -444,14 +443,26 @@ func (MySQLQuestion) TableName() string {
 
 // Comment - added comments  with marks
 type Comment struct {
-	ID     int      `gorm:"column:CommentID;primary_key;AUTO_INCREMENT"`
-	Text   string   `gorm:"column:CommentText"`
-	Blocks []*Block `gorm:"many2many:BlockCommentMapping;association_foreignkey:ExcelBlockID;foreignkey:ExcelCommentID;association_joinable_foreignkey:ExcelBlockID;joinable_foreignkey:ExcelCommentID"`
+	ID   int    `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
+	Text string `gorm:"column:CommentText"`
 }
 
 // TableName overrides default table name for the model
 func (Comment) TableName() string {
 	return "Comments"
+}
+
+// BlockCommentMapping - block-comment mapping
+type BlockCommentMapping struct {
+	Block          Block   `gorm:"ForeignKey:ExcelBlockID"`
+	ExcelBlockID   uint    `gorm:"column:ExcelBlockID"`
+	Comment        Comment `gorm:"ForeignKey:ExcelCommentID"`
+	ExcelCommentID uint    `gorm:"column:ExcelCommentID"`
+}
+
+// TableName overrides default table name for the model
+func (BlockCommentMapping) TableName() string {
+	return "BlockCommentMapping"
 }
 
 // SetDb initializes DB
@@ -475,6 +486,7 @@ func SetDb() {
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
 	Db.AutoMigrate(&Comment{})
+	Db.AutoMigrate(&BlockCommentMapping{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
