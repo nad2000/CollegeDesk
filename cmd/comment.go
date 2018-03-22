@@ -1,4 +1,4 @@
-// Copyright © 2018 NAME HERE <EMAIL ADDRESS>
+// Copyright © 2017 Radomirs Cirskis
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -8,43 +8,53 @@
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// WITHOUT WARRANTIES OR ONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
 package cmd
 
 import (
-	"fmt"
 
+	// model "extract-blocks/model"
+
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
+	//"github.com/tealeg/xlsx"
+	"github.com/360EntSecGroup-Skylar/excelize"
 )
 
 // commentCmd represents the comment command
 var commentCmd = &cobra.Command{
-	Use:   "comment",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "comment FILENAME",
+	Short: "Add comments from DB",
+	Long: `TODO
+	TODO
+	TODO.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("comment called")
+		if len(args) < 1 {
+			log.Fatal("Missing file name.")
+		}
+		fileName := args[0]
+		if verboseLevel > 0 || debug {
+			log.Infof("Processing %q", fileName)
+		}
+		xlsx, err := excelize.OpenFile(fileName)
+		if err != nil {
+			log.Errorf("Fialed to open file %q", fileName)
+			log.Errorln(err)
+			return
+		}
+		xlsx.AddComment("Sheet1", "A1", `{"author":"Excelize: ","text":"This is a comment."}`)
+		err = xlsx.SaveAs("NEW_" + fileName)
+		if err != nil {
+			log.Errorf("Fialed to save file %q", fileName)
+			log.Errorln(err)
+		}
+
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(commentCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// commentCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// commentCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.AddCommand(commentCmd)
 }
