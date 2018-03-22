@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/360EntSecGroup-Skylar/excelize"
+  packages = ["."]
+  revision = "6d634ca320acca28a84f25888a04c0861548d5ed"
+  version = "v1.2"
+
+[[projects]]
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
@@ -222,6 +228,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f046e01c571d9f8af40f16080cf79fc39d2389fe0355d70104e121e44353ea92"
+  inputs-digest = "b6e89a8a6b6a62ff80e8cc33bfde136766b30819acd5226f28a755ad23fdef6a"
   solver-name = "gps-cdcl"
   solver-version = 1
