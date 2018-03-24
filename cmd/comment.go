@@ -15,8 +15,9 @@
 package cmd
 
 import (
-
-	// model "extract-blocks/model"
+	model "extract-blocks/model"
+	"fmt"
+	"strings"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -47,6 +48,7 @@ func init() {
 	RootCmd.AddCommand(commentCmd)
 }
 
+// AddComments addes comments to the given file from the DB and stores file with the given name
 func AddComments(fileName, outputName string) {
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
@@ -54,14 +56,33 @@ func AddComments(fileName, outputName string) {
 		log.Errorln(err)
 		return
 	}
-	xlsx.AddComment("Sheet1", "A1", `{"author":"Excelize: ","text":"This is a comment."}`)
+
+	var book model.Workbook
+	Db.Preload("Worksheets.Blocks.CommentMappings.Comment").First(&book, "file_name = ?", fileName)
+	for _, sheet := range book.Worksheets {
+		for _, block := range sheet.Blocks {
+			for _, bcm := range block.CommentMappings {
+				comment := bcm.Comment
+				log.Info("****", comment)
+				rangeCells := strings.Split(block.Range, ":")
+				xlsx.AddComment(
+					sheet.Name,
+					rangeCells[0],
+					fmt.Sprintf(`{"author": %q,"text": %q}`, "????", comment.Text))
+			}
+		}
+	}
 	if fileName == outputName || outputName == "" {
 		err = xlsx.Save()
 	} else {
 		err = xlsx.SaveAs(outputName)
 	}
 	if err != nil {
-		log.Errorf("Fialed to save file %q", fileName)
+		if outputName != "" {
+			log.Errorf("Failed to save file %q -> %q", fileName, outputName)
+		} else {
+			log.Errorf("Failed to save file %q", fileName)
+		}
 		log.Errorln(err)
 	}
 }

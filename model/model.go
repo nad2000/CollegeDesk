@@ -262,11 +262,12 @@ type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	WorksheetID     int `gorm:"index"`
 	Color           string
-	Range           string    `gorm:"column:BlockCellRange"`
-	Formula         string    `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string    // first block cell relative formula formula
-	Cells           []Cell    `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet `gorm:"ForeignKey:WorksheetID"`
+	Range           string                `gorm:"column:BlockCellRange"`
+	Formula         string                `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string                // first block cell relative formula formula
+	Cells           []Cell                `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
+	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell

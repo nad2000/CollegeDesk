@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"strconv"
@@ -197,6 +198,7 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
+
 	return db
 }
 
@@ -340,16 +342,35 @@ func TestComments(t *testing.T) {
 
 	db = createTestDB()
 	defer db.Close()
+
 	var source model.Source
 
 	db.Where("Filename=?", "demo.xlsx").First(&source)
 	log.Infof("Source: %#v", source)
 
-	for _, fn := range testFileNames {
-		outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
-		cmd.AddComments(fn, outputName)
-		log.Info("*** Output:", outputName)
+	book := model.Workbook{FileName: "commenting.test.xlsx"}
+	db.Create(&book)
+	for _, sn := range []string{"Sheet1", "Sheet2"} {
+		sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName}
+		db.Create(&sheet)
+		for _, r := range []string{"A1", "C3", "D2:F13"} {
+			block := model.Block{Worksheet: sheet, Range: r}
+			db.Create(&block)
+			comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
+			db.Create(&comment)
+			bcm := model.BlockCommentMapping{Block: block, Comment: comment}
+			db.Create(&bcm)
+		}
 	}
+	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	t.Log("OUTPUT:", outputName)
+	cmd.AddComments(book.FileName, outputName)
+
+	// for _, fn := range testFileNames {
+	// 	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	// 	cmd.AddComments(fn, outputName)
+	// 	log.Info("*** Output:", outputName)
+	// }
 
 	// if db == nil || db.DB() == nil {
 	// 	db, _ := model.OpenDb(url)
