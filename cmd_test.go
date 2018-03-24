@@ -338,6 +338,13 @@ func testS3Downloader(t *testing.T) {
 
 func TestComments(t *testing.T) {
 
+	db = createTestDB()
+	defer db.Close()
+	var source model.Source
+
+	db.Where("Filename=?", "demo.xlsx").First(&source)
+	log.Infof("Source: %#v", source)
+
 	for _, fn := range testFileNames {
 		outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 		cmd.AddComments(fn, outputName)
