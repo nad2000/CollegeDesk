@@ -22,6 +22,13 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
+var testFileNames = []string{
+	"demo.xlsx",
+	"Sample3_A2E1.xlsx",
+	"Sample4_A2E1.xlsx",
+	"test2.xlsx",
+	"test.xlsx",
+}
 var testDb = path.Join(os.TempDir(), "extract-block-test.db")
 var defaultURL = "sqlite3://" + testDb
 var url string
@@ -145,15 +152,8 @@ func createTestDB() *gorm.DB {
 
 	deletData()
 	//db.LogMode(true)
-	fileNames := []string{
-		"demo.xlsx",
-		"Sample3_A2E1.xlsx",
-		"Sample4_A2E1.xlsx",
-		"test2.xlsx",
-		"test.xlsx",
-	}
 
-	for _, fn := range fileNames {
+	for _, fn := range testFileNames {
 		f := model.Source{
 			FileName:     fn,
 			S3BucketName: "studentanswers",
@@ -197,7 +197,6 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
-
 	return db
 }
 
@@ -269,6 +268,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("S3Downloader", testS3Downloader)
 	t.Run("Questions", testQuestions)
+	//t.Run("Comments", testComments)
 }
 
 func testQuestions(t *testing.T) {
@@ -334,5 +334,24 @@ func testS3Downloader(t *testing.T) {
 	if stat.Size() < 1000 {
 		t.Errorf("Expected at least 5kB size file, got: %d bytes", stat.Size())
 	}
+}
 
+func TestComments(t *testing.T) {
+
+	for _, fn := range testFileNames {
+		outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+		cmd.AddComments(fn, outputName)
+		log.Info("*** Output:", outputName)
+	}
+
+	// if db == nil || db.DB() == nil {
+	// 	db, _ := model.OpenDb(url)
+	// 	defer db.Close()
+	// }
+
+	// var count int
+	// db.Model(&model.QuestionExcelData{}).Count(&count)
+	// if count != 72 {
+	// 	t.Errorf("Expected 72 blocks, got: %d", count)
+	// }
 }

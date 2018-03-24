@@ -39,7 +39,7 @@ var commentCmd = &cobra.Command{
 		if verboseLevel > 0 || debug {
 			log.Infof("Processing %q", fileName)
 		}
-		addComments(fileName)
+		AddComments(fileName, "")
 	},
 }
 
@@ -47,7 +47,7 @@ func init() {
 	RootCmd.AddCommand(commentCmd)
 }
 
-func addComments(fileName string) {
+func AddComments(fileName, outputName string) {
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
 		log.Errorf("Fialed to open file %q", fileName)
@@ -55,7 +55,11 @@ func addComments(fileName string) {
 		return
 	}
 	xlsx.AddComment("Sheet1", "A1", `{"author":"Excelize: ","text":"This is a comment."}`)
-	err = xlsx.SaveAs("NEW_" + fileName)
+	if fileName == outputName || outputName == "" {
+		err = xlsx.Save()
+	} else {
+		err = xlsx.SaveAs(outputName)
+	}
 	if err != nil {
 		log.Errorf("Fialed to save file %q", fileName)
 		log.Errorln(err)
