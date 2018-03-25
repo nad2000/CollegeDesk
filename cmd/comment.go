@@ -17,6 +17,7 @@ package cmd
 import (
 	model "extract-blocks/model"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -58,7 +59,8 @@ func AddComments(fileName, outputName string) {
 	}
 
 	var book model.Workbook
-	Db.Preload("Worksheets.Blocks.CommentMappings.Comment").First(&book, "file_name = ?", fileName)
+	base := filepath.Base(fileName)
+	Db.Preload("Worksheets.Blocks.CommentMappings.Comment").First(&book, "file_name LIKE ?", "%"+base)
 	for _, sheet := range book.Worksheets {
 		for _, block := range sheet.Blocks {
 			for _, bcm := range block.CommentMappings {

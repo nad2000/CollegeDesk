@@ -21,6 +21,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/nad2000/xlsx"
 )
 
 var testFileNames = []string{
@@ -366,20 +367,15 @@ func TestComments(t *testing.T) {
 	t.Log("OUTPUT:", outputName)
 	cmd.AddComments(book.FileName, outputName)
 
-	// for _, fn := range testFileNames {
-	// 	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
-	// 	cmd.AddComments(fn, outputName)
-	// 	log.Info("*** Output:", outputName)
-	// }
+	xlFile, err := xlsx.OpenFile(outputName)
+	if err != nil {
+		t.Error(err)
+	}
 
-	// if db == nil || db.DB() == nil {
-	// 	db, _ := model.OpenDb(url)
-	// 	defer db.Close()
-	// }
-
-	// var count int
-	// db.Model(&model.QuestionExcelData{}).Count(&count)
-	// if count != 72 {
-	// 	t.Errorf("Expected 72 blocks, got: %d", count)
-	// }
+	sheet := xlFile.Sheets[0]
+	comment := sheet.Comment["D2"]
+	expect := `*** Comment in "Sheet1" for the range "D2:F13"`
+	if comment.Text != expect {
+		t.Errorf("Expected %q, got: %q", expect, comment.Text)
+	}
 }
