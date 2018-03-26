@@ -341,12 +341,8 @@ func testS3Downloader(t *testing.T) {
 
 func testComments(t *testing.T) {
 
-	var source model.Source
-
-	db.Where("Filename=?", "demo.xlsx").First(&source)
-	log.Infof("Source: %#v", source)
-
-	book := model.Workbook{FileName: "commenting.test.xlsx"}
+	fileName := "commenting.test.xlsx"
+	book := model.Workbook{FileName: fileName}
 	db.Create(&book)
 	for _, sn := range []string{"Sheet1", "Sheet2"} {
 		sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName}
@@ -372,6 +368,22 @@ func testComments(t *testing.T) {
 	sheet := xlFile.Sheets[0]
 	comment := sheet.Comment["D2"]
 	expect := `*** Comment in "Sheet1" for the range "D2:F13"`
+	if comment.Text != expect {
+		t.Errorf("Expected %q, got: %q", expect, comment.Text)
+	}
+
+	outputName = path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	t.Log("OUTPUT:", outputName)
+	cmd.RootCmd.SetArgs([]string{"comment", fileName, outputName})
+	cmd.Execute()
+
+	xlFile, err = xlsx.OpenFile(outputName)
+	if err != nil {
+		t.Error(err)
+	}
+
+	sheet = xlFile.Sheets[0]
+	comment = sheet.Comment["D2"]
 	if comment.Text != expect {
 		t.Errorf("Expected %q, got: %q", expect, comment.Text)
 	}

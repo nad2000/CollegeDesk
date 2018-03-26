@@ -20,10 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/360EntSecGroup-Skylar/excelize"
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
-	//"github.com/tealeg/xlsx"
-	"github.com/360EntSecGroup-Skylar/excelize"
 )
 
 // commentCmd represents the comment command
