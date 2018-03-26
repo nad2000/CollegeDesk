@@ -28,20 +28,14 @@ import (
 
 // commentCmd represents the comment command
 var commentCmd = &cobra.Command{
-	Use:   "comment FILENAME",
+	Use:   "comment [INPUT] [OUTPUT]",
 	Short: "Add comments from DB",
-	Long: `TODO
-	TODO
-	TODO.`,
+	Long: `
+Adds comments to the answer Excel Workbooks either in batch
+or to a sible file given as an input. If the out put also is give
+the new file will be stored with the given name.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			log.Fatal("Missing file name.")
-		}
-		fileName := args[0]
-		if verboseLevel > 0 || debug {
-			log.Infof("Processing %q", fileName)
-		}
-		AddComments(fileName, "")
+		AddComments(args...)
 	},
 }
 
@@ -50,10 +44,25 @@ func init() {
 }
 
 // AddComments addes comments to the given file from the DB and stores file with the given name
-func AddComments(fileName, outputName string) {
+func AddComments(fileNames ...string) {
+
+	hasInputFile := len(fileNames) > 0
+	if !hasInputFile {
+		AddCommentsInBatch()
+		return
+	}
+
+	var fileName, outputName string
+
+	if hasInputFile {
+		fileName = fileNames[0]
+		if len(fileNames) > 1 {
+			outputName = fileNames[1]
+		}
+	}
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
-		log.Errorf("Fialed to open file %q", fileName)
+		log.Errorf("Failed to open file %q", fileName)
 		log.Errorln(err)
 		return
 	}
@@ -65,7 +74,6 @@ func AddComments(fileName, outputName string) {
 		for _, block := range sheet.Blocks {
 			for _, bcm := range block.CommentMappings {
 				comment := bcm.Comment
-				log.Info("****", comment)
 				rangeCells := strings.Split(block.Range, ":")
 				xlsx.AddComment(
 					sheet.Name,
@@ -87,4 +95,10 @@ func AddComments(fileName, outputName string) {
 		}
 		log.Errorln(err)
 	}
+}
+
+// AddCommentsInBatch addes comments to the answer files.
+func AddCommentsInBatch() {
+	// TODO: ...
+	return
 }

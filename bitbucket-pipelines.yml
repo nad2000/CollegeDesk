@@ -19,7 +19,6 @@ pipelines:
           # - go build -v
           - go build -v -o $(basename $PWD) main.go
           - ./bin/upx --best --lzma $(basename $PWD)
-          - env
           - ./$(basename $PWD) run -t -v demo.xlsx
           - ./$(basename $PWD) run -t -v commenting.test.xlsx
           - go test -v -short cmd_test.go

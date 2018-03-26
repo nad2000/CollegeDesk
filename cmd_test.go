@@ -271,7 +271,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("S3Downloader", testS3Downloader)
 	t.Run("Questions", testQuestions)
-	//t.Run("Comments", testComments)
+	t.Run("Comments", testComments)
 }
 
 func testQuestions(t *testing.T) {
@@ -339,10 +339,7 @@ func testS3Downloader(t *testing.T) {
 	}
 }
 
-func TestComments(t *testing.T) {
-
-	db = createTestDB()
-	defer db.Close()
+func testComments(t *testing.T) {
 
 	var source model.Source
 
