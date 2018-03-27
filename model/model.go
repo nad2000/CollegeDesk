@@ -90,7 +90,7 @@ type Question struct {
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
 	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
-	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
+	WasCompared        bool                `gorm:"type:tinyint(1)"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
@@ -208,6 +208,27 @@ type Answer struct {
 // TableName overrides default table name for the model
 func (Answer) TableName() string {
 	return "StudentAnswers"
+}
+
+// Assignment - assigment
+type Assignment struct {
+	ID                 int       `gorm:"column:AssignmentID;primary_key:true;AUTO_INCREMENT"`
+	Title              string    `gorm:"column:Title;type:varchar(80)"`
+	AssignmentSequence int       `gorm:"column:AssignmentSequence"`
+	StartDateAndTime   time.Time `gorm:"column:StartDateAndTime"`
+	DueDateAndTime     time.Time `gorm:"column:DueDateAndTime"`
+	UpdateTime         time.Time `gorm:"column:UpdateTime"`
+	IsHidden           int8      `gorm:"type:tinyint(4)"`
+	TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
+	TotalQuestion      int       `gorm:"column:TotalQuestion"`
+	CourseID           uint      `gorm:"column:CourseID;type:uint(10)"`
+	State              string    `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
+	WasProcessed       int8      `gorm:"type:tinyint(1)"`
+}
+
+// TableName overrides default table name for the model
+func (Assignment) TableName() string {
+	return "CourseAssignments"
 }
 
 // Workbook - Excel file / workbook
@@ -466,6 +487,19 @@ func (BlockCommentMapping) TableName() string {
 	return "BlockCommentMapping"
 }
 
+// QuestionAssignment - question-assignment mapping
+type QuestionAssignment struct {
+	Assignment   Assignment `gorm:"ForeignKey:AssignmentID"`
+	AssignmentID uint       `gorm:"column:AssignmentID"`
+	Question     Comment    `gorm:"ForeignKey:QuestionID"`
+	QuestionID   uint       `gorm:"column:QuestionID"`
+}
+
+// TableName overrides default table name for the model
+func (QuestionAssignment) TableName() string {
+	return "QuestionAssignmentMapping"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -488,6 +522,8 @@ func SetDb() {
 	Db.AutoMigrate(&Cell{})
 	Db.AutoMigrate(&Comment{})
 	Db.AutoMigrate(&BlockCommentMapping{})
+	Db.AutoMigrate(&Assignment{})
+	Db.AutoMigrate(&QuestionAssignment{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -558,6 +594,20 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 	}
 
 	return results, nil
+}
+
+// RowsToComment returns "cursor" for file IDs that can be commented
+func RowsToComment() (*sql.Rows, error) {
+	return Db.Table("FileSources").
+		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
+		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
+		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
+		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
+		Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
+		Where("FileName IS NOT NULL").
+		Where("FileName != ?", "").
+		Where("FileName LIKE ?", "%.xlsx").
+		Where("CourseAssignments.State = ?", "GRADED").Rows()
 }
 
 type blockList []Block

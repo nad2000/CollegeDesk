@@ -199,6 +199,14 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
+	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
+	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
+	db.Exec("UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1")
+	db.Exec(`
+		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
+		SELECT AssignmentID, QuestionID 
+		FROM CourseAssignments, Questions 
+		WHERE QuestionID % 2 != AssignmentID % 2`)
 
 	return db
 }
@@ -272,6 +280,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Downloader", testS3Downloader)
 	t.Run("Questions", testQuestions)
 	t.Run("Comments", testComments)
+	t.Run("testRowsToComment", testRowsToComment)
 }
 
 func testQuestions(t *testing.T) {
@@ -386,5 +395,25 @@ func testComments(t *testing.T) {
 	comment = sheet.Comment["D2"]
 	if comment.Text != expect {
 		t.Errorf("Expected %q, got: %q", expect, comment.Text)
+	}
+}
+
+func testRowsToComment(t *testing.T) {
+
+	rows, err := model.RowsToComment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		count += 1
+		var r model.RowsToProcessResult
+		db.ScanRows(rows, &r)
+		t.Log(r)
+	}
+	if count != 3 {
+		t.Errorf("Expected to select 3 files to comment, got: %d", count)
 	}
 }

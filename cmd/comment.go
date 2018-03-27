@@ -17,6 +17,7 @@ package cmd
 import (
 	model "extract-blocks/model"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -34,7 +35,13 @@ Adds comments to the answer Excel Workbooks either in batch
 or to a sible file given as an input. If the out put also is give
 the new file will be stored with the given name.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		AddComments(args...)
+		if len(args) == 0 {
+
+			downloader := createS3Downloader()
+			AddCommentsInBatch(downloader)
+		} else {
+			AddComments(args...)
+		}
 	},
 }
 
@@ -45,19 +52,11 @@ func init() {
 // AddComments addes comments to the given file from the DB and stores file with the given name
 func AddComments(fileNames ...string) {
 
-	hasInputFile := len(fileNames) > 0
-	if !hasInputFile {
-		AddCommentsInBatch()
-		return
-	}
-
 	var fileName, outputName string
 
-	if hasInputFile {
-		fileName = fileNames[0]
-		if len(fileNames) > 1 {
-			outputName = fileNames[1]
-		}
+	fileName = fileNames[0]
+	if len(fileNames) > 1 {
+		outputName = fileNames[1]
 	}
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
@@ -97,7 +96,49 @@ func AddComments(fileNames ...string) {
 }
 
 // AddCommentsInBatch addes comments to the answer files.
-func AddCommentsInBatch() {
+func AddCommentsInBatch(downloader FileDownloader) error {
 	// TODO: ...
-	return
+
+	rows, err := model.QuestionsToProcess()
+	if err != nil {
+		log.Fatalf("Failed to retrieve list of question source files to process: %s",
+			err.Error())
+	}
+	var fileCount int
+	for _, q := range rows {
+		var s model.Source
+		Db.Model(&q).Related(&s, "FileID")
+		destinationName := path.Join(dest, s.FileName)
+		log.Infof(
+			"Downloading %q (%q) form %q into %q",
+			s.S3Key, s.FileName, s.S3BucketName, destinationName)
+		fileName, err := downloader.DownloadFile(
+			s.FileName, s.S3BucketName, s.S3Key, destinationName)
+		if err != nil {
+			log.Errorf(
+				"Failed to retrieve file %q from %q into %q: %s",
+				s.S3Key, s.S3BucketName, destinationName, err.Error())
+			continue
+		}
+		log.Infof("Processing %q", fileName)
+		err = q.ImportFile(fileName)
+		if err != nil {
+			log.Errorf(
+				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
+			continue
+		}
+		q.IsProcessed = true
+		Db.Save(&q)
+		if Db.Error != nil {
+			log.Errorf(
+				"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
+			continue
+		}
+		fileCount++
+	}
+	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
+	if len(rows) != fileCount {
+		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
+	}
+	return nil
 }
