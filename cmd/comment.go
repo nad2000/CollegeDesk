@@ -35,8 +35,19 @@ Adds comments to the answer Excel Workbooks either in batch
 or to a sible file given as an input. If the out put also is give
 the new file will be stored with the given name.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) == 0 {
+		model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
+		getConfig()
+		debugCmd(cmd)
 
+		var err error
+		Db, err = model.OpenDb(url)
+		if err != nil {
+			log.Error(err)
+			log.Fatalf("failed to connect database %q", url)
+		}
+		defer Db.Close()
+
+		if len(args) == 0 {
 			downloader := createS3Downloader()
 			AddCommentsInBatch(downloader)
 		} else {
@@ -101,21 +112,36 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 
 	rows, err := model.RowsToComment()
 	defer rows.Close()
+
 	if err != nil {
 		log.Fatalf("Failed to retrieve list of question source files to process: %s",
 			err.Error())
 	}
-	// var fileCount int
+	var fileCount int
 	for rows.Next() {
 		var r model.RowsToProcessResult
+		var a model.Answer
 		//var s model.Source
-		rows.Scan(&r)
-		log.Info(r)
+		Db.ScanRows(rows, &r)
+		err = Db.Preload("Source").First(&a, r.StudentAnswerID).Error
+		if err != nil {
+			log.Error(err)
+			continue
+		}
 		// Download the file and open it
-		// Iterate via asssiated comments and add them to the file
+		fileName, err := a.Source.DownloadTo(downloader, dest)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		_ = fileName
+
+		// Iterate via assosiated comments and add them to the file
 		// Save with a new name
 		// Upload the file
 		// Assosiate the file with the answer
+		// Mark the asnwer as 'commented'
+		fileCount += 1
 	}
 	// for _, q := range rows {
 	// 	Db.Model(&q).Related(&s, "FileID")
@@ -152,5 +178,6 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 	// if len(rows) != fileCount {
 	// 	log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
 	// }
+	log.Infof("Successfully commented %d Excel files.", fileCount)
 	return nil
 }

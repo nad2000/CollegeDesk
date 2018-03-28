@@ -623,6 +623,7 @@ func RowsToComment() (*sql.Rows, error) {
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
 		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
 		Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
+		Where("was_comment_processed = ?", 0).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
