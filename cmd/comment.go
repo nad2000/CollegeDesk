@@ -15,9 +15,12 @@
 package cmd
 
 import (
+	"crypto/rand"
 	model "extract-blocks/model"
 	"extract-blocks/s3"
 	"fmt"
+	"io"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -123,7 +126,7 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 		var a model.Answer
 		//var s model.Source
 		Db.ScanRows(rows, &r)
-		err = Db.Preload("Source").First(&a, r.StudentAnswerID).Error
+		err = Db.Preload("Source").Preload("Worksheets.Blocks.CommentMappings.Comment").First(&a, r.StudentAnswerID).Error
 		if err != nil {
 			log.Error(err)
 			continue
@@ -134,10 +137,33 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 			log.Error(err)
 			continue
 		}
-		_ = fileName
 
 		// Iterate via assosiated comments and add them to the file
+		xlsx, err := excelize.OpenFile(fileName)
+		if err != nil {
+			log.Errorf("Failed to open file %q", fileName)
+			log.Errorln(err)
+			continue
+		}
+		for _, sheet := range a.Worksheets {
+			for _, block := range sheet.Blocks {
+				for _, bcm := range block.CommentMappings {
+					comment := bcm.Comment
+					rangeCells := strings.Split(block.Range, ":")
+					log.Info(sheet.Name, rangeCells, comment.Text)
+					xlsx.AddComment(
+						sheet.Name,
+						rangeCells[0],
+						fmt.Sprintf(`{"author": %q,"text": %q}`, "????", comment.Text))
+				}
+			}
+		}
 		// Save with a new name
+		outputS3Key, _ := newUUID()
+		outputName := path.Join(dest, outputS3Key+".xlsx")
+		err = xlsx.SaveAs(outputName)
+		log.Infof("Outpu saved to %q", outputName)
+
 		// Upload the file
 		// Assosiate the file with the answer
 		// Mark the asnwer as 'commented'
@@ -180,4 +206,18 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 	// }
 	log.Infof("Successfully commented %d Excel files.", fileCount)
 	return nil
+}
+
+// newUUID generates a random UUID according to RFC 4122
+func newUUID() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", err
+	}
+	// variant bits; see section 4.1.1
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	// version 4 (pseudo-random); see section 4.1.3
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }

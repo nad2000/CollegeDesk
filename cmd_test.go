@@ -208,6 +208,13 @@ func createTestDB() *gorm.DB {
 		SELECT AssignmentID, QuestionID 
 		FROM CourseAssignments, Questions 
 		WHERE QuestionID % 2 != AssignmentID % 2`)
+	db.Exec(`
+		INSERT INTO Comments (CommentText)
+		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3')`)
+	db.Exec(`
+		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
+		SELECT ExcelBlockID, CommentID
+		FROM ExcelBlocks, Comments`)
 
 	return db
 }
@@ -280,8 +287,8 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("S3Downloader", testS3Downloader)
 	t.Run("Questions", testQuestions)
+	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
-	t.Run("testRowsToComment", testRowsToComment)
 }
 
 func testQuestions(t *testing.T) {
@@ -409,7 +416,7 @@ func testRowsToComment(t *testing.T) {
 
 	var count int
 	for rows.Next() {
-		count += 1
+		count++
 		var r model.RowsToProcessResult
 		db.ScanRows(rows, &r)
 		t.Log(r)

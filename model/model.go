@@ -616,6 +616,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 }
 
 // RowsToComment returns "cursor" for file IDs that can be commented
+// include only rows that actuaally has any commnets
 func RowsToComment() (*sql.Rows, error) {
 	return Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
@@ -627,6 +628,10 @@ func RowsToComment() (*sql.Rows, error) {
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
+		Where(`EXISTS(SELECT NULL
+			FROM worksheets JOIN ExcelBlocks ON ExcelBlocks.worksheet_id = worksheets.id
+			JOIN BlockCommentMapping ON BlockCommentMapping.ExcelBlockID = ExcelBlocks.ExcelBlockID
+			WHERE worksheets.answer_id = StudentAnswers.StudentAnswerID)`).
 		Where("CourseAssignments.State = ?", "GRADED").Rows()
 }
 
