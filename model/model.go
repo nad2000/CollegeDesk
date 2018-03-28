@@ -210,17 +210,18 @@ func (s Source) DownloadTo(downloader s3.FileDownloader, dest string) (fileName 
 
 // Answer - student submitted answers
 type Answer struct {
-	ID             int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
-	AssignmentID   int           `gorm:"column:StudentAssignmentID"`
-	QuestionID     sql.NullInt64 `gorm:"column:QuestionID;type:int"`
-	MCQOptionID    int           `gorm:"column:MCQOptionID"`
-	ShortAnswer    string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks          string        `gorm:"column:Marks"`
-	SubmissionTime time.Time     `gorm:"column:SubmissionTime"`
-	FileID         int           `gorm:"column:FileID"`
-	Worksheets     []Worksheet   `gorm:"ForeignKey:AnswerID"`
-	Source         Source        `gorm:"ForeignKey:FileID"`
-	Question       Question      `gorm:"ForeignKey:QuestionID"`
+	ID                  int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
+	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
+	MCQOptionID         int           `gorm:"column:MCQOptionID"`
+	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
+	Marks               string        `gorm:"column:Marks"`
+	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
+	FileID              int           `gorm:"column:FileID"`
+	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
+	Source              Source        `gorm:"ForeignKey:FileID"`
+	Question            Question      `gorm:"ForeignKey:QuestionID"`
+	WasCommentProcessed uint8         `gorm:"type:utinyint;default:0"`
 }
 
 // TableName overrides default table name for the model
