@@ -9,7 +9,7 @@
 // aws_session_token = TOKEN
 //
 // See: https://docs.aws.amazon.com/sdk-for-go/api/aws/session/#pkg-overview
-package cmd
+package s3
 
 import (
 	"os"

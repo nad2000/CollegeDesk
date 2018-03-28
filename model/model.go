@@ -3,7 +3,9 @@ package models
 import (
 	"database/sql"
 	"database/sql/driver"
+	"extract-blocks/s3"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -188,6 +190,22 @@ type Source struct {
 // TableName overrides default table name for the model
 func (Source) TableName() string {
 	return "FileSources"
+}
+
+// DownloadTo - download and store source file to a specified directory
+func (s Source) DownloadTo(downloader s3.FileDownloader, dest string) (fileName string, err error) {
+	destinationName := path.Join(dest, s.FileName)
+	log.Infof(
+		"Downloading %q (%q) form %q into %q",
+		s.S3Key, s.FileName, s.S3BucketName, destinationName)
+	fileName, err = downloader.DownloadFile(
+		s.FileName, s.S3BucketName, s.S3Key, destinationName)
+	if err != nil {
+		err = fmt.Errorf(
+			"Failed to retrieve file %q from %q into %q: %s",
+			s.S3Key, s.S3BucketName, destinationName, err.Error())
+	}
+	return
 }
 
 // Answer - student submitted answers

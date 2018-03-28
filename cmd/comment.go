@@ -16,8 +16,8 @@ package cmd
 
 import (
 	model "extract-blocks/model"
+	"extract-blocks/s3"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -96,49 +96,61 @@ func AddComments(fileNames ...string) {
 }
 
 // AddCommentsInBatch addes comments to the answer files.
-func AddCommentsInBatch(downloader FileDownloader) error {
+func AddCommentsInBatch(downloader s3.FileDownloader) error {
 	// TODO: ...
 
-	rows, err := model.QuestionsToProcess()
+	rows, err := model.RowsToComment()
+	defer rows.Close()
 	if err != nil {
 		log.Fatalf("Failed to retrieve list of question source files to process: %s",
 			err.Error())
 	}
-	var fileCount int
-	for _, q := range rows {
-		var s model.Source
-		Db.Model(&q).Related(&s, "FileID")
-		destinationName := path.Join(dest, s.FileName)
-		log.Infof(
-			"Downloading %q (%q) form %q into %q",
-			s.S3Key, s.FileName, s.S3BucketName, destinationName)
-		fileName, err := downloader.DownloadFile(
-			s.FileName, s.S3BucketName, s.S3Key, destinationName)
-		if err != nil {
-			log.Errorf(
-				"Failed to retrieve file %q from %q into %q: %s",
-				s.S3Key, s.S3BucketName, destinationName, err.Error())
-			continue
-		}
-		log.Infof("Processing %q", fileName)
-		err = q.ImportFile(fileName)
-		if err != nil {
-			log.Errorf(
-				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
-			continue
-		}
-		q.IsProcessed = true
-		Db.Save(&q)
-		if Db.Error != nil {
-			log.Errorf(
-				"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
-			continue
-		}
-		fileCount++
+	// var fileCount int
+	for rows.Next() {
+		var r model.RowsToProcessResult
+		//var s model.Source
+		rows.Scan(&r)
+		log.Info(r)
+		// Download the file and open it
+		// Iterate via asssiated comments and add them to the file
+		// Save with a new name
+		// Upload the file
+		// Assosiate the file with the answer
 	}
-	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
-	if len(rows) != fileCount {
-		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
-	}
+	// for _, q := range rows {
+	// 	Db.Model(&q).Related(&s, "FileID")
+	// 	destinationName := path.Join(dest, s.FileName)
+
+	// 	log.Infof(
+	// 		"Downloading %q (%q) form %q into %q",
+	// 		s.S3Key, s.FileName, s.S3BucketName, destinationName)
+	// 	fileName, err := downloader.DownloadFile(
+	// 		s.FileName, s.S3BucketName, s.S3Key, destinationName)
+	// 	if err != nil {
+	// 		log.Errorf(
+	// 			"Failed to retrieve file %q from %q into %q: %s",
+	// 			s.S3Key, s.S3BucketName, destinationName, err.Error())
+	// 		continue
+	// 	}
+	// 	log.Infof("Processing %q", fileName)
+	// 	err = q.ImportFile(fileName)
+	// 	if err != nil {
+	// 		log.Errorf(
+	// 			"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
+	// 		continue
+	// 	}
+	// 	q.IsProcessed = true
+	// 	Db.Save(&q)
+	// 	if Db.Error != nil {
+	// 		log.Errorf(
+	// 			"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
+	// 		continue
+	// 	}
+	// 	fileCount++
+	// }
+	// log.Infof("Downloaded and loaded %d Excel files.", fileCount)
+	// if len(rows) != fileCount {
+	// 	log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
+	// }
 	return nil
 }

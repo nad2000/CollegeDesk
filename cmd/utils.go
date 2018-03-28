@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"extract-blocks/s3"
 	"fmt"
 	"strings"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-func createS3Downloader() (d S3Downloader) {
+func createS3Downloader() (d s3.S3Downloader) {
 	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {
-		return NewS3Downloader(awsRegion, awsProfile)
+		return s3.NewS3Downloader(awsRegion, awsProfile)
 	} else if awsAccessKeyID != "" && awsSecretAccessKey != "" {
-		return NewS3DownloaderWithCredentials(
+		return s3.NewS3DownloaderWithCredentials(
 			awsAccessKeyID, awsSecretAccessKey, awsRegion)
 	}
 	log.Fatal("AWS credential information missing!")

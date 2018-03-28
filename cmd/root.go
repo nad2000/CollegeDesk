@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	model "extract-blocks/model"
+	"extract-blocks/s3"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
@@ -115,7 +116,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 // HandleAnswers - iterates through student answers and retrievs answer workbooks
 // it thaks the funcion that actuatualy performs file download from S3 bucket
 // and returns the downloades file name or an error.
-func HandleAnswers(downloader FileDownloader) error {
+func HandleAnswers(downloader s3.FileDownloader) error {
 
 	rows, err := model.RowsToProcess()
 	if err != nil {

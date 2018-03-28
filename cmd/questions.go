@@ -16,7 +16,7 @@ package cmd
 
 import (
 	model "extract-blocks/model"
-	"path"
+	"extract-blocks/s3"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ func processQuestions(cmd *cobra.Command, args []string) {
 
 // HandleQuestions - iterates through questions, downloads the all files
 // and inport all cells into DB
-func HandleQuestions(downloader FileDownloader) error {
+func HandleQuestions(downloader s3.FileDownloader) error {
 
 	rows, err := model.QuestionsToProcess()
 	if err != nil {
@@ -60,16 +60,9 @@ func HandleQuestions(downloader FileDownloader) error {
 	for _, q := range rows {
 		var s model.Source
 		Db.Model(&q).Related(&s, "FileID")
-		destinationName := path.Join(dest, s.FileName)
-		log.Infof(
-			"Downloading %q (%q) form %q into %q",
-			s.S3Key, s.FileName, s.S3BucketName, destinationName)
-		fileName, err := downloader.DownloadFile(
-			s.FileName, s.S3BucketName, s.S3Key, destinationName)
+		fileName, err := s.DownloadTo(downloader, dest)
 		if err != nil {
-			log.Errorf(
-				"Failed to retrieve file %q from %q into %q: %s",
-				s.S3Key, s.S3BucketName, destinationName, err.Error())
+			log.Error(err)
 			continue
 		}
 		log.Infof("Processing %q", fileName)
