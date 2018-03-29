@@ -158,9 +158,10 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 				}
 			}
 		}
-		// Save with a new name
-		outputS3Key, _ := newUUID()
-		outputName := path.Join(dest, outputS3Key+".xlsx")
+		// Save with a new name adding suffix "_Reviewed" to the input name
+		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
+		outputName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_Reviewed"+extension)
+
 		err = xlsx.SaveAs(outputName)
 		log.Infof("Outpu saved to %q", outputName)
 
