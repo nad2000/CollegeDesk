@@ -273,7 +273,8 @@ func TestProcessing(t *testing.T) {
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("HandleAnswers", testHandleAnswers)
-	t.Run("S3Downloader", testS3Downloader)
+	t.Run("S3Downloading", testS3Downloading)
+	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 }
 
@@ -321,10 +322,10 @@ func nextRandomName() string {
 	return strconv.Itoa(int(1e9 + r%1e9))[1:]
 }
 
-func testS3Downloader(t *testing.T) {
+func testS3Downloading(t *testing.T) {
 
 	if testing.Short() {
-		t.Skip("Skipping S3 downloaer testing...")
+		t.Skip("Skipping S3 downloading testing...")
 	}
 
 	m := s3.NewManager("us-east-1", "rad")
@@ -340,6 +341,20 @@ func testS3Downloader(t *testing.T) {
 	if stat.Size() < 1000 {
 		t.Errorf("Expected at least 5kB size file, got: %d bytes", stat.Size())
 	}
+}
+
+func testS3Uploading(t *testing.T) {
+
+	if testing.Short() {
+		t.Skip("Skipping S3 uploading testing...")
+	}
+
+	m := s3.NewManager("us-east-1", "rad")
+	location, err := m.Upload("upload.test.txt", "studentanswers", "upload.test.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log("*** Uploaded to:", location)
 }
 
 func TestCommenting(t *testing.T) {
