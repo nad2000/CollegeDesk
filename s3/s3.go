@@ -52,9 +52,11 @@ func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Sessio
 	if err != nil {
 		return nil, err
 	}
-	cfg := aws.NewConfig().WithRegion(region).WithCredentials(creds)
 
-	return session.NewSessionWithOptions(session.Options{Config: *cfg})
+	return session.NewSession(&aws.Config{
+		Region:      aws.String(region),
+		Credentials: creds,
+	})
 }
 
 // NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
