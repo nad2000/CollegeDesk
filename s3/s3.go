@@ -27,12 +27,12 @@ type FileDownloader interface {
 	DownloadFile(fileName, containerName, sourceName, destinationName string) (string, error)
 }
 
-// S3Downloader AWS S3 file downloader
-type S3Downloader struct {
+// Downloader AWS S3 file downloader
+type Downloader struct {
 	s3Downloader *s3manager.Downloader
 }
 
-func (d *S3Downloader) setUp(region, profile string) {
+func (d *Downloader) setUp(region, profile string) {
 	if profile == "" {
 		profile = "default"
 	}
@@ -60,8 +60,8 @@ func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Sessio
 }
 
 // NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
-func NewS3DownloaderWithCredentials(accessKeyID, secretAccessKey, region string) S3Downloader {
-	d := S3Downloader{}
+func NewDownloaderWithCredentials(accessKeyID, secretAccessKey, region string) Downloader {
+	d := Downloader{}
 	sess, err := newAwsSession(accessKeyID, secretAccessKey, region)
 	if err != nil {
 		log.Errorln("Failed to connect to AWS: %s", err.Error())
@@ -70,22 +70,22 @@ func NewS3DownloaderWithCredentials(accessKeyID, secretAccessKey, region string)
 	return d
 }
 
-// NewS3Downloader instantiates an AWS S3 file downloader
-func NewS3Downloader(region, profile string) S3Downloader {
-	d := S3Downloader{}
+// NewDownloader instantiates an AWS S3 file downloader
+func NewDownloader(region, profile string) Downloader {
+	d := Downloader{}
 	d.setUp(region, profile)
 	return d
 }
 
-// S3Entry S3 entry returned by List
-type S3Entry struct {
+// Entry S3 entry returned by List
+type Entry struct {
 	Name, Owner, Repr string
 	Size              int64
 }
 
 // List lists content of a S3 bucket
-func (d S3Downloader) List(
-	bucket, prefix string) ([]S3Entry, error) {
+func (d Downloader) List(
+	bucket, prefix string) ([]Entry, error) {
 
 	params := &s3.ListObjectsInput{
 		Bucket: aws.String(bucket),
@@ -97,7 +97,7 @@ func (d S3Downloader) List(
 		return nil, err
 	}
 
-	list := make([]S3Entry, len(resp.Contents))
+	list := make([]Entry, len(resp.Contents))
 	for i, key := range resp.Contents {
 
 		//log.Debugf("i=%d, %#v", i, key)
@@ -117,7 +117,7 @@ func (d S3Downloader) List(
 }
 
 // DownloadFile downloads a file form the given bucket to the destination file.
-func (d S3Downloader) DownloadFile(
+func (d Downloader) DownloadFile(
 	SourceName, S3BucketName, S3Key, DestinationFileName string) (string, error) {
 
 	f, err := os.Create(DestinationFileName)

@@ -323,7 +323,7 @@ func testS3Downloader(t *testing.T) {
 		t.Skip("Skipping S3 downloaer testing...")
 	}
 
-	d := s3.NewS3Downloader("us-east-1", "rad")
+	d := s3.NewDownloader("us-east-1", "rad")
 	destName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	_, err := d.DownloadFile("test.xlsx", "studentanswers", "test.xlsx", destName)
 	if err != nil {

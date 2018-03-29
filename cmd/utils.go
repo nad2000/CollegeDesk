@@ -10,11 +10,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-func createS3Downloader() (d s3.S3Downloader) {
+func createS3Downloader() (d s3.Downloader) {
 	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {
-		return s3.NewS3Downloader(awsRegion, awsProfile)
+		return s3.NewDownloader(awsRegion, awsProfile)
 	} else if awsAccessKeyID != "" && awsSecretAccessKey != "" {
-		return s3.NewS3DownloaderWithCredentials(
+		return s3.NewDownloaderWithCredentials(
 			awsAccessKeyID, awsSecretAccessKey, awsRegion)
 	}
 	log.Fatal("AWS credential information missing!")
