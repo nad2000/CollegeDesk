@@ -33,8 +33,8 @@ var lsbCmd = &cobra.Command{
 		bucket := flagString(cmd, "bucket")
 		prefix := flagString(cmd, "prefix")
 
-		downloader := createS3Downloader()
-		list, err := downloader.List(bucket, prefix)
+		manager := createS3Manager()
+		list, err := manager.List(bucket, prefix)
 		if err != nil {
 			log.Fatalf("Error occured listing %q: %s", bucket, err.Error())
 		}

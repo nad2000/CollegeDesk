@@ -43,13 +43,13 @@ func processQuestions(cmd *cobra.Command, args []string) {
 	}
 	defer Db.Close()
 
-	downloader := createS3Downloader()
-	HandleQuestions(downloader)
+	manager := createS3Manager()
+	HandleQuestions(manager)
 }
 
 // HandleQuestions - iterates through questions, downloads the all files
 // and inport all cells into DB
-func HandleQuestions(downloader s3.FileDownloader) error {
+func HandleQuestions(manager s3.FileManager) error {
 
 	rows, err := model.QuestionsToProcess()
 	if err != nil {
@@ -60,7 +60,7 @@ func HandleQuestions(downloader s3.FileDownloader) error {
 	for _, q := range rows {
 		var s model.Source
 		Db.Model(&q).Related(&s, "FileID")
-		fileName, err := s.DownloadTo(downloader, dest)
+		fileName, err := s.DownloadTo(manager, dest)
 		if err != nil {
 			log.Error(err)
 			continue

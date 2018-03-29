@@ -51,8 +51,8 @@ the new file will be stored with the given name.`,
 		defer Db.Close()
 
 		if len(args) == 0 {
-			downloader := createS3Downloader()
-			AddCommentsInBatch(downloader)
+			manager := createS3Manager()
+			AddCommentsInBatch(manager)
 		} else {
 			AddComments(args...)
 		}
@@ -110,7 +110,7 @@ func AddComments(fileNames ...string) {
 }
 
 // AddCommentsInBatch addes comments to the answer files.
-func AddCommentsInBatch(downloader s3.FileDownloader) error {
+func AddCommentsInBatch(manager s3.FileManager) error {
 	// TODO: ...
 
 	rows, err := model.RowsToComment()
@@ -132,7 +132,7 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 			continue
 		}
 		// Download the file and open it
-		fileName, err := a.Source.DownloadTo(downloader, dest)
+		fileName, err := a.Source.DownloadTo(manager, dest)
 		if err != nil {
 			log.Error(err)
 			continue

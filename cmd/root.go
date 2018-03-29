@@ -108,15 +108,15 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			model.ExtractBlocksFromFile(excelFileName, color, force, verbose)
 		}
 	} else {
-		downloader := createS3Downloader()
-		HandleAnswers(downloader)
+		manager := createS3Manager()
+		HandleAnswers(manager)
 	}
 }
 
 // HandleAnswers - iterates through student answers and retrievs answer workbooks
 // it thaks the funcion that actuatualy performs file download from S3 bucket
 // and returns the downloades file name or an error.
-func HandleAnswers(downloader s3.FileDownloader) error {
+func HandleAnswers(manager s3.FileManager) error {
 
 	rows, err := model.RowsToProcess()
 	if err != nil {
@@ -128,7 +128,7 @@ func HandleAnswers(downloader s3.FileDownloader) error {
 		log.Infof(
 			"Downloading %q (%q) form %q into %q",
 			r.S3Key, r.FileName, r.S3BucketName, destinationName)
-		fileName, err := downloader.DownloadFile(
+		fileName, err := manager.Download(
 			r.FileName, r.S3BucketName, r.S3Key, destinationName)
 		if err != nil {
 			log.Errorf(

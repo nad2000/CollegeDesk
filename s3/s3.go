@@ -23,16 +23,18 @@ import (
 )
 
 // FileDownloader generic file downloader interfacae
-type FileDownloader interface {
-	DownloadFile(fileName, containerName, sourceName, destinationName string) (string, error)
+type FileManager interface {
+	Download(fileName, containerName, sourceName, destinationName string) (string, error)
+	Upload(fileName, containerName, key string) (string, error)
 }
 
 // Downloader AWS S3 file downloader
-type Downloader struct {
+type Manager struct {
 	s3Downloader *s3manager.Downloader
+	s3Uploader   *s3manager.Uploader
 }
 
-func (d *Downloader) setUp(region, profile string) {
+func (m *Manager) setUp(region, profile string) {
 	if profile == "" {
 		profile = "default"
 	}
@@ -43,7 +45,8 @@ func (d *Downloader) setUp(region, profile string) {
 			Profile: profile,
 			Config:  aws.Config{Region: aws.String(region)},
 		}))
-	d.s3Downloader = s3manager.NewDownloader(sess)
+	m.s3Downloader = s3manager.NewDownloader(sess)
+	m.s3Uploader = s3manager.NewUploader(sess)
 }
 
 func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Session, error) {
@@ -59,22 +62,23 @@ func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Sessio
 	})
 }
 
-// NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
-func NewDownloaderWithCredentials(accessKeyID, secretAccessKey, region string) Downloader {
-	d := Downloader{}
+// NewS3ManagerWithCredentials instantiates an AWS S3 file manager
+func NewManagerWithCredentials(accessKeyID, secretAccessKey, region string) Manager {
+	m := Manager{}
 	sess, err := newAwsSession(accessKeyID, secretAccessKey, region)
 	if err != nil {
 		log.Errorln("Failed to connect to AWS: %s", err.Error())
 	}
-	d.s3Downloader = s3manager.NewDownloader(sess)
-	return d
+	m.s3Downloader = s3manager.NewDownloader(sess)
+	m.s3Uploader = s3manager.NewUploader(sess)
+	return m
 }
 
-// NewDownloader instantiates an AWS S3 file downloader
-func NewDownloader(region, profile string) Downloader {
-	d := Downloader{}
-	d.setUp(region, profile)
-	return d
+// NewManager instantiates an AWS S3 file Manager
+func NewManager(region, profile string) Manager {
+	m := Manager{}
+	m.setUp(region, profile)
+	return m
 }
 
 // Entry S3 entry returned by List
@@ -84,7 +88,7 @@ type Entry struct {
 }
 
 // List lists content of a S3 bucket
-func (d Downloader) List(
+func (m Manager) List(
 	bucket, prefix string) ([]Entry, error) {
 
 	params := &s3.ListObjectsInput{
@@ -92,7 +96,7 @@ func (d Downloader) List(
 		Prefix: aws.String(prefix),
 	}
 
-	resp, err := d.s3Downloader.S3.ListObjects(params)
+	resp, err := m.s3Downloader.S3.ListObjects(params)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +120,8 @@ func (d Downloader) List(
 	return list, nil
 }
 
-// DownloadFile downloads a file form the given bucket to the destination file.
-func (d Downloader) DownloadFile(
+// Download downloads a file form the given bucket to the destination file.
+func (m Manager) Download(
 	SourceName, S3BucketName, S3Key, DestinationFileName string) (string, error) {
 
 	f, err := os.Create(DestinationFileName)
@@ -126,7 +130,7 @@ func (d Downloader) DownloadFile(
 	}
 	defer f.Close()
 
-	numBytes, err := d.s3Downloader.Download(f,
+	numBytes, err := m.s3Downloader.Download(f,
 		&s3.GetObjectInput{
 			Bucket: aws.String(S3BucketName),
 			Key:    aws.String(S3Key),
@@ -137,4 +141,25 @@ func (d Downloader) DownloadFile(
 
 	log.Debug("Downloaded file", f.Name(), numBytes, "bytes")
 	return DestinationFileName, nil
+}
+
+// Upload upload a file to the given bucket.
+func (m Manager) Upload(fileName, bucket, key string) (string, error) {
+
+	f, err := os.Open(fileName)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	result, err := m.s3Uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   f,
+	})
+
+	if err != nil {
+		return "", err
+	}
+	log.Debugf("Uploaded file %q to %q", f.Name(), result.Location)
+	return result.Location, nil
 }

@@ -193,12 +193,12 @@ func (Source) TableName() string {
 }
 
 // DownloadTo - download and store source file to a specified directory
-func (s Source) DownloadTo(downloader s3.FileDownloader, dest string) (fileName string, err error) {
+func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string, err error) {
 	destinationName := path.Join(dest, s.FileName)
 	log.Infof(
 		"Downloading %q (%q) form %q into %q",
 		s.S3Key, s.FileName, s.S3BucketName, destinationName)
-	fileName, err = downloader.DownloadFile(
+	fileName, err = manager.Download(
 		s.FileName, s.S3BucketName, s.S3Key, destinationName)
 	if err != nil {
 		err = fmt.Errorf(

@@ -250,15 +250,19 @@ func testRowsToProcess(t *testing.T) {
 
 }
 
-type testDownloader struct{}
+type testManager struct{}
 
-func (d testDownloader) DownloadFile(sourceName, s3BucketName, s3Key, dest string) (string, error) {
+func (m testManager) Download(sourceName, s3BucketName, s3Key, dest string) (string, error) {
+	return sourceName, nil
+}
+
+func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, error) {
 	return sourceName, nil
 }
 
 func testHandleAnswers(t *testing.T) {
-	td := testDownloader{}
-	cmd.HandleAnswers(&td)
+	tm := testManager{}
+	cmd.HandleAnswers(&tm)
 }
 
 func TestProcessing(t *testing.T) {
@@ -323,9 +327,9 @@ func testS3Downloader(t *testing.T) {
 		t.Skip("Skipping S3 downloaer testing...")
 	}
 
-	d := s3.NewDownloader("us-east-1", "rad")
+	m := s3.NewManager("us-east-1", "rad")
 	destName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
-	_, err := d.DownloadFile("test.xlsx", "studentanswers", "test.xlsx", destName)
+	_, err := m.Download("test.xlsx", "studentanswers", "test.xlsx", destName)
 	if err != nil {
 		t.Error(err)
 	}
