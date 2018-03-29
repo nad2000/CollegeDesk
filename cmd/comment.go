@@ -168,7 +168,7 @@ func AddCommentsInBatch(downloader s3.FileDownloader) error {
 		// Upload the file
 		// Assosiate the file with the answer
 		// Mark the asnwer as 'commented'
-		fileCount += 1
+		fileCount++
 	}
 	// for _, q := range rows {
 	// 	Db.Model(&q).Related(&s, "FileID")

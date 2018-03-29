@@ -1,4 +1,4 @@
-// Package cmd imlements submitted student answer file processing.
+// Package s3 imlements wrappers for AWS S3 service
 //
 // Uses the default AWS SDK Credentials;  e.g. via the environment
 // AWS_REGION=region AWS_ACCESS_KEY_ID=key AWS_SECRET_ACCESS_KEY=secret
@@ -46,17 +46,24 @@ func (d *S3Downloader) setUp(region, profile string) {
 	d.s3Downloader = s3manager.NewDownloader(sess)
 }
 
-// NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
-func NewS3DownloaderWithCredentials(accessKeyID, secretAccessKey, region string) S3Downloader {
-	d := S3Downloader{}
+func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Session, error) {
 	creds := credentials.NewStaticCredentials(accessKeyID, secretAccessKey, "")
 	_, err := creds.Get()
 	if err != nil {
-		log.Fatalf("Bad AWS credentials: %s", err.Error())
+		return nil, err
 	}
 	cfg := aws.NewConfig().WithRegion(region).WithCredentials(creds)
 
-	sess := session.Must(session.NewSessionWithOptions(session.Options{Config: *cfg}))
+	return session.NewSessionWithOptions(session.Options{Config: *cfg})
+}
+
+// NewS3DownloaderWithCredentials instantiates an AWS S3 file downloader
+func NewS3DownloaderWithCredentials(accessKeyID, secretAccessKey, region string) S3Downloader {
+	d := S3Downloader{}
+	sess, err := newAwsSession(accessKeyID, secretAccessKey, region)
+	if err != nil {
+		log.Errorln("Failed to connect to AWS: %s", err.Error())
+	}
 	d.s3Downloader = s3manager.NewDownloader(sess)
 	return d
 }
