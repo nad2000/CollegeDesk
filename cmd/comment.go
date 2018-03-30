@@ -113,19 +113,19 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	// TODO: ...
 
 	rows, err := model.RowsToComment()
-	defer rows.Close()
-
 	if err != nil {
 		log.Fatalf("Failed to retrieve list of question source files to process: %s",
 			err.Error())
 	}
+	if len(rows) == 0 {
+		log.Info("There is no files that can be commented.")
+		return nil
+	}
 	var fileCount int
-	for rows.Next() {
-		var r model.RowsToProcessResult
+	for _, r := range rows {
 		var a model.Answer
-		//var s model.Source
-		Db.ScanRows(rows, &r)
 		err = Db.Preload("Source").Preload("Worksheets.Blocks.CommentMappings.Comment").First(&a, r.StudentAnswerID).Error
+		log.Infof("%d\n%#v", a.SourceID, a.Source)
 		if err != nil {
 			log.Error(err)
 			continue
@@ -180,45 +180,19 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		log.Infof("Output file %q uploaded to bucket %q with S3 key %q, location: %q",
 			outputName, a.Source.S3BucketName, newKey, location)
 
-		// Assosiate the file with the answer
-		// Mark the asnwer as 'commented'
+		// Associate the output file with the answer and mark the asnwer as 'COMMENTED'
+		source := model.Source{
+			FileName:     filepath.Base(outputName),
+			S3BucketName: a.Source.S3BucketName,
+			S3Key:        newKey,
+		}
+		Db.Create(&source)
+		a.Source = source
+		a.WasCommentProcessed = 1
+		Db.Set("gorm:association_autoupdate", false).Save(&a)
+
 		fileCount++
 	}
-	// for _, q := range rows {
-	// 	Db.Model(&q).Related(&s, "FileID")
-	// 	destinationName := path.Join(dest, s.FileName)
-
-	// 	log.Infof(
-	// 		"Downloading %q (%q) form %q into %q",
-	// 		s.S3Key, s.FileName, s.S3BucketName, destinationName)
-	// 	fileName, err := downloader.DownloadFile(
-	// 		s.FileName, s.S3BucketName, s.S3Key, destinationName)
-	// 	if err != nil {
-	// 		log.Errorf(
-	// 			"Failed to retrieve file %q from %q into %q: %s",
-	// 			s.S3Key, s.S3BucketName, destinationName, err.Error())
-	// 		continue
-	// 	}
-	// 	log.Infof("Processing %q", fileName)
-	// 	err = q.ImportFile(fileName)
-	// 	if err != nil {
-	// 		log.Errorf(
-	// 			"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
-	// 		continue
-	// 	}
-	// 	q.IsProcessed = true
-	// 	Db.Save(&q)
-	// 	if Db.Error != nil {
-	// 		log.Errorf(
-	// 			"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
-	// 		continue
-	// 	}
-	// 	fileCount++
-	// }
-	// log.Infof("Downloaded and loaded %d Excel files.", fileCount)
-	// if len(rows) != fileCount {
-	// 	log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
-	// }
 	log.Infof("Successfully commented %d Excel files.", fileCount)
 	return nil
 }

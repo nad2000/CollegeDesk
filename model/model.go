@@ -84,17 +84,17 @@ func NewNullInt64(value int) sql.NullInt64 {
 
 // Question - questions
 type Question struct {
-	ID                 int                 `gorm:"column:QuestionID;primary_key:true;AUTO_INCREMENT"`
-	QuestionType       QuestionType        `gorm:"column:QuestionType"`
-	QuestionSequence   int                 `gorm:"column:QuestionSequence;not null"`
-	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
-	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
-	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
-	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
-	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
-	WasCompared        bool                `gorm:"type:tinyint(1)"`
-	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
-	Source             Source              `gorm:"ForeignKey:FileID"`
+	ID                 int            `gorm:"column:QuestionID;primary_key:true;AUTO_INCREMENT"`
+	QuestionType       QuestionType   `gorm:"column:QuestionType"`
+	QuestionSequence   int            `gorm:"column:QuestionSequence;not null"`
+	QuestionText       string         `gorm:"column:QuestionText;type:text;not null"`
+	AnswerExplanation  sql.NullString `gorm:"column:AnswerExplanation;type:text"`
+	MaxScore           float32        `gorm:"column:MaxScore;type:float;not null"`
+	AuthorUserID       int            `gorm:"column:AuthorUserID;not null"`
+	WasCompared        bool           `gorm:"type:tinyint(1)"`
+	IsProcessed        bool           `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
+	Source             Source
+	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 }
@@ -217,9 +217,9 @@ type Answer struct {
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
 	Marks               string        `gorm:"column:Marks"`
 	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
-	FileID              int           `gorm:"column:FileID"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
-	Source              Source        `gorm:"ForeignKey:FileID"`
+	Source              Source        `gorm:"Association_ForeignKey:FileID"`
+	SourceID            int           `gorm:"column:FileID"`
 	Question            Question      `gorm:"ForeignKey:QuestionID"`
 	WasCommentProcessed uint8         `gorm:"type:utinyint;default:0"`
 }
@@ -615,10 +615,10 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 	return results, nil
 }
 
-// RowsToComment returns "cursor" for file IDs that can be commented
-// include only rows that actuaally has any commnets
-func RowsToComment() (*sql.Rows, error) {
-	return Db.Table("FileSources").
+// RowsToComment returns slice with all recored of source files
+// and AswerIDs that need to be commeted
+func RowsToComment() ([]RowsToProcessResult, error) {
+	rows, err := Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
@@ -633,6 +633,20 @@ func RowsToComment() (*sql.Rows, error) {
 			JOIN BlockCommentMapping ON BlockCommentMapping.ExcelBlockID = ExcelBlocks.ExcelBlockID
 			WHERE worksheets.answer_id = StudentAnswers.StudentAnswerID)`).
 		Where("CourseAssignments.State = ?", "GRADED").Rows()
+	defer rows.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var results []RowsToProcessResult
+	for rows.Next() {
+		var r RowsToProcessResult
+		Db.ScanRows(rows, &r)
+		results = append(results, r)
+	}
+
+	return results, nil
 }
 
 type blockList []Block

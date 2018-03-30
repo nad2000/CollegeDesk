@@ -176,14 +176,14 @@ func createTestDB() *gorm.DB {
 		}
 		db.Create(&f)
 		db.Create(&model.Answer{
-			FileID:         f.ID,
+			SourceID:       f.ID,
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 	}
 
 	ignore := model.Source{FileName: "ignore.abc"}
 	db.Create(&ignore)
-	db.Create(&model.Answer{FileID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+	db.Create(&model.Answer{SourceID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	//db.LogMode(true)
 	for i := 101; i < 110; i++ {
@@ -201,8 +201,7 @@ func createTestDB() *gorm.DB {
 		}
 		db.Create(&f)
 		db.Create(&model.Question{
-			//FileID:           sql.NullInt64{Int64: int64(i), Valid: true},
-			FileID:           model.NewNullInt64(i),
+			SourceID:         model.NewNullInt64(i),
 			QuestionType:     model.QuestionType("FileUpload"),
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
@@ -483,13 +482,10 @@ func testRowsToComment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
 
 	var count int
-	for rows.Next() {
+	for _, r := range rows {
 		count++
-		var r model.RowsToProcessResult
-		db.ScanRows(rows, &r)
 		t.Log(r)
 	}
 	if count != 3 {
