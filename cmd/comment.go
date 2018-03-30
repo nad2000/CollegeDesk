@@ -15,11 +15,10 @@
 package cmd
 
 import (
-	"crypto/rand"
 	model "extract-blocks/model"
 	"extract-blocks/s3"
+	"extract-blocks/utils"
 	"fmt"
-	"io"
 	"path"
 	"path/filepath"
 	"strings"
@@ -154,7 +153,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 					xlsx.AddComment(
 						sheet.Name,
 						rangeCells[0],
-						fmt.Sprintf(`{"author": %q,"text": %q}`, "????", comment.Text))
+						fmt.Sprintf(`{"text": %q}`, comment.Text))
 				}
 			}
 		}
@@ -166,6 +165,20 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		log.Infof("Outpu saved to %q", outputName)
 
 		// Upload the file
+		newKey, err := utils.NewUUID()
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		location, err := manager.Upload(outputName, a.Source.S3BucketName, newKey)
+		if err != nil {
+			log.Errorf("Failed to uploade the output file %q to %q with S3 key %q: %s",
+				outputName, a.Source.S3BucketName, newKey, err)
+			continue
+		}
+		log.Infof("Output file %q uploaded to bucket %q with S3 key %q, location: %q",
+			outputName, a.Source.S3BucketName, newKey, location)
+
 		// Assosiate the file with the answer
 		// Mark the asnwer as 'commented'
 		fileCount++
@@ -207,18 +220,4 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	// }
 	log.Infof("Successfully commented %d Excel files.", fileCount)
 	return nil
-}
-
-// newUUID generates a random UUID according to RFC 4122
-func newUUID() (string, error) {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		return "", err
-	}
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }

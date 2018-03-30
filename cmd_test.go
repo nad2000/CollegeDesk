@@ -18,6 +18,7 @@ import (
 	"extract-blocks/cmd"
 	model "extract-blocks/model"
 	"extract-blocks/s3"
+	"extract-blocks/utils"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
@@ -487,5 +488,23 @@ func testQueries(t *testing.T) {
 	if book.FileName != "commenting.test.xlsx" {
 		t.Errorf("Expected 'commenting.test.xlsx', got: %q", book.FileName)
 		t.Logf("%#v", book)
+	}
+}
+
+// TestNewUUID
+func TestNewUUID(t *testing.T) {
+	uuid1, err := utils.NewUUID()
+	if err != nil {
+		t.Error(err)
+	}
+
+	uuid2, err := utils.NewUUID()
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Logf("UUID: %q, %q", uuid1, uuid2)
+	if uuid1 == uuid2 {
+		t.Errorf("Expected different values: %q, %q", uuid1, uuid2)
 	}
 }
