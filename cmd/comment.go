@@ -170,6 +170,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			log.Error(err)
 			continue
 		}
+		newKey += filepath.Ext(fileName)
 		location, err := manager.Upload(outputName, a.Source.S3BucketName, newKey)
 		if err != nil {
 			log.Errorf("Failed to uploade the output file %q to %q with S3 key %q: %s",

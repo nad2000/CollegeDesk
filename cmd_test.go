@@ -137,7 +137,7 @@ func deletData() {
 		db, _ = model.OpenDb(url)
 		defer db.Close()
 	}
-
+	db.Delete(&model.BlockCommentMapping{})
 	db.Delete(&model.Comment{})
 	db.Delete(&model.Cell{})
 	db.Delete(&model.Block{})
@@ -150,6 +150,18 @@ func deletData() {
 }
 
 func createTestDB() *gorm.DB {
+	// this is a makeshift solution to deal with 'unclodes' DBs...
+	if db != nil {
+		db.Close()
+	}
+	if cmd.Db != nil {
+		cmd.Db.Close()
+	}
+	if strings.HasPrefix(url, "sqlite") {
+		if _, err := os.Stat(testDb); !os.IsNotExist(err) {
+			os.RemoveAll(testDb)
+		}
+	}
 	db, _ = model.OpenDb(url)
 	cmd.Db = db
 
@@ -381,12 +393,15 @@ func TestCommenting(t *testing.T) {
 		JOIN workbooks AS wb ON wb.answer_id = sa.StudentAnswerID`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
-		SELECT id, r.v FROM worksheets, 
+		SELECT id, r.v 
+		FROM worksheets AS s LEFT JOIN ExcelBlocks AS b
+		ON b.worksheet_id = s.id, 
 		(
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
 			UNION SELECT 'D2:F1'
-		) AS r`)
+		) AS r
+		WHERE b.ExcelBlockID IS NULL`)
 
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
@@ -402,7 +417,8 @@ func TestCommenting(t *testing.T) {
 	db.Exec(`
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, CommentID
-		FROM ExcelBlocks, Comments`)
+		FROM ExcelBlocks AS b, Comments AS c
+		WHERE c.CommentID = b.ExcelBlockID % 3 + 1`)
 
 	book := model.Workbook{FileName: "commenting.test.xlsx"}
 	db.Create(&book)
