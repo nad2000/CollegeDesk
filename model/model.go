@@ -221,7 +221,7 @@ type Answer struct {
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            int           `gorm:"column:FileID"`
 	Question            Question      `gorm:"ForeignKey:QuestionID"`
-	WasCommentProcessed uint8         `gorm:"type:utinyint;default:0"`
+	WasCommentProcessed uint8         `gorm:"type:tinyint unsigned;default:0"`
 }
 
 // TableName overrides default table name for the model
@@ -231,18 +231,18 @@ func (Answer) TableName() string {
 
 // Assignment - assigment
 type Assignment struct {
-	ID                 int       `gorm:"column:AssignmentID;primary_key:true;AUTO_INCREMENT"`
-	Title              string    `gorm:"column:Title;type:varchar(80)"`
-	AssignmentSequence int       `gorm:"column:AssignmentSequence"`
-	StartDateAndTime   time.Time `gorm:"column:StartDateAndTime"`
-	DueDateAndTime     time.Time `gorm:"column:DueDateAndTime"`
-	UpdateTime         time.Time `gorm:"column:UpdateTime"`
-	IsHidden           int8      `gorm:"type:tinyint(4)"`
-	TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
-	TotalQuestion      int       `gorm:"column:TotalQuestion"`
-	CourseID           uint      `gorm:"column:CourseID;type:uint(10)"`
-	State              string    `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
-	WasProcessed       int8      `gorm:"type:tinyint(1)"`
+	ID                 int    `gorm:"column:AssignmentID;primary_key:true;AUTO_INCREMENT"`
+	Title              string `gorm:"column:Title;type:varchar(80)"`
+	AssignmentSequence int    `gorm:"column:AssignmentSequence"`
+	// StartDateAndTime   time.Time `gorm:"column:StartDateAndTime"`
+	// DueDateAndTime     time.Time `gorm:"column:DueDateAndTime"`
+	// UpdateTime         time.Time `gorm:"column:UpdateTime"`
+	// IsHidden           int8      `gorm:"type:tinyint(4)"`
+	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
+	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
+	// CourseID           uint      `gorm:"column:CourseID;type:int(10) unsigned"`
+	State        string `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
+	WasProcessed int8   `gorm:"type:tinyint(1)"`
 }
 
 // TableName overrides default table name for the model
