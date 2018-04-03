@@ -419,7 +419,9 @@ func TestCommenting(t *testing.T) {
 
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
-	db.Exec("UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1")
+	// db.Exec(`
+	// 	UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1
+	// 	WHERE QuestionID IN NULL OR QuestionID = 0`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
 		SELECT AssignmentID, QuestionID 
@@ -503,8 +505,8 @@ func testRowsToComment(t *testing.T) {
 		count++
 		t.Log(r)
 	}
-	if count != 3 {
-		t.Errorf("Expected to select 3 files to comment, got: %d", count)
+	if count != 2 {
+		t.Errorf("Expected to select 2 files to comment, got: %d", count)
 	}
 }
 

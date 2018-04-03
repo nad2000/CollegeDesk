@@ -210,17 +210,17 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 
 // Answer - student submitted answers
 type Answer struct {
-	ID                  int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
-	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
+	ID                  int         `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	AssignmentID        int         `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         int         `gorm:"column:MCQOptionID"`
+	ShortAnswer         string      `gorm:"column:ShortAnswerText;type:text"`
+	Marks               string      `gorm:"column:Marks"`
+	SubmissionTime      time.Time   `gorm:"column:SubmissionTime"`
+	Worksheets          []Worksheet `gorm:"ForeignKey:AnswerID"`
+	Source              Source      `gorm:"Association_ForeignKey:FileID"`
+	SourceID            int         `gorm:"column:FileID"`
+	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
-	MCQOptionID         int           `gorm:"column:MCQOptionID"`
-	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks               string        `gorm:"column:Marks"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
-	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
-	Source              Source        `gorm:"Association_ForeignKey:FileID"`
-	SourceID            int           `gorm:"column:FileID"`
-	Question            Question      `gorm:"ForeignKey:QuestionID"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint unsigned;default:0"`
 }
 
@@ -495,10 +495,10 @@ func (Comment) TableName() string {
 
 // BlockCommentMapping - block-comment mapping
 type BlockCommentMapping struct {
-	Block          Block   `gorm:"ForeignKey:ExcelBlockID"`
-	ExcelBlockID   uint    `gorm:"column:ExcelBlockID"`
-	Comment        Comment `gorm:"ForeignKey:ExcelCommentID"`
-	ExcelCommentID uint    `gorm:"column:ExcelCommentID"`
+	Block     Block
+	BlockID   uint `gorm:"column:ExcelBlockID"`
+	Comment   Comment
+	CommentID uint `gorm:"column:ExcelCommentID"`
 }
 
 // TableName overrides default table name for the model
@@ -508,10 +508,10 @@ func (BlockCommentMapping) TableName() string {
 
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
-	Assignment   Assignment `gorm:"ForeignKey:AssignmentID"`
-	AssignmentID uint       `gorm:"column:AssignmentID"`
-	Question     Comment    `gorm:"ForeignKey:QuestionID"`
-	QuestionID   uint       `gorm:"column:QuestionID"`
+	Assignment   Assignment
+	AssignmentID uint `gorm:"column:AssignmentID"`
+	Question     Question
+	QuestionID   uint `gorm:"column:QuestionID"`
 }
 
 // TableName overrides default table name for the model
