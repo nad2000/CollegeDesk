@@ -138,16 +138,18 @@ func deletData() {
 		db, _ = model.OpenDb(url)
 		defer db.Close()
 	}
-	db.Delete(&model.BlockCommentMapping{})
-	db.Delete(&model.Comment{})
-	db.Delete(&model.Cell{})
-	db.Delete(&model.Block{})
-	db.Delete(&model.Worksheet{})
-	db.Delete(&model.Workbook{})
-	db.Delete(&model.QuestionExcelData{})
-	db.Delete(&model.Question{})
-	db.Delete(&model.Answer{})
-	db.Delete(&model.Source{})
+	db.Delete(
+		&model.BlockCommentMapping{},
+		&model.QuestionAssignment{},
+		&model.Comment{},
+		&model.Cell{},
+		&model.Block{},
+		&model.Worksheet{},
+		&model.Workbook{},
+		&model.QuestionExcelData{},
+		&model.Question{},
+		&model.Answer{},
+		&model.Source{})
 }
 
 func createTestDB() *gorm.DB {
@@ -419,9 +421,9 @@ func TestCommenting(t *testing.T) {
 
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
-	// db.Exec(`
-	// 	UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1
-	// 	WHERE QuestionID IN NULL OR QuestionID = 0`)
+	db.Exec(`
+		UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1
+		WHERE QuestionID IS NULL OR QuestionID = 0`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
 		SELECT AssignmentID, QuestionID 
@@ -434,7 +436,7 @@ func TestCommenting(t *testing.T) {
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, CommentID
 		FROM ExcelBlocks AS b, Comments AS c
-		WHERE c.CommentID = b.ExcelBlockID % 3 + 1`)
+		WHERE c.CommentID % 3 = b.ExcelBlockID % 3`)
 
 	book := model.Workbook{FileName: "commenting.test.xlsx"}
 	db.Create(&book)

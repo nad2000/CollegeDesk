@@ -125,7 +125,6 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	for _, r := range rows {
 		var a model.Answer
 		err = Db.Preload("Source").Preload("Worksheets.Blocks.CommentMappings.Comment").First(&a, r.StudentAnswerID).Error
-		log.Infof("%d\n%#v", a.SourceID, a.Source)
 		if err != nil {
 			log.Error(err)
 			continue

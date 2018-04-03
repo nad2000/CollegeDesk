@@ -160,14 +160,14 @@ func (q *Question) ImportFile(fileName string) error {
 
 // QuestionExcelData - extracted celles from question Workbooks
 type QuestionExcelData struct {
-	ID         int      `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
-	QuestionID int      `gorm:"column:QuestionID"`
-	SheetName  string   `gorm:"column:SheetName"`
-	CellRange  string   `gorm:"column:CellRange"`
-	Value      string   `gorm:"column:Value"`
-	Comment    string   `gorm:"column:Comment"`
-	Formula    string   `gorm:"column:Formula"`
-	Question   Question `gorm:"ForeignKey:QuestionID"`
+	ID         int    `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
+	SheetName  string `gorm:"column:SheetName"`
+	CellRange  string `gorm:"column:CellRange"`
+	Value      string `gorm:"column:Value"`
+	Comment    string `gorm:"column:Comment"`
+	Formula    string `gorm:"column:Formula"`
+	Question   Question
+	QuestionID int `gorm:"column:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -619,7 +619,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 // and AswerIDs that need to be commeted
 func RowsToComment() ([]RowsToProcessResult, error) {
 	rows, err := Db.Table("FileSources").
-		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
+		Select("DISTINCT FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
 		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
