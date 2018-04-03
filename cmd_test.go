@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -174,9 +175,21 @@ func createTestDB() *gorm.DB {
 			S3BucketName: "studentanswers",
 			S3Key:        fn,
 		}
+
 		db.Create(&f)
+		q := model.Question{
+			SourceID:         sql.NullInt64{Int64: int64(f.ID), Valid: true},
+			QuestionType:     model.QuestionType("FileUpload"),
+			QuestionSequence: 123,
+			QuestionText:     "QuestionText...",
+			MaxScore:         9999.99,
+			AuthorUserID:     123456789,
+			WasCompared:      true,
+		}
+		db.Create(&q)
 		db.Create(&model.Answer{
 			SourceID:       f.ID,
+			QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 	}
@@ -186,9 +199,11 @@ func createTestDB() *gorm.DB {
 	db.Create(&model.Answer{SourceID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	//db.LogMode(true)
-	for i := 101; i < 110; i++ {
+	var lastFileId int
+	db.DB().QueryRow("SELECT MAX(FileID) AS LastFileID FROM FileSources").Scan(&lastFileId)
+	for i := lastFileId + 1; i < lastFileId+10; i++ {
 		fn := "question" + strconv.Itoa(i)
-		if i < 104 {
+		if i < lastFileId+4 {
 			fn += ".xlsx"
 		} else {
 			fn += ".ignore"
@@ -225,8 +240,8 @@ func testQuestionsToProcess(t *testing.T) {
 		var s model.Source
 		db.Model(&r).Related(&s, "FileID")
 	}
-	if len(rows) != 9 {
-		t.Errorf("Expected 9 question rows, got %d", len(rows))
+	if len(rows) != 14 {
+		t.Errorf("Expected 14 question rows, got %d", len(rows))
 	}
 
 	questions, err := model.QuestionsToProcess()
@@ -241,8 +256,8 @@ func testQuestionsToProcess(t *testing.T) {
 			t.Errorf("Wrong extension: %q, expected: '.xlsx'", s.FileName)
 		}
 	}
-	if len(questions) != 3 {
-		t.Errorf("Expected 3 rows, got %d", len(questions))
+	if len(questions) != 8 {
+		t.Errorf("Expected 8 rows, got %d", len(questions))
 	}
 
 }
@@ -306,8 +321,8 @@ func testQuestions(t *testing.T) {
 
 	var count int
 	db.Model(&model.QuestionExcelData{}).Count(&count)
-	if count != 72 {
-		t.Errorf("Expected 72 blocks, got: %d", count)
+	if count != 1690 {
+		t.Errorf("Expected 1690 blocks, got: %d", count)
 	}
 }
 
@@ -460,7 +475,7 @@ func testComments(t *testing.T) {
 
 	outputName = path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	t.Log("OUTPUT:", outputName)
-	cmd.RootCmd.SetArgs([]string{"comment", "commenting.test.xlsx", outputName})
+	cmd.RootCmd.SetArgs([]string{"comment", "-U", url, "commenting.test.xlsx", outputName})
 	cmd.Execute()
 
 	// xlFile, err = xlsx.OpenFile(outputName)
