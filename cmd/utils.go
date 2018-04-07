@@ -4,11 +4,18 @@ import (
 	"extract-blocks/s3"
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/jinzhu/now"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+func parseTime(str string) *time.Time {
+	t := now.New(time.Now().UTC()).MustParse(str)
+	return &t
+}
 
 func createS3Manager() (d s3.Manager) {
 	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {

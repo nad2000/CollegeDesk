@@ -138,7 +138,7 @@ func deletData() {
 		db, _ = model.OpenDb(url)
 		defer db.Close()
 	}
-	db.Delete(
+	for _, m := range []interface{}{
 		&model.BlockCommentMapping{},
 		&model.QuestionAssignment{},
 		&model.Comment{},
@@ -149,7 +149,9 @@ func deletData() {
 		&model.QuestionExcelData{},
 		&model.Question{},
 		&model.Answer{},
-		&model.Source{})
+		&model.Source{}} {
+		db.Delete(m)
+	}
 }
 
 func createTestDB() *gorm.DB {
@@ -393,24 +395,24 @@ func TestCommenting(t *testing.T) {
 
 	//db.LogMode(true)
 	db.Exec(`
-		INSERT INTO workbooks(file_name, answer_id)
+		INSERT INTO WorkBooks(file_name, StudentAnswerID)
 		SELECT FileName, StudentAnswerID
 		FROM FileSources NATURAL JOIN StudentAnswers`)
 
 	db.Exec(`
-		INSERT INTO worksheets (
+		INSERT INTO WorkSheets (
 			workbook_id,
 			name,
 			workbook_file_name,
-			answer_id
+			StudentAnswerID
 		)
-		SELECT wb.id, 'Sheet1', FileName, StudentAnswerID
+		SELECT wb.id, 'Sheet1', FileName, sa.StudentAnswerID
 		FROM FileSources NATURAL JOIN StudentAnswers AS sa 
-		JOIN workbooks AS wb ON wb.answer_id = sa.StudentAnswerID`)
+		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
 		SELECT id, r.v 
-		FROM worksheets AS s LEFT JOIN ExcelBlocks AS b
+		FROM WorkSheets AS s LEFT JOIN ExcelBlocks AS b
 		ON b.worksheet_id = s.id, 
 		(
 			SELECT 'A1' AS v
@@ -438,10 +440,12 @@ func TestCommenting(t *testing.T) {
 		FROM ExcelBlocks AS b, Comments AS c
 		WHERE c.CommentID % 3 = b.ExcelBlockID % 3`)
 
-	book := model.Workbook{FileName: "commenting.test.xlsx"}
+	var answer model.Answer
+	db.First(&answer)
+	book := model.Workbook{FileName: "commenting.test.xlsx", Answer: answer}
 	db.Create(&book)
 	for _, sn := range []string{"Sheet1", "Sheet2"} {
-		sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName}
+		sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName, Answer: answer}
 		db.Create(&sheet)
 		for _, r := range []string{"A1", "C3", "D2:F13"} {
 			block := model.Block{Worksheet: sheet, Range: r}

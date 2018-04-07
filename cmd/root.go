@@ -100,12 +100,17 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	}
 	defer Db.Close()
 	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
-	//db.LogMode(true)
 
 	if testing {
 		// read up the file list from the arguments
 		for _, excelFileName := range args {
-			model.ExtractBlocksFromFile(excelFileName, color, force, verbose)
+			// Create Student answer entry
+			a := model.Answer{
+				ShortAnswer:    excelFileName,
+				SubmissionTime: *parseTime("2017-01-01 14:42"),
+			}
+			Db.FirstOrCreate(&a, &a)
+			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, a.ID)
 		}
 	} else {
 		manager := createS3Manager()

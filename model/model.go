@@ -214,7 +214,7 @@ type Answer struct {
 	AssignmentID        int         `gorm:"column:StudentAssignmentID"`
 	MCQOptionID         int         `gorm:"column:MCQOptionID"`
 	ShortAnswer         string      `gorm:"column:ShortAnswerText;type:text"`
-	Marks               string      `gorm:"column:Marks"`
+	Marks               float64     `gorm:"column:Marks"`
 	SubmissionTime      time.Time   `gorm:"column:SubmissionTime"`
 	Worksheets          []Worksheet `gorm:"ForeignKey:AnswerID"`
 	Source              Source      `gorm:"Association_ForeignKey:FileID"`
@@ -255,9 +255,14 @@ type Workbook struct {
 	ID         int `gorm:"primary_key:true"`
 	FileName   string
 	CreatedAt  time.Time
-	AnswerID   sql.NullInt64 `gorm:"index;type:int"`
-	Answer     Answer        `gorm:"ForeignKey:AnswerID"`
-	Worksheets []Worksheet   `gorm:"ForeignKey:WorkbookID"`
+	AnswerID   int         `gorm:"column:StudentAnswerID;index;type:int"`
+	Answer     Answer      `gorm:"ForeignKey:AnswerID"`
+	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID"`
+}
+
+// TableName overrides default table name for the model
+func (Workbook) TableName() string {
+	return "WorkBooks"
 }
 
 // Reset deletes all underlying objects: worksheets, blocks, and cells
@@ -291,10 +296,14 @@ type Worksheet struct {
 	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	AnswerID         sql.NullInt64 `gorm:"index;type:int"`
-	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
-	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
-	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
+	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
+	Blocks           []Block  `gorm:"ForeignKey:WorksheetID"`
+	Answer           Answer   `gorm:"ForeignKey:AnswerID"`
+	Workbook         Workbook `gorm:"ForeignKey:WorkbookId"`
+}
+
+func (Worksheet) TableName() string {
+	return "WorkSheets"
 }
 
 // Block - the univormly filled with specific color block
@@ -429,6 +438,10 @@ type Cell struct {
 	Comment string
 }
 
+func (Cell) TableName() string {
+	return "Cells"
+}
+
 // OpenDb opens DB connection based on given URL
 func OpenDb(url string) (db *gorm.DB, err error) {
 
@@ -524,7 +537,7 @@ func SetDb() {
 	// Migrate the schema
 	isMySQL := strings.HasPrefix(Db.Dialect().GetName(), "mysql")
 	log.Debug("Add to automigrate...")
-	worksheetsExists := Db.HasTable("worksheets")
+	worksheetsExists := Db.HasTable("WorkSheets")
 	Db.AutoMigrate(&Source{})
 	if isMySQL {
 		// Modify struct tag for MySQL
@@ -546,7 +559,7 @@ func SetDb() {
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
-		Db.Model(&Worksheet{}).AddForeignKey("answer_id", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
+		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Blocks...")
@@ -629,9 +642,9 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
 		Where(`EXISTS(SELECT NULL
-			FROM worksheets JOIN ExcelBlocks ON ExcelBlocks.worksheet_id = worksheets.id
+			FROM WorkSheets JOIN ExcelBlocks ON ExcelBlocks.worksheet_id = WorkSheets.id
 			JOIN BlockCommentMapping ON BlockCommentMapping.ExcelBlockID = ExcelBlocks.ExcelBlockID
-			WHERE worksheets.answer_id = StudentAnswers.StudentAnswerID)`).
+			WHERE WorkSheets.StudentAnswerID = StudentAnswers.StudentAnswerID)`).
 		Where("CourseAssignments.State = ?", "GRADED").Rows()
 	defer rows.Close()
 
@@ -669,9 +682,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Fatal(err)
 	}
 
-	var answerID sql.NullInt64
+	var answerID int
 	if len(answerIDs) > 0 {
-		answerID = NewNullInt64(answerIDs[0])
+		answerID = int(answerIDs[0])
 	}
 
 	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
