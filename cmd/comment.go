@@ -48,6 +48,9 @@ the new file will be stored with the given name.`,
 			log.Fatalf("failed to connect database %q", url)
 		}
 		defer Db.Close()
+		if debugLevel > 1 {
+			Db.LogMode(true)
+		}
 
 		if len(args) == 0 {
 			manager := createS3Manager()
@@ -186,9 +189,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			S3Key:        newKey,
 		}
 		Db.Create(&source)
-		a.Source = source
-		a.WasCommentProcessed = 1
-		Db.Set("gorm:association_autoupdate", false).Save(&a)
+		Db.Model(&a).UpdateColumns(model.Answer{Source: source, WasCommentProcessed: 1})
 
 		fileCount++
 	}

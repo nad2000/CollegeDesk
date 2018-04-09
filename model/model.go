@@ -210,15 +210,15 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 
 // Answer - student submitted answers
 type Answer struct {
-	ID                  int         `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
-	AssignmentID        int         `gorm:"column:StudentAssignmentID"`
-	MCQOptionID         int         `gorm:"column:MCQOptionID"`
-	ShortAnswer         string      `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64     `gorm:"column:Marks"`
-	SubmissionTime      time.Time   `gorm:"column:SubmissionTime"`
-	Worksheets          []Worksheet `gorm:"ForeignKey:AnswerID"`
-	Source              Source      `gorm:"Association_ForeignKey:FileID"`
-	SourceID            int         `gorm:"column:FileID"`
+	ID                  int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
+	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
+	Marks               float64       `gorm:"column:Marks"`
+	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
+	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
+	Source              Source        `gorm:"Association_ForeignKey:FileID"`
+	SourceID            int           `gorm:"column:FileID"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint unsigned;default:0"`
