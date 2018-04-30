@@ -394,10 +394,21 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				if ok {
 					commentText = comment.Text
 				}
+				var value string
+				var err error
+				if cell.Type() == 2 {
+					if value, err = cell.FormattedValue(); err != nil {
+						log.Error(err.Error())
+						value = cell.Value
+					}
+				} else {
+					value = cell.Value
+				}
+				log.Infof("%#v: %q", cell, value)
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
-					Value:   cell.Value,
+					Value:   value,
 					Range:   cellID,
 					Comment: commentText,
 				}
