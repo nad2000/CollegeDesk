@@ -404,7 +404,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				} else {
 					value = cell.Value
 				}
-				log.Infof("%#v: %q", cell, value)
 				c := Cell{
 					BlockID: b.ID,
 					Formula: cell.Formula(),
