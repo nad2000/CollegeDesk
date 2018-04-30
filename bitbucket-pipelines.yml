@@ -17,9 +17,10 @@ pipelines:
           - cd "${PACKAGE_PATH}"
           # - go get -v
           # - go build -v
-          - go build -v -o $(basename $PWD) main.go
-          - ./bin/upx --best --lzma $(basename $PWD)
-          - ./$(basename $PWD) run -t -v demo.xlsx
-          - ./$(basename $PWD) run -t -v commenting.test.xlsx
+          # - go build -v -o $(basename $PWD) main.go
+          - go install extract-blocks/extract-blocks
+          - ./bin/upx --best --lzma "${GOPATH}/bin/extract-blocks"
+          - extract-blocks $PWD) run -t -v demo.xlsx
+          - extract-blocks $PWD) run -t -v commenting.test.xlsx
           - go test -v -short cmd_test.go
-          - curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"$(basename $PWD)"
+          - curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
