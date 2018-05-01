@@ -222,6 +222,7 @@ type Answer struct {
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint unsigned;default:0"`
+	WasXLProcessed      uint8         `gorm:"type:tinyint unsigned;default:0"`
 }
 
 // TableName overrides default table name for the model
@@ -607,13 +608,6 @@ type RowsToProcessResult struct {
 // RowsToProcess returns answer file sources
 func RowsToProcess() ([]RowsToProcessResult, error) {
 
-	currentTime := time.Now()
-	midnight := time.Date(
-		currentTime.Year(),
-		currentTime.Month(),
-		currentTime.Day(),
-		0, 0, 0, 0, time.UTC)
-
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
 	rows, err := Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
@@ -621,7 +615,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
-		Where("SubmissionTime <= ?", midnight).Rows()
+		Where("StudentAnswers.was_xl_processed = ?", 0).Rows()
 	defer rows.Close()
 
 	if err != nil {
