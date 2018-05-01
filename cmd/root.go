@@ -129,6 +129,12 @@ func HandleAnswers(manager s3.FileManager) error {
 	}
 	var fileCount int
 	for _, r := range rows {
+		var a model.Answer
+		err = Db.First(&a, r.StudentAnswerID).Error
+		if err != nil {
+			log.Error(err)
+			continue
+		}
 		destinationName := path.Join(dest, r.FileName)
 		log.Infof(
 			"Downloading %q (%q) form %q into %q",
@@ -143,6 +149,9 @@ func HandleAnswers(manager s3.FileManager) error {
 		}
 		log.Infof("Processing %q", fileName)
 		model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID)
+
+		Db.Model(&a).UpdateColumns(model.Answer{WasXLProcessed: 1})
+
 		fileCount++
 	}
 	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
