@@ -32,6 +32,7 @@ var testFileNames = []string{
 	"Sample4_A2E1.xlsx",
 	"test2.xlsx",
 	"test.xlsx",
+	"test_floats.xlsx",
 }
 var testDb = path.Join(os.TempDir(), "extract-block-test.db")
 var defaultURL = "sqlite3://" + testDb
@@ -244,8 +245,8 @@ func testQuestionsToProcess(t *testing.T) {
 		var s model.Source
 		db.Model(&r).Related(&s, "FileID")
 	}
-	if len(rows) != 14 {
-		t.Errorf("Expected 14 question rows, got %d", len(rows))
+	if len(rows) != 15 {
+		t.Errorf("Expected 15 question rows, got %d", len(rows))
 	}
 
 	questions, err := model.QuestionsToProcess()
@@ -260,8 +261,8 @@ func testQuestionsToProcess(t *testing.T) {
 			t.Errorf("Wrong extension: %q, expected: '.xlsx'", s.FileName)
 		}
 	}
-	if len(questions) != 8 {
-		t.Errorf("Expected 8 rows, got %d", len(questions))
+	if len(questions) != 9 {
+		t.Errorf("Expected 9 rows, got %d", len(questions))
 	}
 
 }
@@ -275,8 +276,8 @@ func testRowsToProcess(t *testing.T) {
 			t.Errorf("Expected only .xlsx extensions, got %q", r.FileName)
 		}
 	}
-	if len(rows) != 5 {
-		t.Errorf("Expected 5 rows, got %d", len(rows))
+	if len(rows) != len(testFileNames) {
+		t.Errorf("Expected %d rows, got %d", len(testFileNames), len(rows))
 	}
 
 }
@@ -292,8 +293,17 @@ func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, err
 }
 
 func testHandleAnswers(t *testing.T) {
+
+	var countBefore, countAfter int
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countBefore)
 	tm := testManager{}
 	cmd.HandleAnswers(&tm)
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
+	if countBefore <= countAfter {
+		t.Errorf(
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			countBefore, countAfter)
+	}
 }
 
 func TestProcessing(t *testing.T) {
@@ -511,7 +521,7 @@ func testRowsToComment(t *testing.T) {
 		count++
 		t.Log(r)
 	}
-	if count != 2 {
+	if count != 3 {
 		t.Errorf("Expected to select 2 files to comment, got: %d", count)
 	}
 }
