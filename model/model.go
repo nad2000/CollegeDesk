@@ -530,6 +530,19 @@ func (BlockCommentMapping) TableName() string {
 	return "BlockCommentMapping"
 }
 
+// AnswerComment - answer-comment mapping:
+type AnswerComment struct {
+	Answer    Answer
+	AnswerID  int `gorm:"column:StudentAnswerID;index;type:int unsigned"`
+	Comment   Comment
+	CommentID int `gorm:"column:CommentID"`
+}
+
+// TableName overrides default table name for the model
+func (AnswerComment) TableName() string {
+	return "StudentAnswerCommentMapping"
+}
+
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
@@ -567,6 +580,7 @@ func SetDb() {
 	Db.AutoMigrate(&BlockCommentMapping{})
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
+	Db.AutoMigrate(&AnswerComment{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -645,10 +659,21 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
-		Where(`EXISTS(SELECT NULL
-			FROM WorkSheets JOIN ExcelBlocks ON ExcelBlocks.worksheet_id = WorkSheets.id
-			JOIN BlockCommentMapping ON BlockCommentMapping.ExcelBlockID = ExcelBlocks.ExcelBlockID
-			WHERE WorkSheets.StudentAnswerID = StudentAnswers.StudentAnswerID)`).
+		Where(`(
+			EXISTS(
+				SELECT NULL
+				FROM WorkSheets AS ws JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				JOIN BlockCommentMapping AS bcm ON bcm.ExcelBlockID = b.ExcelBlockID
+				WHERE ws.StudentAnswerID = StudentAnswers.StudentAnswerID
+			)
+		OR
+			EXISTS(
+				SELECT NULL
+				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm 
+					ON sacm.CommentID = c.CommentID
+				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
+			)
+		)`).
 		Where("CourseAssignments.State = ?", "GRADED").Rows()
 	defer rows.Close()
 
