@@ -140,6 +140,7 @@ func deletData() {
 		defer db.Close()
 	}
 	for _, m := range []interface{}{
+		&model.AnswerComment{},
 		&model.BlockCommentMapping{},
 		&model.QuestionAssignment{},
 		&model.Comment{},
@@ -450,22 +451,58 @@ func TestCommenting(t *testing.T) {
 		FROM ExcelBlocks AS b, Comments AS c
 		WHERE c.CommentID % 3 = b.ExcelBlockID % 3`)
 
-	var answer model.Answer
-	db.First(&answer)
-	book := model.Workbook{FileName: "commenting.test.xlsx", Answer: answer}
-	db.Create(&book)
-	for _, sn := range []string{"Sheet1", "Sheet2"} {
-		sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName, Answer: answer}
-		db.Create(&sheet)
-		for _, r := range []string{"A1", "C3", "D2:F13"} {
-			block := model.Block{Worksheet: sheet, Range: r}
-			db.Create(&block)
-			comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
-			db.Create(&comment)
-			bcm := model.BlockCommentMapping{Block: block, Comment: comment}
-			db.Create(&bcm)
+	var assignment model.Assignment
+	db.First(&assignment, "State = ?", "GRADED")
+	var question model.Question
+	db.Joins("JOIN QuestionAssignmentMapping AS qa ON qa.QuestionID = Questions.QuestionID").
+		Where("qa.AssignmentID = ?", assignment.ID).
+		First(&question)
+	for _, fn := range []string{"commenting.test.xlsx", "indirect.test.xlsx"} {
+
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		answer := model.Answer{
+			AssignmentID:   assignment.ID,
+			SourceID:       f.ID,
+			QuestionID:     sql.NullInt64{Int64: int64(question.ID), Valid: true},
+			SubmissionTime: *parseTime("2017-01-01 14:42"),
+		}
+		db.Create(&answer)
+		book := model.Workbook{FileName: fn, Answer: answer}
+		db.Create(&book)
+		for _, sn := range []string{"Sheet1", "Sheet2"} {
+			sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName, Answer: answer}
+			db.Create(&sheet)
+			for i, r := range []string{"A1", "C3", "D2:F13"} {
+				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
+				db.Create(&block)
+				if !strings.HasPrefix("indirect", fn) {
+					comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
+					db.Create(&comment)
+					bcm := model.BlockCommentMapping{Block: block, Comment: comment}
+					db.Create(&bcm)
+				}
+			}
 		}
 	}
+	db.Exec(`
+		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
+		SELECT
+			(
+				SELECT StudentAnswerID 
+				FROM WorkBooks 
+				WHERE file_name = 'indirect.test.xlsx' LIMIT 1
+			) AS AnserID,
+			bc.ExcelCommentID
+		FROM BlockCommentMapping AS bc 
+		JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
+		JOIN WorkSheets AS s ON s.id = b.worksheet_id
+		WHERE s.workbook_file_name = 'commenting.test.xlsx'`)
+
 	t.Run("Queries", testQueries)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
@@ -511,6 +548,7 @@ func testComments(t *testing.T) {
 
 func testRowsToComment(t *testing.T) {
 
+	// db.LogMode(true)
 	rows, err := model.RowsToComment()
 	if err != nil {
 		t.Fatal(err)
@@ -521,8 +559,8 @@ func testRowsToComment(t *testing.T) {
 		count++
 		t.Log(r)
 	}
-	if count != 3 {
-		t.Errorf("Expected to select 2 files to comment, got: %d", count)
+	if count != 5 {
+		t.Errorf("Expected to select 5 files to comment, got: %d", count)
 	}
 }
 

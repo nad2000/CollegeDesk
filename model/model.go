@@ -220,9 +220,10 @@ type Answer struct {
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            int           `gorm:"column:FileID"`
 	Question            Question
-	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
-	WasCommentProcessed uint8         `gorm:"type:tinyint unsigned;default:0"`
-	WasXLProcessed      uint8         `gorm:"type:tinyint unsigned;default:0"`
+	QuestionID          sql.NullInt64   `gorm:"column:QuestionID;type:int"`
+	WasCommentProcessed uint8           `gorm:"type:tinyint unsigned;default:0"`
+	WasXLProcessed      uint8           `gorm:"type:tinyint unsigned;default:0"`
+	AnswerComments      []AnswerComment `gorm:"ForeignKey:AnswerID"`
 }
 
 // TableName overrides default table name for the model
@@ -508,8 +509,10 @@ func (MySQLQuestion) TableName() string {
 
 // Comment - added comments  with marks
 type Comment struct {
-	ID   int    `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
-	Text string `gorm:"column:CommentText"`
+	ID              int                   `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
+	Text            string                `gorm:"column:CommentText"`
+	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelCommentID"`
+	AnswerComments  []AnswerComment       `gorm:"ForeignKey:CommentID"`
 }
 
 // TableName overrides default table name for the model

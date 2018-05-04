@@ -127,7 +127,24 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	var fileCount int
 	for _, r := range rows {
 		var a model.Answer
-		err = Db.Preload("Source").Preload("Worksheets.Blocks.CommentMappings.Comment").First(&a, r.StudentAnswerID).Error
+		err = Db.
+			Preload("Source").
+			Preload("Worksheets.Blocks.CommentMappings.Comment").
+			Preload("AnswerComments.Comment.CommentMappings.Block").
+			First(&a, r.StudentAnswerID).Error
+		// directCommentCount counts comments linked via block-comment mapping
+		var directCommentCount int
+		Db.DB().QueryRow(`
+			SELECT COUNT(*) AS DirectCommentCount
+			FROM BlockCommentMapping AS bc 
+			JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
+			JOIN WorkSheets AS s ON s.id = b.worksheet_id
+			WHERE s.StudentAnswerID = ?`, a.ID).Scan(&directCommentCount)
+		if directCommentCount == 0 {
+			log.Infof("*** File %q (bucket: %s, key: %s) doesn't have any direct comments...",
+				r.FileName, r.S3BucketName, r.S3Key)
+		}
+
 		if err != nil {
 			log.Error(err)
 			continue
