@@ -133,22 +133,45 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			Preload("AnswerComments.Comment.CommentMappings.Block").
 			First(&a, r.StudentAnswerID).Error
 		// directCommentCount counts comments linked via block-comment mapping
-		var directCommentCount int
-		Db.DB().QueryRow(`
-			SELECT COUNT(*) AS DirectCommentCount
-			FROM BlockCommentMapping AS bc 
-			JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
-			JOIN WorkSheets AS s ON s.id = b.worksheet_id
-			WHERE s.StudentAnswerID = ?`, a.ID).Scan(&directCommentCount)
-		if directCommentCount == 0 {
-			log.Infof("*** File %q (bucket: %s, key: %s) doesn't have any direct comments...",
-				r.FileName, r.S3BucketName, r.S3Key)
-		}
-
+		// var directCommentCount int
+		// Db.DB().QueryRow(`
+		// 	SELECT COUNT(*) AS DirectCommentCount
+		// 	FROM BlockCommentMapping AS bc
+		// 	JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
+		// 	JOIN WorkSheets AS s ON s.id = b.worksheet_id
+		// 	WHERE s.StudentAnswerID = ?`, a.ID).Scan(&directCommentCount)
+		// if directCommentCount == 0 {
+		// 	log.Infof("*** File %q (bucket: %s, key: %s) doesn't have any direct comments...",
+		// 		r.FileName, r.S3BucketName, r.S3Key)
+		// }
+		var sheetName, blockRange, commentText string
+		commens, err := Db.Raw(`
+			SELECT
+				ws.name, b.BlockCellRange, c.CommentText 
+			FROM StudentAnswers AS a
+			JOIN WorkSheets AS ws
+				ON ws.id = b.worksheet_id
+			JOIN StudentAnswerCommentMapping AS ac ON ac.StudentAnswerID = a.StudentAnswerID
+			JOIN Comments AS c ON c.CommentID = ac.CommentID
+			JOIN BlockCommentMapping AS bc ON bc.ExcelCommentID = c.CommentID
+			JOIN ExcelBlocks AS b -- commented blocks
+				ON b.ExcelBlockID = bc.ExcelBlockID
+			JOIN WorkSheets AS cbws -- commented block worksheet
+				ON cbws.id = b.worksheet_id
+			JOIN StudentAnswers AS cba -- commented block answer
+				ON cba.StudentAnswerID = cbws.StudentAnswerID
+			JOIN ExcelBlocks AS ab -- answer blocks (that match...)
+				ON ab.BlockFormula = b.BlockFormula
+					-- AND ab.BlockCellRange = b.BlockCellRange
+			WHERE
+				a.QuestionID = cba.QuestionID
+				AND a.StudentAnswerID = ?`, a.ID).Rows()
 		if err != nil {
 			log.Error(err)
 			continue
 		}
+		defer commens.Close()
+
 		// Download the file and open it
 		fileName, err := a.Source.DownloadTo(manager, dest)
 		if err != nil {
@@ -163,20 +186,19 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			log.Errorln(err)
 			continue
 		}
-		for _, sheet := range a.Worksheets {
-			for _, block := range sheet.Blocks {
-				for _, bcm := range block.CommentMappings {
-					comment := bcm.Comment
-					rangeCells := strings.Split(block.Range, ":")
-					log.Info(sheet.Name, rangeCells, comment.Text)
-					xlsx.AddComment(
-						sheet.Name,
-						rangeCells[0],
-						fmt.Sprintf(`{"text": %q}`, comment.Text))
-				}
+
+		for commens.Next() {
+			commens.Scan(&sheetName, &blockRange, &commentText)
+			rangeCells := strings.Split(blockRange, ":")
+			if debug {
+				log.Debugf("Adding comment to %q sheet at %q: %s", sheetName, rangeCells[0], commentText)
 			}
+			xlsx.AddComment(
+				sheetName,
+				rangeCells[0],
+				fmt.Sprintf(`{"text": %q}`, strings.Replace(commentText, `"`, `\\"`, -1)))
 		}
-		// Save with a new name adding suffix "_Reviewed" to the input name
+
 		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
 		outputName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_Reviewed"+extension)
 

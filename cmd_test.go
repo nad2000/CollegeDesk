@@ -489,23 +489,39 @@ func TestCommenting(t *testing.T) {
 			}
 		}
 	}
-	db.Exec(`
+	if err := db.Exec(`
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
-		SELECT
-			(
-				SELECT StudentAnswerID 
-				FROM WorkBooks 
-				WHERE file_name = 'indirect.test.xlsx' LIMIT 1
-			) AS AnserID,
-			bc.ExcelCommentID
-		FROM BlockCommentMapping AS bc 
+		SELECT DISTINCT wb.StudentAnswerID, bc.ExcelCommentID
+		FROM WorkBooks AS wb, BlockCommentMapping AS bc 
 		JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
 		JOIN WorkSheets AS s ON s.id = b.worksheet_id
-		WHERE s.workbook_file_name = 'commenting.test.xlsx'`)
+		WHERE s.workbook_file_name = 'commenting.test.xlsx'
+			AND wb.file_name IN ('indirect.test.xlsx', 'commenting.test.xlsx')`).Error; err != nil {
+		t.Error(err)
+	}
 
 	t.Run("Queries", testQueries)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
+}
+
+func testQueries(t *testing.T) {
+	// db.LogMode(true)
+	var book model.Workbook
+	db.First(&book, "file_name LIKE ?", "%commenting.test.xlsx")
+	if book.FileName != "commenting.test.xlsx" {
+		t.Errorf("Expected 'commenting.test.xlsx', got: %q", book.FileName)
+		t.Logf("%#v", book)
+	}
+	var answerCount int
+	if err := db.DB().QueryRow(`
+			SELECT COUNT(DISTINCT StudentAnswerID) AnswerCount
+			FROM StudentAnswerCommentMapping`).Scan(&answerCount); err != nil {
+		t.Error(err)
+	}
+	if answerCount != 2 {
+		t.Errorf("Expecte 2 answers mapped got: %d", answerCount)
+	}
 }
 
 func testComments(t *testing.T) {
@@ -561,16 +577,6 @@ func testRowsToComment(t *testing.T) {
 	}
 	if count != 5 {
 		t.Errorf("Expected to select 5 files to comment, got: %d", count)
-	}
-}
-
-func testQueries(t *testing.T) {
-	// db.LogMode(true)
-	var book model.Workbook
-	db.First(&book, "file_name LIKE ?", "%commenting.test.xlsx")
-	if book.FileName != "commenting.test.xlsx" {
-		t.Errorf("Expected 'commenting.test.xlsx', got: %q", book.FileName)
-		t.Logf("%#v", book)
 	}
 }
 
