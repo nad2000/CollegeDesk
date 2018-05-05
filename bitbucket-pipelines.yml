@@ -10,19 +10,19 @@ pipelines:
     - step:
         script: # Modify the commands below to build your repository.
           - env
-          # # - apt install upx-ucl
-          # # - PACKAGE_PATH="${GOPATH}/src/bitbucket.org/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}"
-          # - PACKAGE_PATH="${GOPATH}/src/extract-blocks"
-          # - mkdir -pv "${PACKAGE_PATH}"
-          # - tar -cO --exclude-vcs --exclude=bitbucket-pipelines.yml . | tar -xv -C "${PACKAGE_PATH}"
-          # - cd "${PACKAGE_PATH}"
-          # # - go get -v
-          # # - go build -v
-          # # - go build -v -o $(basename $PWD) main.go
-          # - go install extract-blocks/extract-blocks
-          # - ./bin/upx --best --lzma "${GOPATH}/bin/extract-blocks"
-          # - extract-blocks run -t -v demo.xlsx
-          # - extract-blocks run -t -v test_floats.xlsx
-          # - extract-blocks comment -t -v commenting.test.xlsx
-          # - go test -v -short cmd_test.go
-          # - curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
+          # - apt install upx-ucl
+          # - PACKAGE_PATH="${GOPATH}/src/bitbucket.org/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}"
+          - PACKAGE_PATH="${GOPATH}/src/extract-blocks"
+          - mkdir -pv "${PACKAGE_PATH}"
+          - tar -cO --exclude-vcs --exclude=bitbucket-pipelines.yml . | tar -xv -C "${PACKAGE_PATH}"
+          - cd "${PACKAGE_PATH}"
+          # - go get -v
+          # - go build -v
+          # - go build -v -o $(basename $PWD) main.go
+          - go install extract-blocks/extract-blocks
+          - ./bin/upx --best --lzma "${GOPATH}/bin/extract-blocks"
+          - extract-blocks run -t -v demo.xlsx
+          - extract-blocks run -t -v test_floats.xlsx
+          - extract-blocks comment -t -v commenting.test.xlsx
+          - go test -v -short cmd_test.go
+          - curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
