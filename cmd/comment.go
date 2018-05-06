@@ -127,30 +127,13 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	var fileCount int
 	for _, r := range rows {
 		var a model.Answer
-		err = Db.
-			Preload("Source").
-			Preload("Worksheets.Blocks.CommentMappings.Comment").
-			Preload("AnswerComments.Comment.CommentMappings.Block").
-			First(&a, r.StudentAnswerID).Error
-		// directCommentCount counts comments linked via block-comment mapping
-		// var directCommentCount int
-		// Db.DB().QueryRow(`
-		// 	SELECT COUNT(*) AS DirectCommentCount
-		// 	FROM BlockCommentMapping AS bc
-		// 	JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
-		// 	JOIN WorkSheets AS s ON s.id = b.worksheet_id
-		// 	WHERE s.StudentAnswerID = ?`, a.ID).Scan(&directCommentCount)
-		// if directCommentCount == 0 {
-		// 	log.Infof("*** File %q (bucket: %s, key: %s) doesn't have any direct comments...",
-		// 		r.FileName, r.S3BucketName, r.S3Key)
-		// }
+		err = Db.Preload("Source").First(&a, r.StudentAnswerID).Error
+
 		var sheetName, blockRange, commentText string
 		commens, err := Db.Raw(`
 			SELECT
 				ws.name, b.BlockCellRange, c.CommentText 
 			FROM StudentAnswers AS a
-			JOIN WorkSheets AS ws
-				ON ws.id = b.worksheet_id
 			JOIN StudentAnswerCommentMapping AS ac ON ac.StudentAnswerID = a.StudentAnswerID
 			JOIN Comments AS c ON c.CommentID = ac.CommentID
 			JOIN BlockCommentMapping AS bc ON bc.ExcelCommentID = c.CommentID
@@ -163,6 +146,8 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			JOIN ExcelBlocks AS ab -- answer blocks (that match...)
 				ON ab.BlockFormula = b.BlockFormula
 					-- AND ab.BlockCellRange = b.BlockCellRange
+			JOIN WorkSheets AS ws -- answer work sheets
+				ON ws.id = ab.worksheet_id
 			WHERE
 				a.QuestionID = cba.QuestionID
 				AND a.StudentAnswerID = ?`, a.ID).Rows()
@@ -196,7 +181,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			xlsx.AddComment(
 				sheetName,
 				rangeCells[0],
-				fmt.Sprintf(`{"text": %q}`, strings.Replace(commentText, `"`, `\\"`, -1)))
+				fmt.Sprintf(`{"text": %q}`, commentText))
 		}
 
 		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
