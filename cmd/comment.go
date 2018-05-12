@@ -132,7 +132,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		var sheetName, blockRange, commentText string
 		commens, err := Db.Raw(`
 			SELECT
-				ws.name, b.BlockCellRange, c.CommentText 
+				ws.name, b.BlockCellRange, c.CommentText
 			FROM StudentAnswers AS a
 			JOIN StudentAnswerCommentMapping AS ac ON ac.StudentAnswerID = a.StudentAnswerID
 			JOIN Comments AS c ON c.CommentID = ac.CommentID

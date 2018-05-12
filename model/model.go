@@ -13,6 +13,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
 	//"github.com/tealeg/xlsx"
+	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/nad2000/xlsx"
 )
 
@@ -24,6 +25,9 @@ var VerboseLevel int
 
 // DebugLevel - the level of verbosity of the debug information
 var DebugLevel int
+
+// DryRun - perform processing without actually updating or changing files
+var DryRun bool
 
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
@@ -292,6 +296,50 @@ func (wb *Workbook) Reset() {
 	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
+// ImportCharts - import charts form workbook file
+func (wb *Workbook) ImportCharts(fileName string) {
+
+	xlFile, err := excelize.OpenFile(fileName)
+	if err != nil {
+		log.Errorf("Failed to open file %q", fileName)
+		log.Errorln(err)
+		return
+	}
+
+	// log.Infof("RELS: %#v", xlFile.WorkBookRels)
+	for i, sheet := range xlFile.WorkBook.Sheets.Sheet {
+		log.Infof("#%d: %#v", i, sheet)
+		// for i, r := range xlFile.WorkBookRels.Relationships {
+		// 	log.Infof("#%d: %#v", i, r)
+		// }
+		// // readup mapping sheet-drawing:
+		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
+		sheetRels := marshalRelationships(xlFile.XLSX[name])
+		log.Info("*** ", name)
+		for _, r := range rels.Relationships {
+			log.Info("= target: ", r.Target)
+
+		}
+		// // readup mapping drawing-cahrt:
+		// for name, f := range xlFile.XLSX {
+		// 	if strings.HasPrefix(name, "xl/drawings/_rels/") {
+		// 		rels := marshalRelationships(f)
+		// 		log.Info("*** ", name)
+		// 		for _, r := range rels.Relationships {
+		// 			log.Info("= target: ", r.Target)
+		// 		}
+		// 	}
+		// }
+	}
+	// // readup mapping sheet-chart:
+	// for name, f := range xlFile.XLSX {
+	// 	if strings.HasPrefix(name, "xl/drawings/_rels/") {
+	// 		log.Infof("** %s: %#v", name, marshalRelationships(f))
+	// 	}
+	// }
+
+}
+
 // Worksheet - Excel workbook worksheet
 type Worksheet struct {
 	ID               int
@@ -336,7 +384,9 @@ func (b Block) TableName() string {
 
 func (b *Block) save() {
 	b.Range = b.address()
-	Db.Save(b)
+	if !DryRun {
+		Db.Save(b)
+	}
 }
 
 func (b *Block) address() string {
@@ -672,7 +722,7 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		OR
 			EXISTS(
 				SELECT NULL
-				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm 
+				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm
 					ON sacm.CommentID = c.CommentID
 				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
@@ -726,8 +776,11 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			return
 		}
 		log.Warnf("File %q was already processed.", fileName)
-		wb.Reset()
-	} else {
+		if !DryRun {
+			wb.Reset()
+		}
+	} else if !DryRun {
+
 		wb = Workbook{FileName: fileName, AnswerID: answerID}
 		result = Db.Create(&wb)
 		if result.Error != nil {
@@ -737,6 +790,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			log.Debugf("Ceated workbook entry %#v", wb)
 		}
 	}
+	wb.ImportCharts(fileName)
+	return
 
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
@@ -754,12 +809,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 
 		var ws Worksheet
-		Db.FirstOrCreate(&ws, Worksheet{
-			Name:             sheet.Name,
-			WorkbookID:       wb.ID,
-			WorkbookFileName: wb.FileName,
-			AnswerID:         answerID,
-		})
+		if !DryRun {
+			Db.FirstOrCreate(&ws, Worksheet{
+				Name:             sheet.Name,
+				WorkbookID:       wb.ID,
+				WorkbookFileName: wb.FileName,
+				AnswerID:         answerID,
+			})
+		}
 		if Db.Error != nil {
 			log.Fatalf("Failed to create worksheet entry: %s", Db.Error.Error())
 		}
@@ -794,7 +851,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					}
 					b.s.r, b.s.c = i, j
 
-					Db.Create(&b)
+					if !DryRun {
+						Db.Create(&b)
+					}
+
 					if DebugLevel > 1 {
 						log.Debugf("Created %#v", b)
 					}
@@ -816,5 +876,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+
 	return
 }

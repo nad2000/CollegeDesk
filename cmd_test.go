@@ -418,13 +418,13 @@ func TestCommenting(t *testing.T) {
 			StudentAnswerID
 		)
 		SELECT wb.id, 'Sheet1', FileName, sa.StudentAnswerID
-		FROM FileSources NATURAL JOIN StudentAnswers AS sa 
+		FROM FileSources NATURAL JOIN StudentAnswers AS sa
 		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
-		SELECT id, r.v 
+		SELECT id, r.v
 		FROM WorkSheets AS s LEFT JOIN ExcelBlocks AS b
-		ON b.worksheet_id = s.id, 
+		ON b.worksheet_id = s.id,
 		(
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
@@ -439,8 +439,8 @@ func TestCommenting(t *testing.T) {
 		WHERE QuestionID IS NULL OR QuestionID = 0`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
-		SELECT AssignmentID, QuestionID 
-		FROM CourseAssignments, Questions 
+		SELECT AssignmentID, QuestionID
+		FROM CourseAssignments, Questions
 		WHERE QuestionID % 2 != AssignmentID % 2`)
 	db.Exec(`
 		INSERT INTO Comments (CommentText)
@@ -492,7 +492,7 @@ func TestCommenting(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT DISTINCT wb.StudentAnswerID, bc.ExcelCommentID
-		FROM WorkBooks AS wb, BlockCommentMapping AS bc 
+		FROM WorkBooks AS wb, BlockCommentMapping AS bc
 		JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
 		JOIN WorkSheets AS s ON s.id = b.worksheet_id
 		WHERE s.workbook_file_name = 'commenting.test.xlsx'
