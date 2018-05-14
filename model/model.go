@@ -1,4 +1,4 @@
-package models
+package model
 
 import (
 	"database/sql"
@@ -6,6 +6,7 @@ import (
 	"extract-blocks/s3"
 	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -281,6 +282,7 @@ func (wb *Workbook) Reset() {
 	}
 	log.Debugf("Deleting worksheets: %#v", worksheets)
 	for _, ws := range worksheets {
+		Db.Delete(Chart{}, "worksheet_id = ?", ws.ID)
 		var blocks []Block
 		Db.Model(&ws).Related(&blocks)
 		result := Db.Where("worksheet_id = ?", ws.ID).Find(&blocks)
@@ -306,52 +308,112 @@ func (wb *Workbook) ImportCharts(fileName string) {
 		return
 	}
 
-	// log.Infof("RELS: %#v", xlFile.WorkBookRels)
-	for i, sheet := range xlFile.WorkBook.Sheets.Sheet {
-		log.Infof("#%d: %#v", i, sheet)
-		// for i, r := range xlFile.WorkBookRels.Relationships {
-		// 	log.Infof("#%d: %#v", i, r)
-		// }
-		// // readup mapping sheet-drawing:
+	for _, sheet := range xlFile.WorkBook.Sheets.Sheet {
+		var ws Worksheet
+		result := Db.First(&ws, Worksheet{
+			Name:       sheet.Name,
+			AnswerID:   wb.AnswerID,
+			WorkbookID: wb.ID,
+		})
+		if result.RecordNotFound() && !DryRun {
+			ws = Worksheet{
+				Name:             sheet.Name,
+				WorkbookFileName: filepath.Base(fileName),
+				AnswerID:         wb.AnswerID,
+				WorkbookID:       wb.ID,
+			}
+			if err := Db.Create(&ws).Error; err != nil {
+				log.Fatalf("Failed to create worksheet entry %#v: %s", ws, err.Error())
+			}
+			if DebugLevel > 1 {
+				log.Debugf("Ceated workbook entry %#v", wb)
+			}
+		}
+
 		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
-		sheetRels := marshalRelationships(xlFile.XLSX[name])
+		sheetRels := unmarshalRelationships(xlFile.XLSX[name])
 		log.Info("*** ", name)
-		for _, r := range rels.Relationships {
-			log.Info("= target: ", r.Target)
+		for _, r := range sheetRels.Relationships {
+			if strings.Contains(r.Target, "drawings/drawing") {
+				log.Info("= target: ", r.Target)
+				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
+				drawing := unmarshalDrawing(xlFile.XLSX["xl/drawings/"+filepath.Base(r.Target)])
+				drawingRels := unmarshalRelationships(xlFile.XLSX[name])
+				log.Infof("drawing: %#v", drawing.FromRow)
+				for _, dr := range drawingRels.Relationships {
+					if strings.Contains(dr.Target, "charts/chart") {
+						chartName := "xl/charts/" + filepath.Base(dr.Target)
+						chart := unmarshalChart(xlFile.XLSX[chartName])
+						log.Infof("*** %s: %#v", chartName, chart.PlotArea.Chart)
+
+						Db.Create(&Chart{
+							WorksheetID: ws.ID,
+							Title:       chart.Title,
+							FromCol:     drawing.FromCol,
+							FromRow:     drawing.FromRow,
+							ToCol:       drawing.ToCol,
+							ToRow:       drawing.ToRow,
+							Type:        chart.PlotArea.Chart.XMLName.Local,
+							Data:        chart.PlotArea.Chart.Data,
+							XData:       chart.PlotArea.Chart.Data,
+							YData:       chart.PlotArea.Chart.Data,
+						})
+
+						Db.Create(&Block{
+							WorksheetID: ws.ID,
+							Range:       "ChartRange",
+							Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
+								drawing.FromRow+2,
+								drawing.FromCol+2,
+								drawing.ToRow+2,
+								drawing.ToCol+2),
+						})
+						Db.Create(&Block{
+							WorksheetID: ws.ID,
+							Range:       "ChartType",
+							Formula:     chart.PlotArea.Chart.XMLName.Local,
+						})
+						Db.Create(&Block{
+							WorksheetID: ws.ID,
+							Range:       "ChartTitle",
+							Formula:     chart.Title,
+						})
+						c := chart.PlotArea.Chart
+						for p, v := range map[string]string{
+							"Data":        c.Data,
+							"X-Axis Data": c.XData,
+							"Y-Axis Data": c.YData,
+						} {
+							if v != "" {
+								Db.Create(&Block{
+									WorksheetID: ws.ID,
+									Range:       p,
+									Formula:     v,
+								})
+							}
+						}
+					}
+				}
+			}
 
 		}
-		// // readup mapping drawing-cahrt:
-		// for name, f := range xlFile.XLSX {
-		// 	if strings.HasPrefix(name, "xl/drawings/_rels/") {
-		// 		rels := marshalRelationships(f)
-		// 		log.Info("*** ", name)
-		// 		for _, r := range rels.Relationships {
-		// 			log.Info("= target: ", r.Target)
-		// 		}
-		// 	}
-		// }
 	}
-	// // readup mapping sheet-chart:
-	// for name, f := range xlFile.XLSX {
-	// 	if strings.HasPrefix(name, "xl/drawings/_rels/") {
-	// 		log.Infof("** %s: %#v", name, marshalRelationships(f))
-	// 	}
-	// }
 
 }
 
 // Worksheet - Excel workbook worksheet
 type Worksheet struct {
 	ID               int
-	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
 	Blocks           []Block  `gorm:"ForeignKey:WorksheetID"`
 	Answer           Answer   `gorm:"ForeignKey:AnswerID"`
+	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
 	Workbook         Workbook `gorm:"ForeignKey:WorkbookId"`
+	WorkbookID       int      `gorm:"index"`
 }
 
+// TableName overrides default table name for the model
 func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
@@ -622,7 +684,6 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
-
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
@@ -634,6 +695,7 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
+	Db.AutoMigrate(&Chart{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -878,4 +940,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	return
+}
+
+// Chart - Excel chart
+type Chart struct {
+	ID                             int
+	Worksheet                      Worksheet `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID                    int       `gorm:"index"`
+	Title                          string
+	FromCol, FromRow, ToCol, ToRow int
+	Data, XData, YData, Type       string
 }

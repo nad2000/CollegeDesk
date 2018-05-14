@@ -1,6 +1,8 @@
-package models
+package model
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+)
 
 // XmlxWorkbookRels contains xmlxWorkbookRelations which maps sheet id and sheet XML.
 type xlsxRelationships struct {
@@ -16,9 +18,80 @@ type xlsxRelationship struct {
 	TargetMode string `xml:",attr,omitempty"`
 }
 
-// workbookRelsReader provides function to read and unmarshal workbook
+type xlsxAnyChart struct {
+	XMLName xml.Name
+	// XML     string `xml:",innerxml"`
+	XData string `xml:"ser>xVal>numRef>f"`
+	YData string `xml:"ser>yVal>numRef>f"`
+	Data  string `xml:"ser>val>numRef>f"`
+}
+
+type xlsxSapeProperties struct {
+	Properies string `xml:",innerxml"`
+}
+
+type anyHolder struct {
+	// XMLName Name
+	// XML string `xml:",innerxml"`
+}
+
+type xlsxPlotArea struct {
+	// XMLName xml.Name      `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart plotArea"`
+	ShapeProperties anyHolder    `xml:"spPr"`
+	Layout          anyHolder    `xml:"layout"`
+	ValueAxis       anyHolder    `xml:"valAx"`
+	CategoryAxis    anyHolder    `xml:"catAx"`
+	DateAxis        anyHolder    `xml:"dateAx"`
+	SeriesAxis      anyHolder    `xml:"serAx"`
+	DataTable       anyHolder    `xml:"dTable"`
+	ExtensionList   anyHolder    `xml:"extLst"`
+	Chart           xlsxAnyChart `xml:",any"`
+}
+
+type xlsxBareChart struct {
+	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart chartSpace"`
+	// XMLNSc         string          `xml:"xmlns:c,attr"`
+	// XMLNSa         string          `xml:"xmlns:a,attr"`
+	// XMLNSr         string          `xml:"xmlns:r,attr"`
+	// XMLNSc16r2     string          `xml:"xmlns:c16r2,attr"`
+	// Date1904       *attrValBool    `xml:"c:date1904"`
+	// Lang           *attrValString  `xml:"lang"`
+	// RoundedCorners *attrValBool    `xml:"c:roundedCorners"`
+	// Chart          cChart          `xml:"c:chart"`
+	// SpPr           *cSpPr          `xml:"c:spPr"`
+	// TxPr           *cTxPr          `xml:"c:txPr"`
+	// PrintSettings *cPrintSettings `xml:"c:printSettings"`
+	Title    string       `xml:"chart>title>tx>rich>p>r>t"`
+	PlotArea xlsxPlotArea `xml:"chart>plotArea"`
+}
+
+type xlsxBareDrawing struct {
+	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing wsDr"`
+	// OneCellAnchor []*xdrCellAnchor `xml:"oneCellAnchor"`
+	// TwoCellAnchor []*xdrCellAnchor `xml:"twoCellAnchor"`
+	// A             string           `xml:"a,attr,omitempty"`
+	// Xdr           string           `xml:"xdr,attr,omitempty"`
+	// R             string           `xml:"r,attr,omitempty"`
+	FromCol int `xml:"twoCellAnchor>from>col"`
+	FromRow int `xml:"twoCellAnchor>from>row"`
+	ToCol   int `xml:"twoCellAnchor>to>col"`
+	ToRow   int `xml:"twoCellAnchor>to>row"`
+}
+
+// marshalRelationships provides function to read and unmarshal workbook
 // relationships of XLSX file.
-func marshalRelationships(fileContent string) (content xlsxRelationships) {
+func unmarshalRelationships(fileContent string) (content xlsxRelationships) {
+	xml.Unmarshal([]byte(fileContent), &content)
+	return
+}
+
+func unmarshalChart(fileContent string) (content xlsxBareChart) {
+	xml.Unmarshal([]byte(fileContent), &content)
+	return
+}
+
+func unmarshalDrawing(fileContent string) (content xlsxBareDrawing) {
+	// log.Info("----", fileContent)
 	xml.Unmarshal([]byte(fileContent), &content)
 	return
 }
