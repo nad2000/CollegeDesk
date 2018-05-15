@@ -333,22 +333,19 @@ func (wb *Workbook) ImportCharts(fileName string) {
 
 		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
 		sheetRels := unmarshalRelationships(xlFile.XLSX[name])
-		log.Info("*** ", name)
 		for _, r := range sheetRels.Relationships {
 			if strings.Contains(r.Target, "drawings/drawing") {
-				log.Info("= target: ", r.Target)
 				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
 				drawing := unmarshalDrawing(xlFile.XLSX["xl/drawings/"+filepath.Base(r.Target)])
 				drawingRels := unmarshalRelationships(xlFile.XLSX[name])
-				log.Infof("drawing: %#v", drawing.FromRow)
 				for _, dr := range drawingRels.Relationships {
 					if strings.Contains(dr.Target, "charts/chart") {
 						chartName := "xl/charts/" + filepath.Base(dr.Target)
 						chart := unmarshalChart(xlFile.XLSX[chartName])
-						log.Infof("*** %s: %#v", chartName, chart.PlotArea.Chart)
+						log.Debugf("*** %s: %#v", chartName, chart)
+						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chart.Title, sheet.Name)
 
 						itemCount := chart.ItemCount()
-
 						Db.Create(&Chart{
 							WorksheetID: ws.ID,
 							Title:       chart.Title,
@@ -418,10 +415,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 					}
 				}
 			}
-
 		}
 	}
-
 }
 
 // Worksheet - Excel workbook worksheet
@@ -875,8 +870,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			log.Debugf("Ceated workbook entry %#v", wb)
 		}
 	}
-	wb.ImportCharts(fileName)
-	return
 
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
@@ -961,6 +954,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+	wb.ImportCharts(fileName)
 
 	return
 }

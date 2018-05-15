@@ -74,12 +74,18 @@ type xlsxBareChart struct {
 	PlotArea xlsxPlotArea `xml:"chart>plotArea"`
 }
 
+// ItemCount - shortcut for number of itmems displayed
 func (c *xlsxBareChart) ItemCount() int {
 	chart := c.PlotArea.Chart
 	if chart.CategoryCount.Value > chart.XPointCount.Value {
 		return chart.CategoryCount.Value
 	}
 	return chart.XPointCount.Value
+}
+
+// Type - chart type - short-cut
+func (c *xlsxBareChart) Type() string {
+	return c.PlotArea.Chart.XMLName.Local
 }
 
 type xlsxBareDrawing struct {
