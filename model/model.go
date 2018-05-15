@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -346,6 +347,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						chart := unmarshalChart(xlFile.XLSX[chartName])
 						log.Infof("*** %s: %#v", chartName, chart.PlotArea.Chart)
 
+						itemCount := chart.ItemCount()
+
 						Db.Create(&Chart{
 							WorksheetID: ws.ID,
 							Title:       chart.Title,
@@ -357,6 +360,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							Data:        chart.PlotArea.Chart.Data,
 							XData:       chart.PlotArea.Chart.Data,
 							YData:       chart.PlotArea.Chart.Data,
+							ItemCount:   itemCount,
 						})
 
 						Db.Create(&Block{
@@ -368,21 +372,14 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								drawing.ToRow+2,
 								drawing.ToCol+2),
 						})
-						Db.Create(&Block{
-							WorksheetID: ws.ID,
-							Range:       "ChartType",
-							Formula:     chart.PlotArea.Chart.XMLName.Local,
-						})
-						Db.Create(&Block{
-							WorksheetID: ws.ID,
-							Range:       "ChartTitle",
-							Formula:     chart.Title,
-						})
 						c := chart.PlotArea.Chart
 						for p, v := range map[string]string{
+							"ChartTitle":  chart.Title,
+							"ChartType":   chart.PlotArea.Chart.XMLName.Local,
 							"Data":        c.Data,
 							"X-Axis Data": c.XData,
 							"Y-Axis Data": c.YData,
+							"ItemCount":   strconv.Itoa(itemCount),
 						} {
 							if v != "" {
 								Db.Create(&Block{
@@ -944,10 +941,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 
 // Chart - Excel chart
 type Chart struct {
-	ID                             int
-	Worksheet                      Worksheet `gorm:"ForeignKey:WorksheetID"`
-	WorksheetID                    int       `gorm:"index"`
-	Title                          string
-	FromCol, FromRow, ToCol, ToRow int
-	Data, XData, YData, Type       string
+	ID                                        int
+	Worksheet                                 Worksheet `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID                               int       `gorm:"index"`
+	Title                                     string
+	FromCol, FromRow, ToCol, ToRow, ItemCount int
+	Data, XData, YData, Type                  string
 }

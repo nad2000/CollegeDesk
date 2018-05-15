@@ -18,12 +18,21 @@ type xlsxRelationship struct {
 	TargetMode string `xml:",attr,omitempty"`
 }
 
+type xlsxAnyWithIntValAttribute struct {
+	// XMLName xml.Name
+	// XML     string `xml:",innerxml"`
+	Value int `xml:"val,attr"`
+}
+
 type xlsxAnyChart struct {
 	XMLName xml.Name
 	// XML     string `xml:",innerxml"`
-	XData string `xml:"ser>xVal>numRef>f"`
-	YData string `xml:"ser>yVal>numRef>f"`
-	Data  string `xml:"ser>val>numRef>f"`
+	Data          string                     `xml:"ser>val>numRef>f"`
+	XData         string                     `xml:"ser>xVal>numRef>f"`
+	YData         string                     `xml:"ser>yVal>numRef>f"`
+	CategoryCount xlsxAnyWithIntValAttribute `xml:"ser>cat>strRef>strCache>ptCount"`
+	XPointCount   xlsxAnyWithIntValAttribute `xml:"ser>xVal>numRef>numCache>ptCount"`
+	YPointCount   xlsxAnyWithIntValAttribute `xml:"ser>yVal>numRef>numCache>ptCount"`
 }
 
 type xlsxSapeProperties struct {
@@ -63,6 +72,14 @@ type xlsxBareChart struct {
 	// PrintSettings *cPrintSettings `xml:"c:printSettings"`
 	Title    string       `xml:"chart>title>tx>rich>p>r>t"`
 	PlotArea xlsxPlotArea `xml:"chart>plotArea"`
+}
+
+func (c *xlsxBareChart) ItemCount() int {
+	chart := c.PlotArea.Chart
+	if chart.CategoryCount.Value > chart.XPointCount.Value {
+		return chart.CategoryCount.Value
+	}
+	return chart.XPointCount.Value
 }
 
 type xlsxBareDrawing struct {
