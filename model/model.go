@@ -358,8 +358,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							ToRow:       drawing.ToRow,
 							Type:        chart.PlotArea.Chart.XMLName.Local,
 							Data:        chart.PlotArea.Chart.Data,
-							XData:       chart.PlotArea.Chart.Data,
-							YData:       chart.PlotArea.Chart.Data,
+							XData:       chart.PlotArea.Chart.XData,
+							YData:       chart.PlotArea.Chart.YData,
 							ItemCount:   itemCount,
 						})
 
@@ -373,20 +373,46 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								drawing.ToCol+2),
 						})
 						c := chart.PlotArea.Chart
-						for p, v := range map[string]string{
-							"ChartTitle":  chart.Title,
-							"ChartType":   chart.PlotArea.Chart.XMLName.Local,
-							"Data":        c.Data,
-							"X-Axis Data": c.XData,
-							"Y-Axis Data": c.YData,
-							"ItemCount":   strconv.Itoa(itemCount),
-						} {
+						var propCount int
+						properties := map[string]string{
+							"ChartType":       chart.PlotArea.Chart.XMLName.Local,
+							"ChartTitle":      chart.Title,
+							"X-Axis Label":    "???",
+							"Y-Axis Label":    "???",
+							"SourceData":      c.Data,
+							"X-Axis Data":     c.XData,
+							"Y-Axis Data":     c.YData,
+							"ItemCount":       strconv.Itoa(itemCount),
+							"X-Axis MinValue": "???",
+							"Y-Axis MinValue": "???",
+							"X-Axis MaxValue": "???",
+							"Y-Axis MaxValue": "???",
+						}
+						propertyNames := []string{
+							"ChartType",
+							"ChartTitle",
+							"X-Axis Label",
+							"Y-Axis Label",
+							"SourceData",
+							"X-Axis Data",
+							"Y-Axis Data",
+							"ItemCount",
+							"X-Axis MinValue",
+							"Y-Axis MinValue",
+							"X-Axis MaxValue",
+							"Y-Axis MaxValue",
+						}
+						for _, p := range propertyNames {
+							v := properties[p]
 							if v != "" {
 								Db.Create(&Block{
 									WorksheetID: ws.ID,
 									Range:       p,
 									Formula:     v,
+									RelativeFormula: cellAddress(
+										drawing.FromRow+propCount, drawing.ToCol+2),
 								})
+								propCount++
 							}
 						}
 					}
@@ -418,13 +444,13 @@ func (Worksheet) TableName() string {
 // Block - the univormly filled with specific color block
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
-	WorksheetID     int `gorm:"index"`
 	Color           string
 	Range           string                `gorm:"column:BlockCellRange"`
 	Formula         string                `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string                // first block cell relative formula formula
 	Cells           []Cell                `gorm:"ForeignKey:BlockID"`
 	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID     int                   `gorm:"index"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
