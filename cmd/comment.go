@@ -84,6 +84,10 @@ func AddComments(fileNames ...string) {
 	var book model.Workbook
 	base := filepath.Base(fileName)
 	Db.Preload("Worksheets.Blocks.CommentMappings.Comment").First(&book, "file_name LIKE ?", "%"+base)
+	if err := addChartProperties(xlsx, book.AnswerID); err != nil {
+		log.Error(err)
+		return
+	}
 	for _, sheet := range book.Worksheets {
 		for _, block := range sheet.Blocks {
 			for _, bcm := range block.CommentMappings {
@@ -92,7 +96,7 @@ func AddComments(fileNames ...string) {
 				xlsx.AddComment(
 					sheet.Name,
 					rangeCells[0],
-					fmt.Sprintf(`{"author": %q,"text": %q}`, "????", comment.Text))
+					fmt.Sprintf(`{"text": %q}`, comment.Text))
 			}
 		}
 	}
@@ -109,6 +113,39 @@ func AddComments(fileNames ...string) {
 		}
 		log.Errorln(err)
 	}
+}
+
+func addChartProperties(xlsx *excelize.File, answerID int) error {
+	chartProperties, err := Db.Raw(`
+			SELECT
+				ws.name,
+				b.relative_formula,
+				b.BlockCellRange,
+				b.BlockFormula
+			FROM blocks.ExcelBlocks AS b
+			JOIN WorkSheets AS ws
+				ON ws.id = b.worksheet_id
+			JOIN charts AS c
+				ON c.id = b.chart_id
+			WHERE ws.StudentAnswerID = ?
+				AND b.relative_formula IS NOT NULL
+				AND b.relative_formula <> ''`, answerID).Rows()
+	if err != nil {
+		return err
+	}
+	defer chartProperties.Close()
+	var sheetName, propName, propValue, cellAddress string
+
+	for chartProperties.Next() {
+		chartProperties.Scan(&sheetName, &cellAddress, &propName, &propValue)
+		xlsx.SetCellStr(sheetName, cellAddress, propName)
+		nextAddress, err := model.RelCellAddress(cellAddress, 0, 1)
+		if err != nil {
+			return err
+		}
+		xlsx.SetCellStr(sheetName, nextAddress, propValue)
+	}
+	return nil
 }
 
 // AddCommentsInBatch addes comments to the answer files.
@@ -169,6 +206,11 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		if err != nil {
 			log.Errorf("Failed to open file %q", fileName)
 			log.Errorln(err)
+			continue
+		}
+
+		if err := addChartProperties(xlsx, a.ID); err != nil {
+			log.Error(err)
 			continue
 		}
 

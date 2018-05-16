@@ -35,7 +35,16 @@ var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
 func cellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
+}
 
+// RelCellAddress - relative cell R1R1 representation against the given cell
+func RelCellAddress(address string, rowIncrement, colIncrement int) (string, error) {
+	colIndex, rowIndex, err := xlsx.GetCoordsFromCellIDString(address)
+	if err != nil {
+		log.Errorf("Failed to map address %q: %s", address, err.Error())
+		return "", err
+	}
+	return xlsx.GetCellIDStringFromCoords(colIndex+colIncrement, rowIndex+rowIncrement), nil
 }
 
 // RelativeCellAddress converts cell ID into a relative R1C1 representation
@@ -376,7 +385,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								drawing.FromCol+2,
 								drawing.ToRow+2,
 								drawing.ToCol+2),
-							ChartId: chartID,
+							ChartID: chartID,
 						})
 						c := chart.PlotArea.Chart
 						var propCount int
@@ -417,7 +426,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 									Formula:     v,
 									RelativeFormula: cellAddress(
 										drawing.FromRow+propCount, drawing.ToCol+2),
-									ChartId: chartID,
+									ChartID: chartID,
 								})
 								propCount++
 							}
@@ -458,7 +467,7 @@ type Block struct {
 	WorksheetID     int                   `gorm:"index"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
 	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
-	ChartId         sql.NullInt64
+	ChartID         sql.NullInt64
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -592,6 +601,7 @@ type Cell struct {
 	Comment string
 }
 
+// TableName overrides default table name for the model
 func (Cell) TableName() string {
 	return "Cells"
 }
