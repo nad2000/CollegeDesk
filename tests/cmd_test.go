@@ -146,6 +146,7 @@ func deletData() {
 		&model.Comment{},
 		&model.Cell{},
 		&model.Block{},
+		&model.Chart{},
 		&model.Worksheet{},
 		&model.Workbook{},
 		&model.QuestionExcelData{},
@@ -459,6 +460,8 @@ func TestCommenting(t *testing.T) {
 		First(&question)
 	for _, fn := range []string{"commenting.test.xlsx", "indirect.test.xlsx"} {
 
+		isIndirect := strings.HasPrefix("indirect", fn)
+
 		f := model.Source{
 			FileName:     fn,
 			S3BucketName: "studentanswers",
@@ -477,10 +480,20 @@ func TestCommenting(t *testing.T) {
 		for _, sn := range []string{"Sheet1", "Sheet2"} {
 			sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName, Answer: answer}
 			db.Create(&sheet)
+			chart := model.Chart{Worksheet: sheet}
+			db.Create(&chart)
+			block := model.Block{Worksheet: sheet, Range: "ChartTitle", Formula: "TEST", RelativeFormula: "E15", Chart: chart}
+			db.Create(&block)
+			if !isIndirect {
+				comment := model.Comment{Text: fmt.Sprintf("+++ Comment for CHART in %q for the range %q", sn, "E15")}
+				db.Create(&comment)
+				bcm := model.BlockCommentMapping{Block: block, Comment: comment}
+				db.Create(&bcm)
+			}
 			for i, r := range []string{"A1", "C3", "D2:F13"} {
 				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
 				db.Create(&block)
-				if !strings.HasPrefix("indirect", fn) {
+				if !isIndirect {
 					comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
 					db.Create(&comment)
 					bcm := model.BlockCommentMapping{Block: block, Comment: comment}

@@ -728,6 +728,7 @@ func SetDb() {
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
 	Db.AutoMigrate(&Comment{})
@@ -735,7 +736,6 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
-	Db.AutoMigrate(&Chart{})
 	if isMySQL && !worksheetsExists {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
