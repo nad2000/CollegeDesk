@@ -345,9 +345,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						chartTitle := chart.Title.Value()
 						log.Debugf("*** %s: %#v", chartName, chart)
 						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
-
 						itemCount := chart.ItemCount()
-						Db.Create(&Chart{
+						chartEntry := Chart{
 							WorksheetID: ws.ID,
 							Title:       chartTitle,
 							XLabel:      chart.XLabel(),
@@ -365,7 +364,9 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							XMaxValue:   chart.XMaxValue(),
 							YMaxValue:   chart.YMaxValue(),
 							YMinValue:   chart.YMinValue(),
-						})
+						}
+						Db.Create(&chartEntry)
+						chartID := NewNullInt64(chartEntry.ID)
 
 						Db.Create(&Block{
 							WorksheetID: ws.ID,
@@ -375,6 +376,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								drawing.FromCol+2,
 								drawing.ToRow+2,
 								drawing.ToCol+2),
+							ChartId: chartID,
 						})
 						c := chart.PlotArea.Chart
 						var propCount int
@@ -415,6 +417,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 									Formula:     v,
 									RelativeFormula: cellAddress(
 										drawing.FromRow+propCount, drawing.ToCol+2),
+									ChartId: chartID,
 								})
 								propCount++
 							}
@@ -454,6 +457,8 @@ type Block struct {
 	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
 	WorksheetID     int                   `gorm:"index"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
+	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
+	ChartId         sql.NullInt64
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
