@@ -21,8 +21,8 @@ pipelines:
           # - go build -v -o $(basename $PWD) main.go
           - go install extract-blocks/extract-blocks
           - ./bin/upx --best --lzma "${GOPATH}/bin/extract-blocks"
-          - extract-blocks run -t -v demo.xlsx
-          - extract-blocks run -t -v test_floats.xlsx
-          - extract-blocks comment -t -v commenting.test.xlsx
+          - extract-blocks run -t -v tests/demo.xlsx
+          - extract-blocks run -t -v tests/test_floats.xlsx
+          - extract-blocks comment -t -v tests/commenting.test.xlsx
           - go test -v -short extract-blocks/tests
           - curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
