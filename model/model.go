@@ -377,8 +377,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						properties := map[string]string{
 							"ChartType":       chart.PlotArea.Chart.XMLName.Local,
 							"ChartTitle":      chartTitle,
-							"X-Axis Label":    chart.XLabel(),
-							"Y-Axis Label":    chart.YLabel(),
+							"X-Axis Title":    chart.XLabel(),
+							"Y-Axis Title":    chart.YLabel(),
 							"SourceData":      c.Data,
 							"X-Axis Data":     c.XData,
 							"Y-Axis Data":     c.YData,
@@ -391,8 +391,8 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						propertyNames := []string{
 							"ChartType",
 							"ChartTitle",
-							"X-Axis Label",
-							"Y-Axis Label",
+							"X-Axis Title",
+							"Y-Axis Title",
 							"SourceData",
 							"X-Axis Data",
 							"Y-Axis Data",
