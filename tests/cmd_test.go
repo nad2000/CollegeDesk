@@ -124,8 +124,8 @@ func TestDemoFile(t *testing.T) {
 	}
 	var count int
 	db.Model(&model.Block{}).Count(&count)
-	if count != 3 {
-		t.Errorf("Expected 3 blocks, got: %d", count)
+	if expected := 10; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
 	}
 	db.Model(&model.Cell{}).Count(&count)
 	if count != 30 {
