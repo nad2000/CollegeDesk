@@ -341,14 +341,17 @@ func (wb *Workbook) ImportCharts(fileName string) {
 				for _, dr := range drawingRels.Relationships {
 					if strings.Contains(dr.Target, "charts/chart") {
 						chartName := "xl/charts/" + filepath.Base(dr.Target)
-						chart := unmarshalChart(xlFile.XLSX[chartName])
+						chart := UnmarshalChart(xlFile.XLSX[chartName])
+						chartTitle := chart.Title.Value()
 						log.Debugf("*** %s: %#v", chartName, chart)
-						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chart.Title, sheet.Name)
+						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
 
 						itemCount := chart.ItemCount()
 						Db.Create(&Chart{
 							WorksheetID: ws.ID,
-							Title:       chart.Title,
+							Title:       chartTitle,
+							XLabel:      chart.XLabel(),
+							YLabel:      chart.YLabel(),
 							FromCol:     drawing.FromCol,
 							FromRow:     drawing.FromRow,
 							ToCol:       drawing.ToCol,
@@ -373,9 +376,9 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						var propCount int
 						properties := map[string]string{
 							"ChartType":       chart.PlotArea.Chart.XMLName.Local,
-							"ChartTitle":      chart.Title,
-							"X-Axis Label":    "???",
-							"Y-Axis Label":    "???",
+							"ChartTitle":      chartTitle,
+							"X-Axis Label":    chart.XLabel(),
+							"Y-Axis Label":    chart.YLabel(),
 							"SourceData":      c.Data,
 							"X-Axis Data":     c.XData,
 							"Y-Axis Data":     c.YData,
@@ -964,7 +967,7 @@ type Chart struct {
 	ID                                        int
 	Worksheet                                 Worksheet `gorm:"ForeignKey:WorksheetID"`
 	WorksheetID                               int       `gorm:"index"`
-	Title                                     string
+	Title, XLabel, YLabel                     string
 	FromCol, FromRow, ToCol, ToRow, ItemCount int
 	Data, XData, YData, Type                  string
 }

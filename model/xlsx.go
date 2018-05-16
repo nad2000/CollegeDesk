@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/xml"
+	"strings"
 )
 
 // XmlxWorkbookRels contains xmlxWorkbookRelations which maps sheet id and sheet XML.
@@ -44,17 +45,30 @@ type anyHolder struct {
 	// XML string `xml:",innerxml"`
 }
 
+type xlsxTitle struct {
+	Texts []string `xml:"tx>rich>p>r>t"`
+}
+
+func (t *xlsxTitle) Value() string {
+	if t.Texts != nil {
+		return strings.Join(t.Texts, "")
+	}
+	return ""
+}
+
 type xlsxPlotArea struct {
 	// XMLName xml.Name      `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart plotArea"`
-	ShapeProperties anyHolder    `xml:"spPr"`
-	Layout          anyHolder    `xml:"layout"`
-	ValueAxis       anyHolder    `xml:"valAx"`
-	CategoryAxis    anyHolder    `xml:"catAx"`
-	DateAxis        anyHolder    `xml:"dateAx"`
-	SeriesAxis      anyHolder    `xml:"serAx"`
-	DataTable       anyHolder    `xml:"dTable"`
-	ExtensionList   anyHolder    `xml:"extLst"`
-	Chart           xlsxAnyChart `xml:",any"`
+	ShapeProperties anyHolder `xml:"spPr"`
+	Layout          anyHolder `xml:"layout"`
+	// ValueAxis       anyHolder `xml:"valAx"`
+	// CategoryAxis    anyHolder `xml:"catAx"`
+	CatAxTitles   []xlsxTitle  `xml:"catAx>title"`
+	ValAxTitles   []xlsxTitle  `xml:"valAx>title"`
+	DateAxis      anyHolder    `xml:"dateAx"`
+	SeriesAxis    anyHolder    `xml:"serAx"`
+	DataTable     anyHolder    `xml:"dTable"`
+	ExtensionList anyHolder    `xml:"extLst"`
+	Chart         xlsxAnyChart `xml:",any"`
 }
 
 type xlsxBareChart struct {
@@ -70,7 +84,8 @@ type xlsxBareChart struct {
 	// SpPr           *cSpPr          `xml:"c:spPr"`
 	// TxPr           *cTxPr          `xml:"c:txPr"`
 	// PrintSettings *cPrintSettings `xml:"c:printSettings"`
-	Title    string       `xml:"chart>title>tx>rich>p>r>t"`
+	// Title    string       `xml:"chart>title>tx>rich>p>r>t"`
+	Title    xlsxTitle    `xml:"chart>title"`
 	PlotArea xlsxPlotArea `xml:"chart>plotArea"`
 }
 
@@ -86,6 +101,28 @@ func (c *xlsxBareChart) ItemCount() int {
 // Type - chart type - short-cut
 func (c *xlsxBareChart) Type() string {
 	return c.PlotArea.Chart.XMLName.Local
+}
+
+// XLabel - X-axis title
+func (c *xlsxBareChart) XLabel() string {
+	if c.PlotArea.ValAxTitles != nil && len(c.PlotArea.ValAxTitles) > 1 {
+		return c.PlotArea.ValAxTitles[0].Value()
+	}
+	if c.PlotArea.CatAxTitles != nil {
+		return c.PlotArea.CatAxTitles[0].Value()
+	}
+	return ""
+}
+
+// YLabel - Y-axis title
+func (c *xlsxBareChart) YLabel() string {
+	if c.PlotArea.ValAxTitles != nil {
+		if len(c.PlotArea.ValAxTitles) > 1 {
+			return c.PlotArea.ValAxTitles[1].Value()
+		}
+		return c.PlotArea.ValAxTitles[0].Value()
+	}
+	return ""
 }
 
 type xlsxBareDrawing struct {
@@ -108,7 +145,7 @@ func unmarshalRelationships(fileContent string) (content xlsxRelationships) {
 	return
 }
 
-func unmarshalChart(fileContent string) (content xlsxBareChart) {
+func UnmarshalChart(fileContent string) (content xlsxBareChart) {
 	xml.Unmarshal([]byte(fileContent), &content)
 	return
 }
