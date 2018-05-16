@@ -25,6 +25,12 @@ type xlsxAnyWithIntValAttribute struct {
 	Value int `xml:"val,attr"`
 }
 
+type xlsxAnyWithStringValAttribute struct {
+	// XMLName xml.Name
+	// XML     string `xml:",innerxml"`
+	Value string `xml:"val,attr"`
+}
+
 type xlsxAnyChart struct {
 	XMLName xml.Name
 	// XML     string `xml:",innerxml"`
@@ -56,19 +62,23 @@ func (t *xlsxTitle) Value() string {
 	return ""
 }
 
+type xlsxValAx struct {
+	Title xlsxTitle                     `xml:"title"`
+	Min   xlsxAnyWithStringValAttribute `xml:"scaling>min"`
+	Max   xlsxAnyWithStringValAttribute `xml:"scaling>max"`
+}
+
 type xlsxPlotArea struct {
 	// XMLName xml.Name      `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart plotArea"`
-	ShapeProperties anyHolder `xml:"spPr"`
-	Layout          anyHolder `xml:"layout"`
-	// ValueAxis       anyHolder `xml:"valAx"`
-	// CategoryAxis    anyHolder `xml:"catAx"`
-	CatAxTitles   []xlsxTitle  `xml:"catAx>title"`
-	ValAxTitles   []xlsxTitle  `xml:"valAx>title"`
-	DateAxis      anyHolder    `xml:"dateAx"`
-	SeriesAxis    anyHolder    `xml:"serAx"`
-	DataTable     anyHolder    `xml:"dTable"`
-	ExtensionList anyHolder    `xml:"extLst"`
-	Chart         xlsxAnyChart `xml:",any"`
+	ShapeProperties anyHolder    `xml:"spPr"`
+	Layout          anyHolder    `xml:"layout"`
+	ValAxes         []xlsxValAx  `xml:"valAx"`
+	CatAxTitles     []xlsxTitle  `xml:"catAx>title"`
+	DateAxis        anyHolder    `xml:"dateAx"`
+	SeriesAxis      anyHolder    `xml:"serAx"`
+	DataTable       anyHolder    `xml:"dTable"`
+	ExtensionList   anyHolder    `xml:"extLst"`
+	Chart           xlsxAnyChart `xml:",any"`
 }
 
 type xlsxBareChart struct {
@@ -100,13 +110,13 @@ func (c *xlsxBareChart) ItemCount() int {
 
 // Type - chart type - short-cut
 func (c *xlsxBareChart) Type() string {
-	return c.PlotArea.Chart.XMLName.Local
+	return strings.Title(strings.TrimSuffix(c.PlotArea.Chart.XMLName.Local, "Chart"))
 }
 
 // XLabel - X-axis title
 func (c *xlsxBareChart) XLabel() string {
-	if c.PlotArea.ValAxTitles != nil && len(c.PlotArea.ValAxTitles) > 1 {
-		return c.PlotArea.ValAxTitles[0].Value()
+	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
+		return c.PlotArea.ValAxes[0].Title.Value()
 	}
 	if c.PlotArea.CatAxTitles != nil {
 		return c.PlotArea.CatAxTitles[0].Value()
@@ -116,11 +126,43 @@ func (c *xlsxBareChart) XLabel() string {
 
 // YLabel - Y-axis title
 func (c *xlsxBareChart) YLabel() string {
-	if c.PlotArea.ValAxTitles != nil {
-		if len(c.PlotArea.ValAxTitles) > 1 {
-			return c.PlotArea.ValAxTitles[1].Value()
+	if c.PlotArea.ValAxes != nil {
+		if len(c.PlotArea.ValAxes) > 1 {
+			return c.PlotArea.ValAxes[1].Title.Value()
 		}
-		return c.PlotArea.ValAxTitles[0].Value()
+		return c.PlotArea.ValAxes[0].Title.Value()
+	}
+	return ""
+}
+
+// XMinValue - X-axis min value
+func (c *xlsxBareChart) XMinValue() string {
+	if c.PlotArea.ValAxes != nil {
+		return c.PlotArea.ValAxes[0].Min.Value
+	}
+	return ""
+}
+
+// XMaxValue - X-axis max value
+func (c *xlsxBareChart) XMaxValue() string {
+	if c.PlotArea.ValAxes != nil {
+		return c.PlotArea.ValAxes[0].Max.Value
+	}
+	return ""
+}
+
+// YMinValue - Y-axis min value
+func (c *xlsxBareChart) YMinValue() string {
+	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
+		return c.PlotArea.ValAxes[1].Min.Value
+	}
+	return ""
+}
+
+// YMaxValue - Y-axis max value
+func (c *xlsxBareChart) YMaxValue() string {
+	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
+		return c.PlotArea.ValAxes[1].Max.Value
 	}
 	return ""
 }

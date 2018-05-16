@@ -356,11 +356,15 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							FromRow:     drawing.FromRow,
 							ToCol:       drawing.ToCol,
 							ToRow:       drawing.ToRow,
-							Type:        chart.PlotArea.Chart.XMLName.Local,
+							Type:        chart.Type(),
 							Data:        chart.PlotArea.Chart.Data,
 							XData:       chart.PlotArea.Chart.XData,
 							YData:       chart.PlotArea.Chart.YData,
 							ItemCount:   itemCount,
+							XMinValue:   chart.XMinValue(),
+							XMaxValue:   chart.XMaxValue(),
+							YMaxValue:   chart.YMaxValue(),
+							YMinValue:   chart.YMinValue(),
 						})
 
 						Db.Create(&Block{
@@ -375,7 +379,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 						c := chart.PlotArea.Chart
 						var propCount int
 						properties := map[string]string{
-							"ChartType":       chart.PlotArea.Chart.XMLName.Local,
+							"ChartType":       chart.Type(),
 							"ChartTitle":      chartTitle,
 							"X-Axis Title":    chart.XLabel(),
 							"Y-Axis Title":    chart.YLabel(),
@@ -383,10 +387,10 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							"X-Axis Data":     c.XData,
 							"Y-Axis Data":     c.YData,
 							"ItemCount":       strconv.Itoa(itemCount),
-							"X-Axis MinValue": "???",
-							"Y-Axis MinValue": "???",
-							"X-Axis MaxValue": "???",
-							"Y-Axis MaxValue": "???",
+							"X-Axis MinValue": chart.XMinValue(),
+							"Y-Axis MinValue": chart.YMinValue(),
+							"X-Axis MaxValue": chart.XMaxValue(),
+							"Y-Axis MaxValue": chart.YMaxValue(),
 						}
 						propertyNames := []string{
 							"ChartType",
@@ -964,10 +968,11 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 
 // Chart - Excel chart
 type Chart struct {
-	ID                                        int
-	Worksheet                                 Worksheet `gorm:"ForeignKey:WorksheetID"`
-	WorksheetID                               int       `gorm:"index"`
-	Title, XLabel, YLabel                     string
-	FromCol, FromRow, ToCol, ToRow, ItemCount int
-	Data, XData, YData, Type                  string
+	ID                                         int
+	Worksheet                                  Worksheet
+	WorksheetID                                int `gorm:"index"`
+	Title, XLabel, YLabel                      string
+	FromCol, FromRow, ToCol, ToRow, ItemCount  int
+	Data, XData, YData, Type                   string
+	XMinValue, XMaxValue, YMaxValue, YMinValue string
 }
