@@ -45,7 +45,7 @@ the new file will be stored with the given name.`,
 		Db, err = model.OpenDb(url)
 		if err != nil {
 			log.Error(err)
-			log.Fatalf("failed to connect database %q", url)
+			log.Fatalf("Failed to connect database %q", url)
 		}
 		defer Db.Close()
 		if debugLevel > 1 {
@@ -83,39 +83,6 @@ func AddComments(fileNames ...string) {
 	}
 }
 
-func addChartProperties(xlsx *excelize.File, answerID int) error {
-	chartProperties, err := Db.Raw(`
-			SELECT
-				ws.name,
-				b.relative_formula,
-				b.BlockCellRange,
-				b.BlockFormula
-			FROM ExcelBlocks AS b
-			JOIN WorkSheets AS ws
-				ON ws.id = b.worksheet_id
-			JOIN charts AS c
-				ON c.id = b.chart_id
-			WHERE ws.StudentAnswerID = ?
-				AND b.relative_formula IS NOT NULL
-				AND b.relative_formula <> ''`, answerID).Rows()
-	if err != nil {
-		return err
-	}
-	defer chartProperties.Close()
-	var sheetName, propName, propValue, cellAddress string
-
-	for chartProperties.Next() {
-		chartProperties.Scan(&sheetName, &cellAddress, &propName, &propValue)
-		xlsx.SetCellStr(sheetName, cellAddress, propName)
-		nextAddress, err := model.RelCellAddress(cellAddress, 0, 1)
-		if err != nil {
-			return err
-		}
-		xlsx.SetCellStr(sheetName, nextAddress, propValue)
-	}
-	return nil
-}
-
 // AddCommentsInBatch addes comments to the answer files.
 func AddCommentsInBatch(manager s3.FileManager) error {
 
@@ -144,61 +111,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			continue
 		}
 
-		// // Iterate via assosiated comments and add them to the file
-		// xlsx, err := excelize.OpenFile(fileName)
-		// if err != nil {
-		// 	log.Errorf("Failed to open file %q", fileName)
-		// 	log.Errorln(err)
-		// 	continue
-		// }
-
-		// var sheetName, blockRange, commentText string
-		// commens, err := Db.Raw(`
-		// 	SELECT
-		// 		ws.name,
-		// 		CASE
-		// 			WHEN b.chart_id IS NULL THEN b.BlockCellRange
-		// 			ELSE b.relative_formula
-		// 		END AS CellRange,
-		// 		c.CommentText
-		// 	FROM StudentAnswers AS a
-		// 	JOIN StudentAnswerCommentMapping AS ac ON ac.StudentAnswerID = a.StudentAnswerID
-		// 	JOIN Comments AS c ON c.CommentID = ac.CommentID
-		// 	JOIN BlockCommentMapping AS bc ON bc.ExcelCommentID = c.CommentID
-		// 	JOIN ExcelBlocks AS b -- commented blocks
-		// 		ON b.ExcelBlockID = bc.ExcelBlockID
-		// 	JOIN WorkSheets AS cbws -- commented block worksheet
-		// 		ON cbws.id = b.worksheet_id
-		// 	JOIN StudentAnswers AS cba -- commented block answer
-		// 		ON cba.StudentAnswerID = cbws.StudentAnswerID
-		// 	JOIN ExcelBlocks AS ab -- answer blocks (that match...)
-		// 		ON ab.BlockFormula = b.BlockFormula
-		// 			-- AND ab.BlockCellRange = b.BlockCellRange
-		// 	JOIN WorkSheets AS ws -- answer work sheets
-		// 		ON ws.id = ab.worksheet_id
-		// 	WHERE
-		// 		a.QuestionID = cba.QuestionID
-		// 		AND a.StudentAnswerID = ?
-		// `, a.ID).Rows()
-		// if err != nil {
-		// 	log.Error(err)
-		// 	continue
-		// }
-		// defer commens.Close()
-
-		// for commens.Next() {
-		// 	commens.Scan(&sheetName, &blockRange, &commentText)
-		// 	rangeCells := strings.Split(blockRange, ":")
-		// 	log.Infof("Adding comment to %q sheet at %q: %s", sheetName, rangeCells[0], commentText)
-		// 	if debug {
-		// 		log.Debugf("Adding comment to %q sheet at %q: %s", sheetName, rangeCells[0], commentText)
-		// 	}
-		// 	xlsx.AddComment(
-		// 		sheetName,
-		// 		rangeCells[0],
-		// 		fmt.Sprintf(`{"text": %q}`, commentText))
-		// }
-
+		// Choose the output file name
 		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
 		outputName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_Reviewed"+extension)
 
@@ -243,8 +156,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	// Iterate via assosiated comments and add them to the file
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
-		log.Errorf("Failed to open file %q", fileName)
-		return err
+		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
 	}
 
 	if err := addChartProperties(xlsx, answerID); err != nil {
@@ -297,7 +209,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 		xlsx.AddComment(
 			sheetName,
 			rangeCells[0],
-			fmt.Sprintf(`{"text": %q}`, commentText))
+			fmt.Sprintf(`{"author":"", "text":%q}`, commentText))
 	}
 
 	if fileName == outputName || outputName == "" {
@@ -308,13 +220,44 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 
 	if err != nil {
 		if outputName != "" {
-			log.Errorf("Failed to save file %q -> %q", fileName, outputName)
-		} else {
-			log.Errorf("Failed to save file %q", fileName)
+			return fmt.Errorf("Failed to save file %q -> %q: %s", fileName, outputName, err.Error())
 		}
-		return err
+		return fmt.Errorf("Failed to save file %q: %s", fileName, err.Error())
 	}
 	log.Infof("Outpu saved to %q", outputName)
 
+	return nil
+}
+
+func addChartProperties(xlsx *excelize.File, answerID int) error {
+	chartProperties, err := Db.Raw(`
+			SELECT
+				ws.name,
+				b.relative_formula,
+				b.BlockCellRange,
+				b.BlockFormula
+			FROM ExcelBlocks AS b
+			JOIN WorkSheets AS ws
+				ON ws.id = b.worksheet_id
+			JOIN charts AS c
+				ON c.id = b.chart_id
+			WHERE ws.StudentAnswerID = ?
+				AND b.relative_formula IS NOT NULL
+				AND b.relative_formula <> ''`, answerID).Rows()
+	if err != nil {
+		return err
+	}
+	defer chartProperties.Close()
+	var sheetName, propName, propValue, cellAddress string
+
+	for chartProperties.Next() {
+		chartProperties.Scan(&sheetName, &cellAddress, &propName, &propValue)
+		xlsx.SetCellStr(sheetName, cellAddress, propName)
+		nextAddress, err := model.RelCellAddress(cellAddress, 0, 1)
+		if err != nil {
+			return err
+		}
+		xlsx.SetCellStr(sheetName, nextAddress, propValue)
+	}
 	return nil
 }
