@@ -381,55 +381,38 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							WorksheetID: ws.ID,
 							Range:       "ChartRange",
 							Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
-								drawing.FromRow+2,
-								drawing.FromCol+2,
-								drawing.ToRow+2,
+								drawing.FromRow,
+								drawing.FromCol,
+								drawing.ToRow,
 								drawing.ToCol+2),
 							ChartID: chartID,
 						})
 						c := chart.PlotArea.Chart
 						var propCount int
-						properties := map[string]string{
-							"ChartType":       chart.Type(),
-							"ChartTitle":      chartTitle,
-							"X-Axis Title":    chart.XLabel(),
-							"Y-Axis Title":    chart.YLabel(),
-							"SourceData":      c.Data,
-							"X-Axis Data":     c.XData,
-							"Y-Axis Data":     c.YData,
-							"ItemCount":       strconv.Itoa(itemCount),
-							"X-Axis MinValue": chart.XMinValue(),
-							"Y-Axis MinValue": chart.YMinValue(),
-							"X-Axis MaxValue": chart.XMaxValue(),
-							"Y-Axis MaxValue": chart.YMaxValue(),
+						properties := []struct{ Name, Value string }{
+							{"ChartType", chart.Type()},
+							{"ChartTitle", chartTitle},
+							{"X-Axis Title", chart.XLabel()},
+							{"Y-Axis Title", chart.YLabel()},
+							{"SourceData", c.Data},
+							{"X-Axis Data", c.XData},
+							{"Y-Axis Data", c.YData},
+							{"ItemCount", strconv.Itoa(itemCount)},
+							{"X-Axis MinValue", chart.XMinValue()},
+							{"Y-Axis MinValue", chart.YMinValue()},
+							{"X-Axis MaxValue", chart.XMaxValue()},
+							{"Y-Axis MaxValue", chart.YMaxValue()},
 						}
-						propertyNames := []string{
-							"ChartType",
-							"ChartTitle",
-							"X-Axis Title",
-							"Y-Axis Title",
-							"SourceData",
-							"X-Axis Data",
-							"Y-Axis Data",
-							"ItemCount",
-							"X-Axis MinValue",
-							"Y-Axis MinValue",
-							"X-Axis MaxValue",
-							"Y-Axis MaxValue",
-						}
-						for _, p := range propertyNames {
-							v := properties[p]
-							if v != "" {
-								Db.Create(&Block{
-									WorksheetID: ws.ID,
-									Range:       p,
-									Formula:     v,
-									RelativeFormula: cellAddress(
-										drawing.FromRow+propCount, drawing.ToCol+2),
-									ChartID: chartID,
-								})
-								propCount++
-							}
+						for _, p := range properties {
+							Db.Create(&Block{
+								WorksheetID: ws.ID,
+								Range:       p.Name,
+								Formula:     p.Value,
+								RelativeFormula: cellAddress(
+									drawing.FromRow+propCount, drawing.ToCol+2),
+								ChartID: chartID,
+							})
+							propCount++
 						}
 					}
 				}
