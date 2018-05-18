@@ -1,4 +1,4 @@
-package models
+package model
 
 import (
 	"database/sql"
@@ -6,13 +6,16 @@ import (
 	"extract-blocks/s3"
 	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
 	//"github.com/tealeg/xlsx"
+	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/nad2000/xlsx"
 )
 
@@ -25,11 +28,23 @@ var VerboseLevel int
 // DebugLevel - the level of verbosity of the debug information
 var DebugLevel int
 
+// DryRun - perform processing without actually updating or changing files
+var DryRun bool
+
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
 func cellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
+}
 
+// RelCellAddress - relative cell R1R1 representation against the given cell
+func RelCellAddress(address string, rowIncrement, colIncrement int) (string, error) {
+	colIndex, rowIndex, err := xlsx.GetCoordsFromCellIDString(address)
+	if err != nil {
+		log.Errorf("Failed to map address %q: %s", address, err.Error())
+		return "", err
+	}
+	return xlsx.GetCellIDStringFromCoords(colIndex+colIncrement, rowIndex+rowIncrement), nil
 }
 
 // RelativeCellAddress converts cell ID into a relative R1C1 representation
@@ -277,6 +292,7 @@ func (wb *Workbook) Reset() {
 	}
 	log.Debugf("Deleting worksheets: %#v", worksheets)
 	for _, ws := range worksheets {
+		Db.Delete(Chart{}, "worksheet_id = ?", ws.ID)
 		var blocks []Block
 		Db.Model(&ws).Related(&blocks)
 		result := Db.Where("worksheet_id = ?", ws.ID).Find(&blocks)
@@ -292,18 +308,132 @@ func (wb *Workbook) Reset() {
 	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
+// ImportCharts - import charts form workbook file
+func (wb *Workbook) ImportCharts(fileName string) {
+
+	xlFile, err := excelize.OpenFile(fileName)
+	if err != nil {
+		log.Errorf("Failed to open file %q", fileName)
+		log.Errorln(err)
+		return
+	}
+
+	for _, sheet := range xlFile.WorkBook.Sheets.Sheet {
+		var ws Worksheet
+		result := Db.First(&ws, Worksheet{
+			Name:       sheet.Name,
+			AnswerID:   wb.AnswerID,
+			WorkbookID: wb.ID,
+		})
+		if result.RecordNotFound() && !DryRun {
+			ws = Worksheet{
+				Name:             sheet.Name,
+				WorkbookFileName: filepath.Base(fileName),
+				AnswerID:         wb.AnswerID,
+				WorkbookID:       wb.ID,
+			}
+			if err := Db.Create(&ws).Error; err != nil {
+				log.Fatalf("Failed to create worksheet entry %#v: %s", ws, err.Error())
+			}
+			if DebugLevel > 1 {
+				log.Debugf("Ceated workbook entry %#v", wb)
+			}
+		}
+
+		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
+		sheetRels := unmarshalRelationships(xlFile.XLSX[name])
+		for _, r := range sheetRels.Relationships {
+			if strings.Contains(r.Target, "drawings/drawing") {
+				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
+				drawing := unmarshalDrawing(xlFile.XLSX["xl/drawings/"+filepath.Base(r.Target)])
+				drawingRels := unmarshalRelationships(xlFile.XLSX[name])
+				for _, dr := range drawingRels.Relationships {
+					if strings.Contains(dr.Target, "charts/chart") {
+						chartName := "xl/charts/" + filepath.Base(dr.Target)
+						chart := UnmarshalChart(xlFile.XLSX[chartName])
+						chartTitle := chart.Title.Value()
+						log.Debugf("*** %s: %#v", chartName, chart)
+						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
+						itemCount := chart.ItemCount()
+						chartEntry := Chart{
+							WorksheetID: ws.ID,
+							Title:       chartTitle,
+							XLabel:      chart.XLabel(),
+							YLabel:      chart.YLabel(),
+							FromCol:     drawing.FromCol,
+							FromRow:     drawing.FromRow,
+							ToCol:       drawing.ToCol,
+							ToRow:       drawing.ToRow,
+							Type:        chart.Type(),
+							Data:        chart.PlotArea.Chart.Data,
+							XData:       chart.PlotArea.Chart.XData,
+							YData:       chart.PlotArea.Chart.YData,
+							ItemCount:   itemCount,
+							XMinValue:   chart.XMinValue(),
+							XMaxValue:   chart.XMaxValue(),
+							YMaxValue:   chart.YMaxValue(),
+							YMinValue:   chart.YMinValue(),
+						}
+						Db.Create(&chartEntry)
+						chartID := NewNullInt64(chartEntry.ID)
+
+						Db.Create(&Block{
+							WorksheetID: ws.ID,
+							Range:       "ChartRange",
+							Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
+								drawing.FromRow,
+								drawing.FromCol,
+								drawing.ToRow,
+								drawing.ToCol+2),
+							ChartID: chartID,
+						})
+						c := chart.PlotArea.Chart
+						var propCount int
+						properties := []struct{ Name, Value string }{
+							{"ChartType", chart.Type()},
+							{"ChartTitle", chartTitle},
+							{"X-Axis Title", chart.XLabel()},
+							{"Y-Axis Title", chart.YLabel()},
+							{"SourceData", c.Data},
+							{"X-Axis Data", c.XData},
+							{"Y-Axis Data", c.YData},
+							{"ItemCount", strconv.Itoa(itemCount)},
+							{"X-Axis MinValue", chart.XMinValue()},
+							{"Y-Axis MinValue", chart.YMinValue()},
+							{"X-Axis MaxValue", chart.XMaxValue()},
+							{"Y-Axis MaxValue", chart.YMaxValue()},
+						}
+						for _, p := range properties {
+							Db.Create(&Block{
+								WorksheetID: ws.ID,
+								Range:       p.Name,
+								Formula:     p.Value,
+								RelativeFormula: cellAddress(
+									drawing.FromRow+propCount, drawing.ToCol+2),
+								ChartID: chartID,
+							})
+							propCount++
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 // Worksheet - Excel workbook worksheet
 type Worksheet struct {
 	ID               int
-	WorkbookID       int `gorm:"index"`
 	Name             string
 	WorkbookFileName string
-	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
 	Blocks           []Block  `gorm:"ForeignKey:WorksheetID"`
 	Answer           Answer   `gorm:"ForeignKey:AnswerID"`
+	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
 	Workbook         Workbook `gorm:"ForeignKey:WorkbookId"`
+	WorkbookID       int      `gorm:"index"`
 }
 
+// TableName overrides default table name for the model
 func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
@@ -311,14 +441,16 @@ func (Worksheet) TableName() string {
 // Block - the univormly filled with specific color block
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
-	WorksheetID     int `gorm:"index"`
 	Color           string
 	Range           string                `gorm:"column:BlockCellRange"`
 	Formula         string                `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string                // first block cell relative formula formula
 	Cells           []Cell                `gorm:"ForeignKey:BlockID"`
 	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID     int                   `gorm:"index"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
+	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
+	ChartID         sql.NullInt64
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
@@ -336,7 +468,9 @@ func (b Block) TableName() string {
 
 func (b *Block) save() {
 	b.Range = b.address()
-	Db.Save(b)
+	if !DryRun {
+		Db.Save(b)
+	}
 }
 
 func (b *Block) address() string {
@@ -450,6 +584,7 @@ type Cell struct {
 	Comment string
 }
 
+// TableName overrides default table name for the model
 func (Cell) TableName() string {
 	return "Cells"
 }
@@ -572,11 +707,11 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
-
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
 	Db.AutoMigrate(&Comment{})
@@ -672,7 +807,7 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		OR
 			EXISTS(
 				SELECT NULL
-				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm 
+				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm
 					ON sacm.CommentID = c.CommentID
 				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
@@ -726,8 +861,11 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			return
 		}
 		log.Warnf("File %q was already processed.", fileName)
-		wb.Reset()
-	} else {
+		if !DryRun {
+			wb.Reset()
+		}
+	} else if !DryRun {
+
 		wb = Workbook{FileName: fileName, AnswerID: answerID}
 		result = Db.Create(&wb)
 		if result.Error != nil {
@@ -754,12 +892,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 
 		var ws Worksheet
-		Db.FirstOrCreate(&ws, Worksheet{
-			Name:             sheet.Name,
-			WorkbookID:       wb.ID,
-			WorkbookFileName: wb.FileName,
-			AnswerID:         answerID,
-		})
+		if !DryRun {
+			Db.FirstOrCreate(&ws, Worksheet{
+				Name:             sheet.Name,
+				WorkbookID:       wb.ID,
+				WorkbookFileName: wb.FileName,
+				AnswerID:         answerID,
+			})
+		}
 		if Db.Error != nil {
 			log.Fatalf("Failed to create worksheet entry: %s", Db.Error.Error())
 		}
@@ -794,7 +934,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					}
 					b.s.r, b.s.c = i, j
 
-					Db.Create(&b)
+					if !DryRun {
+						Db.Create(&b)
+					}
+
 					if DebugLevel > 1 {
 						log.Debugf("Created %#v", b)
 					}
@@ -816,5 +959,18 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+	wb.ImportCharts(fileName)
+
 	return
+}
+
+// Chart - Excel chart
+type Chart struct {
+	ID                                         int
+	Worksheet                                  Worksheet
+	WorksheetID                                int `gorm:"index"`
+	Title, XLabel, YLabel                      string
+	FromCol, FromRow, ToCol, ToRow, ItemCount  int
+	Data, XData, YData, Type                   string
+	XMinValue, XMaxValue, YMaxValue, YMinValue string
 }

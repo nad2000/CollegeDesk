@@ -60,13 +60,13 @@ var RootCmd = &cobra.Command{
 	Use:   "extract-blocks",
 	Short: "Extracts Cell Formula Blocks from Excel file and writes to MySQL",
 	Long: `Extracts Cell Formula Blocks from Excel file and writes to MySQL.
-	
-Conditions that define Cell Formula Block - 
+
+Conditions that define Cell Formula Block -
     (i) Any contiguous (unbroken) range of excel cells containing cell formula
    (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
   (iii) The formula in the range of cells should be the same except the changes due to relative cell references.
-  
-Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
+
+Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS,
 where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
 	// Run: func(c *cobra.Command, args []Args) {},
@@ -101,7 +101,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	defer Db.Close()
 	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
 
-	if testing {
+	if testing || len(args) > 0 {
 		// read up the file list from the arguments
 		for _, excelFileName := range args {
 			// Create Student answer entry
@@ -109,7 +109,9 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 				ShortAnswer:    excelFileName,
 				SubmissionTime: *parseTime("2017-01-01 14:42"),
 			}
-			Db.FirstOrCreate(&a, &a)
+			if !model.DryRun {
+				Db.FirstOrCreate(&a, &a)
+			}
 			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, a.ID)
 		}
 	} else {
@@ -178,6 +180,7 @@ func init() {
 	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
 	flags.CountVarP(&debugLevel, "debug", "d", "Show full stack trace on error.")
 	flags.CountVarP(&verboseLevel, "verbose", "v", "Verbose mode. Produce more output about what the program does.")
+	flags.BoolVarP(&model.DryRun, "dry", "D", false, "Dry run, run commands without performing and DB update or file changes.")
 	flags.StringP("url", "U", defaultURL, "Database URL connection string, e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local (More examples at: https://github.com/go-sql-driver/mysql#examples).")
 	flags.String("aws-profile", "default", "AWS Configuration Profile (see: http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)")
 	flags.String("aws-region", "ap-south-1", "AWS Region.")

@@ -22,16 +22,16 @@ import (
 // runCmd represents the run command
 var runCmd = &cobra.Command{
 	Use:   "run",
-	Short: "A brief description of your command",
-	Long: `Retrievs list of the file sources for submitted answers, downloads the Excel 
+	Short: "Process submitted student answer worksheets.",
+	Long: `Retrievs list of the file sources for submitted answers, downloads the Excel
 workbooks and extracts Cell Formula Blocks from Excel file and writes to MySQL.
-	
-Conditions that define Cell Formula Block - 
+
+Conditions that define Cell Formula Block -
     (i) Any contiguous (unbroken) range of excel cells containing cell formula
    (ii) Contiguous cells could be either in a row or in a column or in row+column cell block.
   (iii) The formula in the range of cells should be the same except the changes due to relative cell references.
-  
-Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS, 
+
+Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS,
 where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
 	Run: extractBlocks,

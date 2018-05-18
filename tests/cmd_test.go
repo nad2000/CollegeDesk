@@ -1,4 +1,4 @@
-package cmd_test
+package tests
 
 import (
 	"database/sql"
@@ -124,8 +124,8 @@ func TestDemoFile(t *testing.T) {
 	}
 	var count int
 	db.Model(&model.Block{}).Count(&count)
-	if count != 3 {
-		t.Errorf("Expected 3 blocks, got: %d", count)
+	if expected := 16; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
 	}
 	db.Model(&model.Cell{}).Count(&count)
 	if count != 30 {
@@ -146,6 +146,7 @@ func deletData() {
 		&model.Comment{},
 		&model.Cell{},
 		&model.Block{},
+		&model.Chart{},
 		&model.Worksheet{},
 		&model.Workbook{},
 		&model.QuestionExcelData{},
@@ -418,13 +419,13 @@ func TestCommenting(t *testing.T) {
 			StudentAnswerID
 		)
 		SELECT wb.id, 'Sheet1', FileName, sa.StudentAnswerID
-		FROM FileSources NATURAL JOIN StudentAnswers AS sa 
+		FROM FileSources NATURAL JOIN StudentAnswers AS sa
 		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
-		SELECT id, r.v 
+		SELECT id, r.v
 		FROM WorkSheets AS s LEFT JOIN ExcelBlocks AS b
-		ON b.worksheet_id = s.id, 
+		ON b.worksheet_id = s.id,
 		(
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
@@ -439,8 +440,8 @@ func TestCommenting(t *testing.T) {
 		WHERE QuestionID IS NULL OR QuestionID = 0`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
-		SELECT AssignmentID, QuestionID 
-		FROM CourseAssignments, Questions 
+		SELECT AssignmentID, QuestionID
+		FROM CourseAssignments, Questions
 		WHERE QuestionID % 2 != AssignmentID % 2`)
 	db.Exec(`
 		INSERT INTO Comments (CommentText)
@@ -458,6 +459,8 @@ func TestCommenting(t *testing.T) {
 		Where("qa.AssignmentID = ?", assignment.ID).
 		First(&question)
 	for _, fn := range []string{"commenting.test.xlsx", "indirect.test.xlsx"} {
+
+		isIndirect := strings.HasPrefix("indirect", fn)
 
 		f := model.Source{
 			FileName:     fn,
@@ -477,10 +480,20 @@ func TestCommenting(t *testing.T) {
 		for _, sn := range []string{"Sheet1", "Sheet2"} {
 			sheet := model.Worksheet{Name: sn, Workbook: book, WorkbookFileName: book.FileName, Answer: answer}
 			db.Create(&sheet)
+			chart := model.Chart{Worksheet: sheet}
+			db.Create(&chart)
+			block := model.Block{Worksheet: sheet, Range: "ChartTitle", Formula: "TEST", RelativeFormula: "E15", Chart: chart}
+			db.Create(&block)
+			if !isIndirect {
+				comment := model.Comment{Text: fmt.Sprintf("+++ Comment for CHART in %q for the range %q", sn, "E15")}
+				db.Create(&comment)
+				bcm := model.BlockCommentMapping{Block: block, Comment: comment}
+				db.Create(&bcm)
+			}
 			for i, r := range []string{"A1", "C3", "D2:F13"} {
 				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
 				db.Create(&block)
-				if !strings.HasPrefix("indirect", fn) {
+				if !isIndirect {
 					comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
 					db.Create(&comment)
 					bcm := model.BlockCommentMapping{Block: block, Comment: comment}
@@ -492,7 +505,7 @@ func TestCommenting(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT DISTINCT wb.StudentAnswerID, bc.ExcelCommentID
-		FROM WorkBooks AS wb, BlockCommentMapping AS bc 
+		FROM WorkBooks AS wb, BlockCommentMapping AS bc
 		JOIN ExcelBlocks AS b ON b.ExcelBlockID = bc.ExcelBlockID
 		JOIN WorkSheets AS s ON s.id = b.worksheet_id
 		WHERE s.workbook_file_name = 'commenting.test.xlsx'
