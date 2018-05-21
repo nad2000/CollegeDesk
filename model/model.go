@@ -398,10 +398,10 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							{"X-Axis Data", c.XData},
 							{"Y-Axis Data", c.YData},
 							{"ItemCount", strconv.Itoa(itemCount)},
-							{"X-Axis MinValue", chart.XMinValue()},
-							{"Y-Axis MinValue", chart.YMinValue()},
-							{"X-Axis MaxValue", chart.XMaxValue()},
-							{"Y-Axis MaxValue", chart.YMaxValue()},
+							{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
+							{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
+							{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
+							{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
 						}
 						for _, p := range properties {
 							block := Block{
@@ -425,6 +425,17 @@ func (wb *Workbook) ImportCharts(fileName string) {
 			}
 		}
 	}
+}
+
+// normalizeFloatRepr - if val is float representation round it to 3 digits after the '.'
+func normalizeFloatRepr(val string) string {
+	if strings.Contains(val, ".") {
+		floatVal, err := strconv.ParseFloat(val, 64)
+		if err == nil {
+			return strings.TrimRight(fmt.Sprintf("%.3f", floatVal), "0")
+		}
+	}
+	return val
 }
 
 // Worksheet - Excel workbook worksheet
