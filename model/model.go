@@ -810,7 +810,7 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
 		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
-		Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
+		// Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
 		Where("was_comment_processed = ?", 0).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
@@ -830,7 +830,8 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
 		)`).
-		Where("CourseAssignments.State = ?", "GRADED").Rows()
+		// Where("CourseAssignments.State = ?", "GRADED").
+		Rows()
 	defer rows.Close()
 
 	if err != nil {
