@@ -404,13 +404,19 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							{"Y-Axis MaxValue", chart.YMaxValue()},
 						}
 						for _, p := range properties {
-							Db.Create(&Block{
+							block := Block{
 								WorksheetID: ws.ID,
 								Range:       p.Name,
 								Formula:     p.Value,
 								RelativeFormula: cellAddress(
 									drawing.FromRow+propCount, drawing.ToCol+2),
 								ChartID: chartID,
+							}
+							Db.Create(&block)
+							Db.Create(&Cell{
+								Block:   block,
+								Range:   block.Range,
+								Formula: block.Formula,
 							})
 							propCount++
 						}
@@ -577,7 +583,8 @@ func (b *Block) IsInside(r, c int) bool {
 // Cell - a sigle cell of the block
 type Cell struct {
 	ID      int
-	BlockID int `gorm:"index"`
+	Block   Block `gorm:"ForeignKey:BlockID"`
+	BlockID int   `gorm:"index"`
 	Range   string
 	Formula string
 	Value   string

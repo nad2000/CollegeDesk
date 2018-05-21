@@ -128,8 +128,8 @@ func TestDemoFile(t *testing.T) {
 		t.Errorf("Expected %d blocks, got: %d", expected, count)
 	}
 	db.Model(&model.Cell{}).Count(&count)
-	if count != 30 {
-		t.Errorf("Expected 30 cells, got: %d", count)
+	if expected := 42; count != expected {
+		t.Errorf("Expected %d cells, got: %d", expected, count)
 	}
 }
 
