@@ -165,31 +165,23 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 
 	var sheetName, blockRange, commentText string
 	commens, err := Db.Raw(`
-			SELECT DISTINCT
-				ws.name,
-				CASE
-					WHEN b.chart_id IS NULL THEN b.BlockCellRange
-					ELSE b.relative_formula
-				END AS CellRange,
-				c.CommentText
-			FROM StudentAnswers AS a
-			JOIN StudentAnswerCommentMapping AS ac ON ac.StudentAnswerID = a.StudentAnswerID
-			JOIN Comments AS c ON c.CommentID = ac.CommentID
-			JOIN BlockCommentMapping AS bc ON bc.ExcelCommentID = c.CommentID
-			JOIN ExcelBlocks AS b -- commented blocks
-				ON b.ExcelBlockID = bc.ExcelBlockID
-			JOIN WorkSheets AS cbws -- commented block worksheet
-				ON cbws.id = b.worksheet_id
-			JOIN StudentAnswers AS cba -- commented block answer
-				ON cba.StudentAnswerID = cbws.StudentAnswerID
-			JOIN ExcelBlocks AS ab -- answer blocks (that match...)
-				ON ab.BlockFormula = b.BlockFormula
-					-- AND ab.BlockCellRange = b.BlockCellRange
-			JOIN WorkSheets AS ws -- answer work sheets
-				ON ws.id = ab.worksheet_id
-			WHERE
-				a.QuestionID = cba.QuestionID
-				AND a.StudentAnswerID = ?
+        SELECT DISTINCT
+          ws.name,
+          CASE
+            WHEN b.chart_id IS NULL THEN b.BlockCellRange
+            ELSE b.relative_formula
+          END AS CellRange,
+          c.CommentText
+        FROM StudentAnswers AS a
+        JOIN WorkSheets AS ws
+          ON ws.id = a.StudentAnswerID = a.StudentAnswerID
+        JOIN ExcelBlocks AS b
+          ON b.worksheet_id = ws.id
+        JOIN BlockCommentMapping AS bc
+          ON bc.ExcelBlockID = b.ExcelBlockID
+        JOIN Comments AS c
+          ON c.CommentID = bc.ExcelCommentID
+        WHERE a.StudentAnswerID = ?
 		`, answerID).Rows()
 	if err != nil {
 		return err
