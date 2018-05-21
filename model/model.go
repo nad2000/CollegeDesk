@@ -398,19 +398,25 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							{"X-Axis Data", c.XData},
 							{"Y-Axis Data", c.YData},
 							{"ItemCount", strconv.Itoa(itemCount)},
-							{"X-Axis MinValue", chart.XMinValue()},
-							{"Y-Axis MinValue", chart.YMinValue()},
-							{"X-Axis MaxValue", chart.XMaxValue()},
-							{"Y-Axis MaxValue", chart.YMaxValue()},
+							{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
+							{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
+							{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
+							{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
 						}
 						for _, p := range properties {
-							Db.Create(&Block{
+							block := Block{
 								WorksheetID: ws.ID,
 								Range:       p.Name,
 								Formula:     p.Value,
 								RelativeFormula: cellAddress(
 									drawing.FromRow+propCount, drawing.ToCol+2),
 								ChartID: chartID,
+							}
+							Db.Create(&block)
+							Db.Create(&Cell{
+								Block:   block,
+								Range:   block.Range,
+								Formula: block.Formula,
 							})
 							propCount++
 						}
@@ -419,6 +425,17 @@ func (wb *Workbook) ImportCharts(fileName string) {
 			}
 		}
 	}
+}
+
+// normalizeFloatRepr - if val is float representation round it to 3 digits after the '.'
+func normalizeFloatRepr(val string) string {
+	if strings.Contains(val, ".") {
+		floatVal, err := strconv.ParseFloat(val, 64)
+		if err == nil {
+			return strings.TrimRight(fmt.Sprintf("%.3f", floatVal), "0")
+		}
+	}
+	return val
 }
 
 // Worksheet - Excel workbook worksheet
@@ -577,7 +594,8 @@ func (b *Block) IsInside(r, c int) bool {
 // Cell - a sigle cell of the block
 type Cell struct {
 	ID      int
-	BlockID int `gorm:"index"`
+	Block   Block `gorm:"ForeignKey:BlockID"`
+	BlockID int   `gorm:"index"`
 	Range   string
 	Formula string
 	Value   string
@@ -792,7 +810,7 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
 		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
-		Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
+		// Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
 		Where("was_comment_processed = ?", 0).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
@@ -812,7 +830,8 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
 		)`).
-		Where("CourseAssignments.State = ?", "GRADED").Rows()
+		// Where("CourseAssignments.State = ?", "GRADED").
+		Rows()
 	defer rows.Close()
 
 	if err != nil {

@@ -32,14 +32,15 @@ type xlsxAnyWithStringValAttribute struct {
 }
 
 type xlsxAnyChart struct {
-	XMLName xml.Name
+	XMLName       xml.Name
+	BarDir        xlsxAnyWithStringValAttribute `xml:"barDir"`
+	Data          string                        `xml:"ser>val>numRef>f"`
+	XData         string                        `xml:"ser>xVal>numRef>f"`
+	YData         string                        `xml:"ser>yVal>numRef>f"`
+	CategoryCount xlsxAnyWithIntValAttribute    `xml:"ser>cat>strRef>strCache>ptCount"`
+	XPointCount   xlsxAnyWithIntValAttribute    `xml:"ser>xVal>numRef>numCache>ptCount"`
+	YPointCount   xlsxAnyWithIntValAttribute    `xml:"ser>yVal>numRef>numCache>ptCount"`
 	// XML     string `xml:",innerxml"`
-	Data          string                     `xml:"ser>val>numRef>f"`
-	XData         string                     `xml:"ser>xVal>numRef>f"`
-	YData         string                     `xml:"ser>yVal>numRef>f"`
-	CategoryCount xlsxAnyWithIntValAttribute `xml:"ser>cat>strRef>strCache>ptCount"`
-	XPointCount   xlsxAnyWithIntValAttribute `xml:"ser>xVal>numRef>numCache>ptCount"`
-	YPointCount   xlsxAnyWithIntValAttribute `xml:"ser>yVal>numRef>numCache>ptCount"`
 }
 
 type xlsxSapeProperties struct {
@@ -81,6 +82,7 @@ type xlsxPlotArea struct {
 	Chart           xlsxAnyChart `xml:",any"`
 }
 
+// xlsxBareChart - minial requiered implementation of the Chart object
 type xlsxBareChart struct {
 	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart chartSpace"`
 	// XMLNSc         string          `xml:"xmlns:c,attr"`
@@ -110,7 +112,11 @@ func (c *xlsxBareChart) ItemCount() int {
 
 // Type - chart type - short-cut
 func (c *xlsxBareChart) Type() string {
-	return strings.Title(strings.TrimSuffix(c.PlotArea.Chart.XMLName.Local, "Chart"))
+	fromElementName := strings.Title(strings.TrimSuffix(c.PlotArea.Chart.XMLName.Local, "Chart"))
+	if fromElementName == "Bar" && c.PlotArea.Chart.BarDir.Value == "col" {
+		return "Column"
+	}
+	return fromElementName
 }
 
 // XLabel - X-axis title

@@ -128,8 +128,8 @@ func TestDemoFile(t *testing.T) {
 		t.Errorf("Expected %d blocks, got: %d", expected, count)
 	}
 	db.Model(&model.Cell{}).Count(&count)
-	if count != 30 {
-		t.Errorf("Expected 30 cells, got: %d", count)
+	if expected := 42; count != expected {
+		t.Errorf("Expected %d cells, got: %d", expected, count)
 	}
 }
 
@@ -583,13 +583,13 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var count int
-	for _, r := range rows {
-		count++
-		t.Log(r)
+	if expected, got := 8, len(rows); got != expected {
+		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
-	if count != 5 {
-		t.Errorf("Expected to select 5 files to comment, got: %d", count)
+	if t.Failed() {
+		for _, r := range rows {
+			t.Log(r)
+		}
 	}
 }
 
