@@ -165,7 +165,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 
 	var sheetName, blockRange, commentText string
 	commens, err := Db.Raw(`
-			SELECT
+			SELECT DISTINCT
 				ws.name,
 				CASE
 					WHEN b.chart_id IS NULL THEN b.BlockCellRange
