@@ -815,21 +815,14 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
-		Where(`(
+		Where(`
 			EXISTS(
 				SELECT NULL
 				FROM WorkSheets AS ws JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
 				JOIN BlockCommentMapping AS bcm ON bcm.ExcelBlockID = b.ExcelBlockID
 				WHERE ws.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
-		OR
-			EXISTS(
-				SELECT NULL
-				FROM Comments AS c JOIN StudentAnswerCommentMapping AS sacm
-					ON sacm.CommentID = c.CommentID
-				WHERE sacm.StudentAnswerID = StudentAnswers.StudentAnswerID
-			)
-		)`).
+		`).
 		// Where("CourseAssignments.State = ?", "GRADED").
 		Rows()
 	defer rows.Close()
