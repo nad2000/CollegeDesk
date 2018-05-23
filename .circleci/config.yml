@@ -45,4 +45,5 @@ jobs:
             go test -v -short ./...
       - run:
           name: Upload the buid
+          # BB_AUTH_STRING=<bb_user_name>:<APP Password>
           command: curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
