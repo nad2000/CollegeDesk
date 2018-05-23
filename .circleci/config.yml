@@ -43,4 +43,6 @@ jobs:
             extract-blocks run -t -v tests/test_floats.xlsx
             extract-blocks comment -t -v tests/commenting.test.xlsx
             go test -v -short ./...
-      - run: curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
+      - run:
+          name: Upload the buid
+          command: curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
