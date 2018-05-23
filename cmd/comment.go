@@ -174,7 +174,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
           c.CommentText
         FROM StudentAnswers AS a
         JOIN WorkSheets AS ws
-          ON ws.id = a.StudentAnswerID = a.StudentAnswerID
+          ON ws.StudentAnswerID = a.StudentAnswerID
         JOIN ExcelBlocks AS b
           ON b.worksheet_id = ws.id
         JOIN BlockCommentMapping AS bc
