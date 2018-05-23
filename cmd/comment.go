@@ -201,7 +201,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 		xlsx.AddComment(
 			sheetName,
 			rangeCells[0],
-			fmt.Sprintf(`{"author":"GRADER", "text":%q}`, commentText))
+			fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, commentText))
 	}
 
 	if fileName == outputName || outputName == "" {
