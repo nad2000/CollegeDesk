@@ -4,27 +4,26 @@
 version: 2
 jobs:
   build:
+    working_directory: /go/src/extract-blocks
     docker:
       # specify the version
-      - image: circleci/golang:1.10.2
-        environment:
-          PACKAGE_PATH: ${GOPATH}/src/extract-blocks
-
-
+      - image: circleci/golang:1.9
+    environment:
+      PACKAGE_PATH: ${GOPATH}/src/extract-blocks
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
       # - image: circleci/postgres:9.4
-
     #### TEMPLATE_NOTE: go expects specific checkout path representing url
     #### expecting it in the form of
     ####   /go/src/github.com/circleci/go-tool
     ####   /go/src/bitbucket.org/circleci/go-tool
-    working_directory: /go/src/extract-blocks
     steps:
-      - run: env
       - checkout
-
+      - run: env
+      - restore_cache:
+          keys:
+            - v1-pkg-cache
       # specify any bash command here prefixed with `run: `
       ## - run: go get -v -t -d ./...
       ## - run: go test -v ./...
@@ -32,9 +31,16 @@ jobs:
       # - go build -v
       # - go build -v -o $(basename $PWD) main.go
       - run: go install extract-blocks/extract-blocks
+      - save_cache:
+          key: v1-pkg-cache
+          paths:
+            - "/go/pkg"
       - run: ./bin/upx --best --lzma "${GOPATH}/bin/extract-blocks"
-      - run: extract-blocks run -t -v tests/demo.xlsx
-      - run: extract-blocks run -t -v tests/test_floats.xlsx
-      - run: extract-blocks comment -t -v tests/commenting.test.xlsx
-      - run: go test -v -short ./...
-      # - run: curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${BITBUCKET_REPO_SLUG}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
+      - run:
+          name: Run all tests
+          command: |
+            extract-blocks run -t -v tests/demo.xlsx
+            extract-blocks run -t -v tests/test_floats.xlsx
+            extract-blocks comment -t -v tests/commenting.test.xlsx
+            go test -v -short ./...
+      - run: curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_OWNER}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${GOPATH}/bin/extract-blocks"
