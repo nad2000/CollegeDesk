@@ -108,8 +108,8 @@ type xClientData struct {
 	ObjectType    string `xml:"ObjectType,attr"`
 	MoveWithCells string `xml:"x:MoveWithCells,omitempty"`
 	SizeWithCells string `xml:"x:SizeWithCells,omitempty"`
-	Anchor        string `xml:"x:Anchor"`
-	AutoFill      string `xml:"x:AutoFill"`
+	Anchor        string `xml:"x:Anchor,omitempty"`
+	AutoFill      string `xml:"x:AutoFill,omitempty"`
 	Row           int    `xml:"x:Row"`
 	Column        int    `xml:"x:Column"`
 }
