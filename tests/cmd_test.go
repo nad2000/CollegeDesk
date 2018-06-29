@@ -430,6 +430,7 @@ func TestCommenting(t *testing.T) {
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
 			UNION SELECT 'D2:F1'
+			UNION SELECT 'C2:F1'
 		) AS r
 		WHERE b.ExcelBlockID IS NULL`)
 
@@ -445,12 +446,15 @@ func TestCommenting(t *testing.T) {
 		WHERE QuestionID % 2 != AssignmentID % 2`)
 	db.Exec(`
 		INSERT INTO Comments (CommentText)
-		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3')`)
+		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3'), ('MULTILINE COMMENT:
+2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
+3: 123 1234 45676756 87585765 5767
+4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123')`)
 	db.Exec(`
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, CommentID
 		FROM ExcelBlocks AS b, Comments AS c
-		WHERE c.CommentID % 3 = b.ExcelBlockID % 3`)
+		WHERE c.CommentID % 4 = b.ExcelBlockID % 4`)
 
 	var assignment model.Assignment
 	db.First(&assignment, "State = ?", "GRADED")
@@ -490,11 +494,20 @@ func TestCommenting(t *testing.T) {
 				bcm := model.BlockCommentMapping{Block: block, Comment: comment}
 				db.Create(&bcm)
 			}
-			for i, r := range []string{"A1", "C3", "D2:F13"} {
+			for i, r := range []string{"A1", "C3", "D2:F13", "C2:F14"} {
 				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
 				db.Create(&block)
+				var ct string
 				if !isIndirect {
-					comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
+					if i < 3 {
+						ct = fmt.Sprintf("*** Comment in %q for the range %q", sn, r)
+					} else {
+						ct = `MULTILINE COMMENT:
+2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
+3: 123 1234 45676756 87585765 5767
+4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123`
+					}
+					comment := model.Comment{Text: ct}
 					db.Create(&comment)
 					bcm := model.BlockCommentMapping{Block: block, Comment: comment}
 					db.Create(&bcm)

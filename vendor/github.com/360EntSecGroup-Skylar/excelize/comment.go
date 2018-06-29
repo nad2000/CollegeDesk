@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -56,17 +57,38 @@ func (f *File) AddComment(sheet, cell, format string) {
 			colCount = ll
 		}
 	}
-	f.addDrawingVML(commentID, drawingVML, cell, strings.Count(formatSet.Text, "\n")+1, colCount)
+	col := strings.Map(letterOnlyMapF, cell)
+	col1Width := f.GetColWidth(sheet, string(rune(col[0]+1)))
+	col2Width := f.GetColWidth(sheet, string(rune(col[0]+2)))
+	row, _ := strconv.Atoi(strings.Map(intOnlyMapF, cell))
+	xAxis := TitleToNumber(col)
+	yAxis := row - 1
+
+	lineCount := strings.Count(formatSet.Text, "\n") + 1
+
+	// fmt.Println("================", sheet, ":", col, "=", f.GetColWidth(sheet, col))
+	// leftColumn, leftOffset, topRow, topOffset, rightColumn, rightOffset, bottomRow, bottomOffset),
+	f.addBoxDrawingVML(
+		commentID, drawingVML, cell,
+		1+xAxis, 23, 1+yAxis, 0,
+		1+xAxis, int(math.Min((float64(colCount)*991.)/175.0+5.0, 70.0*(col1Width+col2Width)/10.+5.)+.5),
+		lineCount+yAxis+1, 0)
 	f.addContentTypePart(commentID, "comments")
 }
 
 // addDrawingVML provides function to create comment as
 // xl/drawings/vmlDrawing%d.vml by given commit ID and cell.
 func (f *File) addDrawingVML(commentID int, drawingVML, cell string, lineCount, colCount int) {
+}
+
+// addBoxDrawingVML provides function to create comment as
+// xl/drawings/vmlDrawing%d.vml by given commit ID and cell.
+func (f *File) addBoxDrawingVML(commentID int, drawingVML, cell string,
+	leftColumn, leftOffset, topRow, topOffset, rightColumn, rightOffset, bottomRow, bottomOffset int) {
 	col := string(strings.Map(letterOnlyMapF, cell))
 	row, _ := strconv.Atoi(strings.Map(intOnlyMapF, cell))
-	xAxis := row - 1
-	yAxis := TitleToNumber(col)
+	yAxis := row - 1
+	xAxis := TitleToNumber(col)
 	vml := vmlDrawing{
 		XMLNSv:  "urn:schemas-microsoft-com:vml",
 		XMLNSo:  "urn:schemas-microsoft-com:office:office",
@@ -117,14 +139,17 @@ func (f *File) addDrawingVML(commentID int, drawingVML, cell string, lineCount, 
 				Style: "text-align:left",
 			},
 		},
+
 		ClientData: &xClientData{
 			ObjectType: "Note",
 			Anchor: fmt.Sprintf(
-				"%d, 23, %d, 0, %d, %d, %d, 5",
-				1+yAxis, 1+xAxis, 1+yAxis+lineCount, (colCount*991)/175+5, 2+xAxis),
+				"%d, %d, %d, %d, %d, %d, %d, %d",
+				leftColumn, leftOffset, topRow, topOffset, rightColumn, rightOffset, bottomRow, bottomOffset),
+			// 1+yAxis, 23, 1+xAxis, 0, 1+yAxis+lineCount, 0, 9+xAxis, 5), // (colCount*991)/175+5, 2+xAxis),
+			// 1+yAxis, 23, 1+xAxis, 0, 1+yAxis+lineCount, 0, 9+xAxis, 5), // (colCount*991)/175+5, 2+xAxis),
 			AutoFill: "True",
-			Row:      xAxis,
-			Column:   yAxis,
+			Row:      yAxis,
+			Column:   xAxis,
 		},
 	}
 	s, _ := xml.Marshal(sp)
