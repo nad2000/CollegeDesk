@@ -1026,8 +1026,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	// Comments that should be linked with the file:
-	const commentsToMapSql = `SELECT DISTINCT
-		nsa.StudentAnswerID, nb.ExcelBlockID, bc.ExcelCommentID
+	const commentsToMapSql = `
+	SELECT
+		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
 	-- Newly added/processed answers
 	FROM StudentAnswers AS nsa
 	JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
@@ -1049,7 +1050,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	LEFT OUTER JOIN BlockCommentMapping AS nbc
 	ON nbc.ExcelBlockID = nb.ExcelBlockID
 	WHERE nwb.StudentAnswerID = ?
-	AND nbc.ExcelCommentID IS NULL`
+	AND nbc.ExcelCommentID IS NULL
+	GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
 
 	// Insert block -> comment mapping:
 	sql := `
