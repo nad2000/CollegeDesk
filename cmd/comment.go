@@ -150,7 +150,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	return nil
 }
 
-// AddCommentsToFile addes chart properties and comments to the answer files.
+// addCommentsToFile addes chart properties and comments to the answer files.
 func addCommentsToFile(answerID int, fileName, outputName string) error {
 
 	// Iterate via assosiated comments and add them to the file
@@ -158,7 +158,6 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
 	}
-
 	if err := addChartProperties(xlsx, answerID); err != nil {
 		return err
 	}

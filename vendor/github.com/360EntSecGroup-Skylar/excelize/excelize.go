@@ -66,6 +66,7 @@ func OpenReader(r io.Reader) (*File, error) {
 	}
 	f.sheetMap = f.getSheetMap()
 	f.Styles = f.stylesReader()
+	f.workbookRelsReader()
 	return f, nil
 }
 

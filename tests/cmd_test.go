@@ -105,12 +105,25 @@ func TestRelativeFormulas(t *testing.T) {
 func TestDemoFile(t *testing.T) {
 	deletData()
 	var wb model.Workbook
+
+	db, _ := model.OpenDb(url)
+	db.Close()
+
+	q := model.Question{
+		QuestionType:      "ShortAnswer",
+		QuestionSequence:  0,
+		QuestionText:      "DUMMY",
+		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
+		MaxScore:          999.99,
+	}
+	db.FirstOrCreate(&q, &q)
+	db.Close()
+
 	cmd.RootCmd.SetArgs([]string{
 		"run", "-U", url, "-t", "-f", "demo.xlsx"})
 	cmd.Execute()
 
-	db, _ := model.OpenDb(url)
-	defer db.Close()
+	db, _ = model.OpenDb(url)
 
 	result := db.First(&wb, "file_name = ?", "demo.xlsx")
 	if result.Error != nil {
@@ -130,6 +143,26 @@ func TestDemoFile(t *testing.T) {
 	db.Model(&model.Cell{}).Count(&count)
 	if expected := 42; count != expected {
 		t.Errorf("Expected %d cells, got: %d", expected, count)
+	}
+
+	db.DB().Exec("UPDATE StudentAnswers SET ShortAnswerText = 'FIRST-DEMO.xlsx'")
+	db.DB().Exec("INSERT INTO Comments (CommentText) VALUES('DUMMY')")
+	db.DB().Exec(`INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
+		SELECT ExcelBlockID, (SELECT CommentID FROM Comments LIMIT 1)
+		FROM ExcelBlocks
+		WHERE color = 'FFFFFF00'`)
+	db.Close()
+
+	cmd.RootCmd.SetArgs([]string{
+		"run", "-U", url, "-t", "-f", "demo.xlsx"})
+	cmd.Execute()
+
+	db, _ = model.OpenDb(url)
+	defer db.Close()
+
+	db.Model(&model.BlockCommentMapping{}).Count(&count)
+	if expected := 6; count != expected {
+		t.Errorf("Expected %d block -> comment mapping entries, got: %d", expected, count)
 	}
 }
 

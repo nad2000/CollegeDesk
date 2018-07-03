@@ -29,6 +29,7 @@ type xlsxWorksheet struct {
 	Picture               *xlsxPicture                 `xml:"picture"`
 	TableParts            *xlsxTableParts              `xml:"tableParts"`
 	ExtLst                *xlsxExtLst                  `xml:"extLst"`
+	commens               *xlsxComments                `xml:-`
 }
 
 // xlsxDrawing change r:id to rid in the namespace.
