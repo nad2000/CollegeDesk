@@ -45,6 +45,19 @@ func (f *File) GetComments() (comments map[string]*xlsxComments) {
 //    xlsx.AddComment("Sheet1", "A30", `{"author":"Excelize: ","text":"This is a comment."}`)
 //
 func (f *File) AddComment(sheet, cell, format string) {
+	yAxis, xAxis, _ := CellCoords(cell)
+	f.AddCommentAt(sheet, cell, format, xAxis+1, yAxis+1)
+}
+
+// AddComment provides the method to add comment in a sheet by given worksheet
+// index, cell, format set (such as author and text), and comment box location
+// (the of the top left corner column and row index).
+// Note that the max author length is 255 and the max text length is 32512. For example, add a
+// comment in Sheet1!$A$30:
+//
+//    xlsx.AddComment("Sheet1", "A30", `{"author":"Excelize: ","text":"This is a comment."}`)
+//
+func (f *File) AddCommentAt(sheet, cell, format string, col, row int) {
 	formatSet := parseFormatCommentsSet(format)
 	// Read sheet data.
 	xlsx := f.workSheetReader(sheet)
@@ -74,33 +87,22 @@ func (f *File) AddComment(sheet, cell, format string) {
 			colCount = ll
 		}
 	}
-	col := strings.Map(letterOnlyMapF, cell)
-	col1Width := f.GetColWidth(sheet, string(rune(col[0]+1)))
-	col2Width := f.GetColWidth(sheet, string(rune(col[0]+2)))
-	row, _ := strconv.Atoi(strings.Map(intOnlyMapF, cell))
-	xAxis := TitleToNumber(col)
-	yAxis := row - 1
+	col1Width := f.GetColWidth(sheet, ColIndexToLetters(col))
+	col2Width := f.GetColWidth(sheet, ColIndexToLetters(col+1))
 
 	lineCount := strings.Count(formatSet.Text, "\n") + 1
 
-	// fmt.Println("================", sheet, ":", col, "=", f.GetColWidth(sheet, col))
-	// leftColumn, leftOffset, topRow, topOffset, rightColumn, rightOffset, bottomRow, bottomOffset),
-	f.addBoxDrawingVML(
+	f.addDrawingVML(
 		commentID, drawingVML, cell,
-		1+xAxis, 23, 1+yAxis, 0,
-		1+xAxis, int(math.Min((float64(colCount)*991.)/175.0+5.0, 70.0*(col1Width+col2Width)/10.+5.)+.5),
-		lineCount+yAxis+1, 0)
+		col, 23, row, 0,
+		col, int(math.Min((float64(colCount)*991.)/175.0+5.0, 70.0*(col1Width+col2Width)/10.+5.)+.5),
+		lineCount+row, 0)
 	f.addContentTypePart(commentID, "comments")
 }
 
 // addDrawingVML provides function to create comment as
 // xl/drawings/vmlDrawing%d.vml by given commit ID and cell.
-func (f *File) addDrawingVML(commentID int, drawingVML, cell string, lineCount, colCount int) {
-}
-
-// addBoxDrawingVML provides function to create comment as
-// xl/drawings/vmlDrawing%d.vml by given commit ID and cell.
-func (f *File) addBoxDrawingVML(commentID int, drawingVML, cell string,
+func (f *File) addDrawingVML(commentID int, drawingVML, cell string,
 	leftColumn, leftOffset, topRow, topOffset, rightColumn, rightOffset, bottomRow, bottomOffset int) {
 	col := string(strings.Map(letterOnlyMapF, cell))
 	row, _ := strconv.Atoi(strings.Map(intOnlyMapF, cell))
