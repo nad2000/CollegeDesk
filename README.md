@@ -5,6 +5,7 @@
 
 ```bash
 
-docker rm -f mydb; docker run --name mydb -e MYSQL_ROOT_PASSWORD=p455w0rd -e MYSQL_DATABASE=blocks -p 3306:3306  mysql
+docker rm -f mydb; docker run --name mydb -e MYSQL_ROOT_PASSWORD=p455w0rd -e MYSQL_DATABASE=blocks -p 3306:3306 -d mysql --default-authentication-plugin=mysql_native_password
+docker logs -f mydb
 ```
 
