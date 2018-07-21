@@ -10,12 +10,18 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/mohae/deepcopy"
 )
 
-// NewSheet provides function to create a new sheet by given index, when
-// creating a new XLSX file, the default sheet will be create, when you create a
-// new file.
+// NewSheet provides function to create a new sheet by given worksheet name,
+// when creating a new XLSX file, the default sheet will be create, when you
+// create a new file.
 func (f *File) NewSheet(name string) int {
+	// Check if the worksheet already exists
+	if f.GetSheetIndex(name) != 0 {
+		return f.SheetCount
+	}
 	f.SheetCount++
 	// Update docProps/app.xml
 	f.setAppXML()
@@ -35,7 +41,7 @@ func (f *File) NewSheet(name string) int {
 func (f *File) contentTypesReader() *xlsxTypes {
 	if f.ContentTypes == nil {
 		var content xlsxTypes
-		xml.Unmarshal([]byte(f.readXML("[Content_Types].xml")), &content)
+		_ = xml.Unmarshal([]byte(f.readXML("[Content_Types].xml")), &content)
 		f.ContentTypes = &content
 	}
 	return f.ContentTypes
@@ -46,7 +52,7 @@ func (f *File) contentTypesReader() *xlsxTypes {
 func (f *File) contentTypesWriter() {
 	if f.ContentTypes != nil {
 		output, _ := xml.Marshal(f.ContentTypes)
-		f.saveFileList("[Content_Types].xml", string(output))
+		f.saveFileList("[Content_Types].xml", output)
 	}
 }
 
@@ -55,7 +61,7 @@ func (f *File) contentTypesWriter() {
 func (f *File) workbookReader() *xlsxWorkbook {
 	if f.WorkBook == nil {
 		var content xlsxWorkbook
-		xml.Unmarshal([]byte(f.readXML("xl/workbook.xml")), &content)
+		_ = xml.Unmarshal([]byte(f.readXML("xl/workbook.xml")), &content)
 		f.WorkBook = &content
 	}
 	return f.WorkBook
@@ -66,7 +72,7 @@ func (f *File) workbookReader() *xlsxWorkbook {
 func (f *File) workbookWriter() {
 	if f.WorkBook != nil {
 		output, _ := xml.Marshal(f.WorkBook)
-		f.saveFileList("xl/workbook.xml", replaceRelationshipsNameSpace(string(output)))
+		f.saveFileList("xl/workbook.xml", replaceRelationshipsNameSpaceBytes(output))
 	}
 }
 
@@ -79,7 +85,7 @@ func (f *File) worksheetWriter() {
 				f.Sheet[path].SheetData.Row[k].C = trimCell(v.C)
 			}
 			output, _ := xml.Marshal(sheet)
-			f.saveFileList(path, replaceWorkSheetsRelationshipsNameSpace(string(output)))
+			f.saveFileList(path, replaceWorkSheetsRelationshipsNameSpaceBytes(output))
 			ok := f.checked[path]
 			if ok {
 				f.checked[path] = false
@@ -90,13 +96,15 @@ func (f *File) worksheetWriter() {
 
 // trimCell provides function to trim blank cells which created by completeCol.
 func trimCell(column []xlsxC) []xlsxC {
-	col := []xlsxC{}
+	col := make([]xlsxC, len(column))
+	i := 0
 	for _, c := range column {
 		if c.S != 0 || c.V != "" || c.F != nil || c.T != "" {
-			col = append(col, c)
+			col[i] = c
+			i++
 		}
 	}
-	return col
+	return col[0:i]
 }
 
 // Read and update property of contents type of XLSX.
@@ -124,9 +132,17 @@ func (f *File) setSheet(index int, name string) {
 // allowed in sheet title.
 func (f *File) setWorkbook(name string, rid int) {
 	content := f.workbookReader()
+	rID := 0
+	for _, v := range content.Sheets.Sheet {
+		t, _ := strconv.Atoi(v.SheetID)
+		if t > rID {
+			rID = t
+		}
+	}
+	rID++
 	content.Sheets.Sheet = append(content.Sheets.Sheet, xlsxSheet{
 		Name:    trimSheetName(name),
-		SheetID: strconv.Itoa(rid),
+		SheetID: strconv.Itoa(rID),
 		ID:      "rId" + strconv.Itoa(rid),
 	})
 }
@@ -136,7 +152,7 @@ func (f *File) setWorkbook(name string, rid int) {
 func (f *File) workbookRelsReader() *xlsxWorkbookRels {
 	if f.WorkBookRels == nil {
 		var content xlsxWorkbookRels
-		xml.Unmarshal([]byte(f.readXML("xl/_rels/workbook.xml.rels")), &content)
+		_ = xml.Unmarshal([]byte(f.readXML("xl/_rels/workbook.xml.rels")), &content)
 		f.WorkBookRels = &content
 	}
 	return f.WorkBookRels
@@ -147,7 +163,7 @@ func (f *File) workbookRelsReader() *xlsxWorkbookRels {
 func (f *File) workbookRelsWriter() {
 	if f.WorkBookRels != nil {
 		output, _ := xml.Marshal(f.WorkBookRels)
-		f.saveFileList("xl/_rels/workbook.xml.rels", string(output))
+		f.saveFileList("xl/_rels/workbook.xml.rels", output)
 	}
 }
 
@@ -179,7 +195,7 @@ func (f *File) addXlsxWorkbookRels(sheet int) int {
 
 // setAppXML update docProps/app.xml file of XML.
 func (f *File) setAppXML() {
-	f.saveFileList("docProps/app.xml", templateDocpropsApp)
+	f.saveFileList("docProps/app.xml", []byte(templateDocpropsApp))
 }
 
 // Some tools that read XLSX files have very strict requirements about the
@@ -189,14 +205,16 @@ func (f *File) setAppXML() {
 // library doesn't multiple namespace declarations in a single element of a
 // document. This function is a horrible hack to fix that after the XML
 // marshalling is completed.
-func replaceRelationshipsNameSpace(workbookMarshal string) string {
-	oldXmlns := `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
-	newXmlns := `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x15" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">`
-	return strings.Replace(workbookMarshal, oldXmlns, newXmlns, -1)
+func replaceRelationshipsNameSpaceBytes(workbookMarshal []byte) []byte {
+	oldXmlns := []byte(`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
+	newXmlns := []byte(`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x15" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">`)
+	return bytes.Replace(workbookMarshal, oldXmlns, newXmlns, -1)
 }
 
-// SetActiveSheet provides function to set default active sheet of XLSX by given
-// index.
+// SetActiveSheet provides function to set default active worksheet of XLSX by
+// given index. Note that active index is different with the index that got by
+// function GetSheetMap, and it should be greater than 0 and less than total
+// worksheet numbers.
 func (f *File) SetActiveSheet(index int) {
 	if index < 1 {
 		index = 1
@@ -227,7 +245,6 @@ func (f *File) SetActiveSheet(index int) {
 			}
 		}
 	}
-	return
 }
 
 // GetActiveSheetIndex provides function to get active sheet of XLSX. If not
@@ -240,7 +257,7 @@ func (f *File) GetActiveSheetIndex() int {
 		buffer.WriteString("xl/worksheets/sheet")
 		buffer.WriteString(strings.TrimPrefix(v.ID, "rId"))
 		buffer.WriteString(".xml")
-		xml.Unmarshal([]byte(f.readXML(buffer.String())), &xlsx)
+		_ = xml.Unmarshal([]byte(f.readXML(buffer.String())), &xlsx)
 		for _, sheetView := range xlsx.SheetViews.SheetView {
 			if sheetView.TabSelected {
 				ID, _ := strconv.Atoi(strings.TrimPrefix(v.ID, "rId"))
@@ -311,7 +328,7 @@ func (f *File) GetSheetIndex(name string) int {
 // GetSheetMap provides function to get worksheet name and index map of XLSX.
 // For example:
 //
-//    xlsx, err := excelize.OpenFile("./Workbook.xlsx")
+//    xlsx, err := excelize.OpenFile("./Book1.xlsx")
 //    if err != nil {
 //        return
 //    }
@@ -385,6 +402,7 @@ func (f *File) DeleteSheet(name string) {
 			f.SheetCount--
 		}
 	}
+	f.SetActiveSheet(len(f.GetSheetMap()))
 }
 
 // deleteSheetFromWorkbookRels provides function to remove worksheet
@@ -433,8 +451,7 @@ func (f *File) CopySheet(from, to int) error {
 // target worksheet name.
 func (f *File) copySheet(from, to int) {
 	sheet := f.workSheetReader("sheet" + strconv.Itoa(from))
-	worksheet := xlsxWorksheet{}
-	deepCopy(&worksheet, &sheet)
+	worksheet := deepcopy.Copy(sheet).(*xlsxWorksheet)
 	path := "xl/worksheets/sheet" + strconv.Itoa(to) + ".xml"
 	if len(worksheet.SheetViews.SheetView) > 0 {
 		worksheet.SheetViews.SheetView[0].TabSelected = false
@@ -442,7 +459,7 @@ func (f *File) copySheet(from, to int) {
 	worksheet.Drawing = nil
 	worksheet.TableParts = nil
 	worksheet.PageSetUp = nil
-	f.Sheet[path] = &worksheet
+	f.Sheet[path] = worksheet
 	toRels := "xl/worksheets/_rels/sheet" + strconv.Itoa(to) + ".xml.rels"
 	fromRels := "xl/worksheets/_rels/sheet" + strconv.Itoa(from) + ".xml.rels"
 	_, ok := f.XLSX[fromRels]
@@ -494,10 +511,10 @@ func (f *File) SetSheetVisible(name string, visible bool) {
 }
 
 // parseFormatPanesSet provides function to parse the panes settings.
-func parseFormatPanesSet(formatSet string) *formatPanes {
+func parseFormatPanesSet(formatSet string) (*formatPanes, error) {
 	format := formatPanes{}
-	json.Unmarshal([]byte(formatSet), &format)
-	return &format
+	err := json.Unmarshal([]byte(formatSet), &format)
+	return &format, err
 }
 
 // SetPanes provides function to create and remove freeze panes and split panes
@@ -530,12 +547,8 @@ func parseFormatPanesSet(formatSet string) *formatPanes {
 //                                    | been applied, dividing the pane into right and left
 //                                    | regions. In that case, this value specifies the left pane
 //                                    |
-//                                    | Top right pane, when both vertical and horizontal
+//    topRight (Top Right Pane)       | Top right pane, when both vertical and horizontal
 //                                    | splits are applied.
-//                                    |
-//    topRight (Top Right Pane)       | This value is also used when only a vertical split has
-//                                    | splits are applied.
-//                                    |
 //                                    |
 //                                    | This value is also used when only a vertical split has
 //                                    | been applied, dividing the pane into right and left
@@ -571,26 +584,26 @@ func parseFormatPanesSet(formatSet string) *formatPanes {
 // set of ranges.
 //
 // An example of how to freeze column A in the Sheet1 and set the active cell on
-// Sheet1!A16:
+// Sheet1!K16:
 //
-//    xlsx.SetPanes("Sheet1", `{"freeze":true,"split":false,"x_split":1,"y_split":0,"topLeftCell":"B1","activePane":"topRight","panes":[{"sqref":"K16","active_cell":"K16","pane":"topRight"}]}`)
+//    xlsx.SetPanes("Sheet1", `{"freeze":true,"split":false,"x_split":1,"y_split":0,"top_left_cell":"B1","active_pane":"topRight","panes":[{"sqref":"K16","active_cell":"K16","pane":"topRight"}]}`)
 //
 // An example of how to freeze rows 1 to 9 in the Sheet1 and set the active cell
-// on Sheet1!A11:
+// ranges on Sheet1!A11:XFD11:
 //
-//    xlsx.SetPanes("Sheet1", `{"freeze":true,"split":false,"x_split":0,"y_split":9,"topLeftCell":"A34","activePane":"bottomLeft","panes":[{"sqref":"A11:XFD11","active_cell":"A11","pane":"bottomLeft"}]}`)
+//    xlsx.SetPanes("Sheet1", `{"freeze":true,"split":false,"x_split":0,"y_split":9,"top_left_cell":"A34","active_pane":"bottomLeft","panes":[{"sqref":"A11:XFD11","active_cell":"A11","pane":"bottomLeft"}]}`)
 //
 // An example of how to create split panes in the Sheet1 and set the active cell
 // on Sheet1!J60:
 //
-//    xlsx.SetPanes("Sheet1", `{"freeze":false,"split":true,"x_split":3270,"y_split":1800,"topLeftCell":"N57","activePane":"bottomLeft","panes":[{"sqref":"I36","active_cell":"I36"},{"sqref":"G33","active_cell":"G33","pane":"topRight"},{"sqref":"J60","active_cell":"J60","pane":"bottomLeft"},{"sqref":"O60","active_cell":"O60","pane":"bottomRight"}]}`)
+//    xlsx.SetPanes("Sheet1", `{"freeze":false,"split":true,"x_split":3270,"y_split":1800,"top_left_cell":"N57","active_pane":"bottomLeft","panes":[{"sqref":"I36","active_cell":"I36"},{"sqref":"G33","active_cell":"G33","pane":"topRight"},{"sqref":"J60","active_cell":"J60","pane":"bottomLeft"},{"sqref":"O60","active_cell":"O60","pane":"bottomRight"}]}`)
 //
 // An example of how to unfreeze and remove all panes on Sheet1:
 //
 //    xlsx.SetPanes("Sheet1", `{"freeze":false,"split":false}`)
 //
 func (f *File) SetPanes(sheet, panes string) {
-	fs := parseFormatPanesSet(panes)
+	fs, _ := parseFormatPanesSet(panes)
 	xlsx := f.workSheetReader(sheet)
 	p := &xlsxPane{
 		ActivePane:  fs.ActivePane,
@@ -639,8 +652,16 @@ func (f *File) GetSheetVisible(name string) bool {
 // trimSheetName provides function to trim invaild characters by given worksheet
 // name.
 func trimSheetName(name string) string {
-	r := strings.NewReplacer(":", "", "\\", "", "/", "", "?", "", "*", "", "[", "", "]", "")
-	name = r.Replace(name)
+	r := []rune{}
+	for _, v := range name {
+		switch v {
+		case 58, 92, 47, 63, 42, 91, 93: // replace :\/?*[]
+			continue
+		default:
+			r = append(r, v)
+		}
+	}
+	name = string(r)
 	if utf8.RuneCountInString(name) > 31 {
 		name = string([]rune(name)[0:31])
 	}

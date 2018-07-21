@@ -68,4 +68,5 @@
 
 [[constraint]]
   name = "github.com/360EntSecGroup-Skylar/excelize"
-  version = "1.2.0"
+  # version = "1.2.0"
+  branch = "master"

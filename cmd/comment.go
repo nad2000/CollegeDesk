@@ -159,23 +159,35 @@ type commentEntry struct {
 }
 
 // addCommentsToColumn
-func addCommentToColum(file *excelize.File, sheetName string, column []commentEntry) {
+func addCommentToColumn(file *excelize.File, sheetName string, column []commentEntry) {
+
+	if column == nil || len(column) == 0 {
+		return
+	}
+
+	address := column[0].address
+	col, _, err := xlsx.GetCoordsFromCellIDString(address)
+	if err != nil {
+		log.Errorf("Error occured while adding commment to column starting with %q: %s", address, err)
+	}
+	col1Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+1))
+	col2Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+2))
+	maxChar := ((col1Width+col2Width)/10.452839 - 0.007) / 0.17390901
 
 	nextBoxRow := 1
 	for i := len(column) - 1; i >= 0; i-- {
 		cell := &column[i]
-		hight := 0
+		hight := 0.0
 		lines := strings.Split(cell.commentText, "\n")
 		for _, l := range lines {
-			// TODO:
-			hight += len(l)/20 + 1
+			hight += float64(len(l)) / maxChar
 		}
 		if nextBoxRow <= cell.row {
 			cell.boxRow = cell.row + 1
 		} else {
 			cell.boxRow = nextBoxRow
 		}
-		nextBoxRow = cell.boxRow + hight
+		nextBoxRow = cell.boxRow + int(hight+0.5)
 	}
 	for _, cell := range column {
 		if debug {
@@ -216,7 +228,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
           CASE
             WHEN b.chart_id IS NULL THEN
 			  CASE
-                WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 0, INSTR(b.BlockCellRange,':'))
+                WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1)
                 ELSE BlockCellRange
               END
             ELSE b.relative_formula
@@ -232,7 +244,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
         JOIN Comments AS c
           ON c.CommentID = bc.ExcelCommentID
         WHERE a.StudentAnswerID = ?
-		ORDER BY ws.name, b.BlockCellRange DESC
+		ORDER BY ws.name, 2 DESC
 		`, answerID).Rows()
 	if err != nil {
 		return err
@@ -254,7 +266,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 		if currentSheetName != sheetName || currentCol != col {
 
 			if (currentSheetName != "" || currentCol != -1) && len(column) > 0 {
-				addCommentToColum(file, sheetName, column)
+				addCommentToColumn(file, sheetName, column)
 			}
 			currentSheetName = sheetName
 			currentCol = col
@@ -270,7 +282,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	}
 	// Add the last column of the workbook
 	if column != nil && len(column) > 0 {
-		addCommentToColum(file, currentSheetName, column)
+		addCommentToColumn(file, currentSheetName, column)
 	}
 
 	if fileName == outputName || outputName == "" {

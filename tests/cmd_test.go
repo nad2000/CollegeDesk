@@ -451,9 +451,13 @@ func TestCommenting(t *testing.T) {
 			workbook_file_name,
 			StudentAnswerID
 		)
-		SELECT wb.id, 'Sheet1', FileName, sa.StudentAnswerID
+		SELECT wb.id, wsn.Name, FileName, sa.StudentAnswerID
 		FROM FileSources NATURAL JOIN StudentAnswers AS sa
-		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID`)
+		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID,
+		(
+			SELECT 'Sheet1' AS Name
+			UNION SELECT 'Sheet2'
+		) AS wsn`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
 		SELECT id, r.v

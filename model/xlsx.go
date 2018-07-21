@@ -188,18 +188,18 @@ type xlsxBareDrawing struct {
 
 // marshalRelationships provides function to read and unmarshal workbook
 // relationships of XLSX file.
-func unmarshalRelationships(fileContent string) (content xlsxRelationships) {
-	xml.Unmarshal([]byte(fileContent), &content)
+func unmarshalRelationships(fileContent []byte) (content xlsxRelationships) {
+	xml.Unmarshal(fileContent, &content)
 	return
 }
 
-func UnmarshalChart(fileContent string) (content xlsxBareChart) {
-	xml.Unmarshal([]byte(fileContent), &content)
+func UnmarshalChart(fileContent []byte) (content xlsxBareChart) {
+	xml.Unmarshal(fileContent, &content)
 	return
 }
 
-func unmarshalDrawing(fileContent string) (content xlsxBareDrawing) {
+func unmarshalDrawing(fileContent []byte) (content xlsxBareDrawing) {
 	// log.Info("----", fileContent)
-	xml.Unmarshal([]byte(fileContent), &content)
+	xml.Unmarshal(fileContent, &content)
 	return
 }

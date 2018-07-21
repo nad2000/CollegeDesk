@@ -1,8 +1,8 @@
-# Contributing to Excelize
+# Contributing to excelize
 
-Want to hack on Excelize? Awesome! This page contains information about reporting issues as well as some tips and
+Want to hack on excelize? Awesome! This page contains information about reporting issues as well as some tips and
 guidelines useful to experienced open source contributors. Finally, make sure
-you read our [community guidelines](#excelize-community-guidelines) before you
+you read our [community guidelines](#community-guidelines) before you
 start participating.
 
 ## Topics
@@ -15,7 +15,7 @@ start participating.
 
 ## Reporting security issues
 
-The Excelize maintainers take security seriously. If you discover a security
+The excelize maintainers take security seriously. If you discover a security
 issue, please bring it to their attention right away!
 
 Please **DO NOT** file a public issue, instead send your report privately to
@@ -24,7 +24,6 @@ Please **DO NOT** file a public issue, instead send your report privately to
 Security reports are greatly appreciated and we will publicly thank you for it.
 We currently do not offer a paid security bounty program, but are not
 ruling it out in the future.
-
 
 ## Reporting other issues
 
@@ -44,7 +43,7 @@ When reporting issues, always include the output of `go env`.
 
 Also include the steps required to reproduce the problem if possible and
 applicable. This information will help us review and fix your issue faster.
-When sending lengthy log-files, consider posting them as a gist (https://gist.github.com).
+When sending lengthy log-files, consider posting them as a gist [https://gist.github.com](https://gist.github.com).
 Don't forget to remove sensitive data from your logfiles before posting (you can
 replace those parts with "REDACTED").
 
@@ -65,21 +64,21 @@ don't get discouraged!
 
 ### Design and cleanup proposals
 
-You can propose new designs for existing Excelize features. You can also design
+You can propose new designs for existing excelize features. You can also design
 entirely new features. We really appreciate contributors who want to refactor or
 otherwise cleanup our project.
 
-We try hard to keep Excelize lean and focused. Excelize can't do everything for
+We try hard to keep excelize lean and focused. Excelize can't do everything for
 everybody. This means that we might decide against incorporating a new feature.
-However, there might be a way to implement that feature *on top of* Excelize.
+However, there might be a way to implement that feature *on top of* excelize.
 
 ### Conventions
 
 Fork the repository and make changes on your fork in a feature branch:
 
-- If it's a bug fix branch, name it XXXX-something where XXXX is the number of
+* If it's a bug fix branch, name it XXXX-something where XXXX is the number of
     the issue.
-- If it's a feature branch, create an enhancement issue to announce
+* If it's a feature branch, create an enhancement issue to announce
     your intentions, and name it XXXX-something where XXXX is the number of the
     issue.
 
@@ -184,7 +183,7 @@ Please see the [Coding Style](#coding-style) for further guidelines.
 
 ### Merge approval
 
-Excelize maintainers use LGTM (Looks Good To Me) in comments on the code review to
+The excelize maintainers use LGTM (Looks Good To Me) in comments on the code review to
 indicate acceptance.
 
 ### Sign your work
@@ -194,7 +193,7 @@ signature certifies that you wrote the patch or otherwise have the right to pass
 it on as an open-source patch. The rules are pretty simple: if you can certify
 the below (from [developercertificate.org](http://developercertificate.org/)):
 
-```
+```text
 Developer Certificate of Origin
 Version 1.1
 
@@ -242,14 +241,14 @@ Use your real name (sorry, no pseudonyms or anonymous contributions.)
 If you set your `user.name` and `user.email` git configs, you can sign your
 commit automatically with `git commit -s`.
 
-### How can I become a maintainer?
+### How can I become a maintainer
 
 First, all maintainers have 3 things
 
-- They share responsibility in the project's success.
-- They have made a long-term, recurring time investment to improve the project.
-- They spend that time doing whatever needs to be done, not necessarily what
-is the most interesting or fun.
+* They share responsibility in the project's success.
+* They have made a long-term, recurring time investment to improve the project.
+* They spend that time doing whatever needs to be done, not necessarily what
+ is the most interesting or fun.
 
 Maintainers are often under-appreciated, because their work is harder to appreciate.
 It's easy to appreciate a really cool and technically advanced feature. It's harder

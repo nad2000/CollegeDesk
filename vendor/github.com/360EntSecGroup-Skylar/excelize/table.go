@@ -11,13 +11,13 @@ import (
 
 // parseFormatTableSet provides function to parse the format settings of the
 // table with default value.
-func parseFormatTableSet(formatSet string) *formatTable {
+func parseFormatTableSet(formatSet string) (*formatTable, error) {
 	format := formatTable{
 		TableStyle:     "",
 		ShowRowStripes: true,
 	}
-	json.Unmarshal([]byte(formatSet), &format)
-	return &format
+	err := json.Unmarshal(parseFormatSet(formatSet), &format)
+	return &format, err
 }
 
 // AddTable provides the method to add table in a worksheet by given worksheet
@@ -28,10 +28,12 @@ func parseFormatTableSet(formatSet string) *formatTable {
 //
 // Create a table of F2:H6 on Sheet2 with format set:
 //
-//    xlsx.AddTable("Sheet2", "F2", "H6", `{"table_style":"TableStyleMedium2", "show_first_column":true,"show_last_column":true,"show_row_stripes":false,"show_column_stripes":true}`)
+//    xlsx.AddTable("Sheet2", "F2", "H6", `{"table_name":"table","table_style":"TableStyleMedium2", "show_first_column":true,"show_last_column":true,"show_row_stripes":false,"show_column_stripes":true}`)
 //
-// Note that the table at least two lines include string type header. The two
-// chart coordinate areas can not have an intersection.
+// Note that the table at least two lines include string type header. Multiple
+// tables coordinate areas can't have an intersection.
+//
+// table_name: The name of the table, in the same worksheet name of the table should be unique
 //
 // table_style: The built-in table style names
 //
@@ -39,8 +41,11 @@ func parseFormatTableSet(formatSet string) *formatTable {
 //    TableStyleMedium1 - TableStyleMedium28
 //    TableStyleDark1 - TableStyleDark11
 //
-func (f *File) AddTable(sheet, hcell, vcell, format string) {
-	formatSet := parseFormatTableSet(format)
+func (f *File) AddTable(sheet, hcell, vcell, format string) error {
+	formatSet, err := parseFormatTableSet(format)
+	if err != nil {
+		return err
+	}
 	hcell = strings.ToUpper(hcell)
 	vcell = strings.ToUpper(vcell)
 	// Coordinate conversion, convert C1:B3 to 2,0,1,2.
@@ -67,6 +72,7 @@ func (f *File) AddTable(sheet, hcell, vcell, format string) {
 	f.addSheetTable(sheet, rID)
 	f.addTable(sheet, tableXML, hxAxis, hyAxis, vxAxis, vyAxis, tableID, formatSet)
 	f.addContentTypePart(tableID, "table")
+	return err
 }
 
 // countTables provides function to get table files count storage in the folder
@@ -122,7 +128,10 @@ func (f *File) addTable(sheet, tableXML string, hxAxis, hyAxis, vxAxis, vyAxis, 
 			Name: name,
 		})
 	}
-	name := "Table" + strconv.Itoa(i)
+	name := formatSet.TableName
+	if name == "" {
+		name = "Table" + strconv.Itoa(i)
+	}
 	t := xlsxTable{
 		XMLNS:       NameSpaceSpreadSheet,
 		ID:          i,
@@ -145,21 +154,21 @@ func (f *File) addTable(sheet, tableXML string, hxAxis, hyAxis, vxAxis, vyAxis, 
 		},
 	}
 	table, _ := xml.Marshal(t)
-	f.saveFileList(tableXML, string(table))
+	f.saveFileList(tableXML, table)
 }
 
 // parseAutoFilterSet provides function to parse the settings of the auto
 // filter.
-func parseAutoFilterSet(formatSet string) *formatAutoFilter {
+func parseAutoFilterSet(formatSet string) (*formatAutoFilter, error) {
 	format := formatAutoFilter{}
-	json.Unmarshal([]byte(formatSet), &format)
-	return &format
+	err := json.Unmarshal([]byte(formatSet), &format)
+	return &format, err
 }
 
 // AutoFilter provides the method to add auto filter in a worksheet by given
-// worksheet name, coordinate area and settings. An autofilter in Excel is a way
-// of filtering a 2D range of data based on some simple criteria. For example
-// applying an autofilter to a cell range A1:D4 in the worksheet 1:
+// worksheet name, coordinate area and settings. An autofilter in Excel is a
+// way of filtering a 2D range of data based on some simple criteria. For
+// example applying an autofilter to a cell range A1:D4 in the Sheet1:
 //
 //    err = xlsx.AutoFilter("Sheet1", "A1", "D4", "")
 //
@@ -170,15 +179,15 @@ func parseAutoFilterSet(formatSet string) *formatAutoFilter {
 // column defines the filter columns in a autofilter range based on simple
 // criteria
 //
-// It isn't sufficient to just specify the filter condition. You must also hide
-// any rows that don't match the filter condition. Rows are hidden using the
-// SetRowVisible() method. Excelize can't filter rows automatically since this
-// isn't part of the file format.
+// It isn't sufficient to just specify the filter condition. You must also
+// hide any rows that don't match the filter condition. Rows are hidden using
+// the SetRowVisible() method. Excelize can't filter rows automatically since
+// this isn't part of the file format.
 //
 // Setting a filter criteria for a column:
 //
-// expression defines the conditions, the following operators are available for
-// setting the filter criteria:
+// expression defines the conditions, the following operators are available
+// for setting the filter criteria:
 //
 //    ==
 //    !=
@@ -189,8 +198,8 @@ func parseAutoFilterSet(formatSet string) *formatAutoFilter {
 //    and
 //    or
 //
-// An expression can comprise a single statement or two statements separated by
-// the and and or operators. For example:
+// An expression can comprise a single statement or two statements separated
+// by the 'and' and 'or' operators. For example:
 //
 //    x <  2000
 //    x >  2000
@@ -227,7 +236,8 @@ func parseAutoFilterSet(formatSet string) *formatAutoFilter {
 //    Price < 2000
 //
 func (f *File) AutoFilter(sheet, hcell, vcell, format string) error {
-	formatSet := parseAutoFilterSet(format)
+	formatSet, _ := parseAutoFilterSet(format)
+
 	hcell = strings.ToUpper(hcell)
 	vcell = strings.ToUpper(vcell)
 
@@ -251,8 +261,7 @@ func (f *File) AutoFilter(sheet, hcell, vcell, format string) error {
 	}
 	ref := ToAlphaString(hxAxis) + strconv.Itoa(hyAxis+1) + ":" + ToAlphaString(vxAxis) + strconv.Itoa(vyAxis+1)
 	refRange := vxAxis - hxAxis
-	err := f.autoFilter(sheet, ref, refRange, hxAxis, formatSet)
-	return err
+	return f.autoFilter(sheet, ref, refRange, hxAxis, formatSet)
 }
 
 // autoFilter provides function to extract the tokens from the filter
