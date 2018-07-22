@@ -317,6 +317,7 @@
     "github.com/jinzhu/gorm/dialects/sqlite",
     "github.com/jinzhu/now",
     "github.com/mitchellh/go-homedir",
+    "github.com/mohae/deepcopy",
     "github.com/nad2000/xlsx",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",

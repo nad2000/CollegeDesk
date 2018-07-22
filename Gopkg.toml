@@ -70,3 +70,7 @@
   name = "github.com/360EntSecGroup-Skylar/excelize"
   # version = "1.2.0"
   branch = "master"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/mohae/deepcopy"
