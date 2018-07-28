@@ -10,11 +10,9 @@
   version = "v1.0.6"
 
 [[projects]]
-  branch = "master"
-  digest = "1:b084743e393ca2afede5d5e03ff3617900125f94caa0bd279e0b9f9fb2e3b982"
+  digest = "1:eb21ecabbe5f5c371f72a0efa000d6b0805c784ef90fd80600a674a3c9e69cc0"
   name = "github.com/aws/aws-sdk-go"
   packages = [
-    ".",
     "aws",
     "aws/awserr",
     "aws/awsutil",
@@ -50,7 +48,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "4b16798b9c96550bd504aa87cab3106db185f61a"
+  revision = "8475c414b1bd58b8cc214873a8854e3a621e67d7"
+  version = "v1.15.0"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -307,7 +306,6 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Sirupsen/logrus",
-    "github.com/aws/aws-sdk-go",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/credentials",
     "github.com/aws/aws-sdk-go/aws/session",
