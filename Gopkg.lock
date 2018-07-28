@@ -11,9 +11,10 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:eb21ecabbe5f5c371f72a0efa000d6b0805c784ef90fd80600a674a3c9e69cc0"
+  digest = "1:b084743e393ca2afede5d5e03ff3617900125f94caa0bd279e0b9f9fb2e3b982"
   name = "github.com/aws/aws-sdk-go"
   packages = [
+    ".",
     "aws",
     "aws/awserr",
     "aws/awsutil",
@@ -306,6 +307,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Sirupsen/logrus",
+    "github.com/aws/aws-sdk-go",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/credentials",
     "github.com/aws/aws-sdk-go/aws/session",
