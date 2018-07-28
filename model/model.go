@@ -15,7 +15,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
 	//"github.com/tealeg/xlsx"
-	"github.com/360EntSecGroup-Skylar/excelize"
+	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 )
 

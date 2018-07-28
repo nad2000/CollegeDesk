@@ -2,14 +2,6 @@
 
 
 [[projects]]
-  digest = "1:4b94878e125f31ec67c892ecfe38c13211da40653281588598218f807ae72bf7"
-  name = "github.com/360EntSecGroup-Skylar/excelize"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "eb62256d165607c6877ce88efbba10c119137b3d"
-  version = "v1.3.0"
-
-[[projects]]
   digest = "1:d867dfa6751c8d7a435821ad3b736310c2ed68945d05b50fb9d23aee0540c8cc"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
@@ -18,6 +10,7 @@
   version = "v1.0.6"
 
 [[projects]]
+  branch = "master"
   digest = "1:eb21ecabbe5f5c371f72a0efa000d6b0805c784ef90fd80600a674a3c9e69cc0"
   name = "github.com/aws/aws-sdk-go"
   packages = [
@@ -56,8 +49,7 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "8475c414b1bd58b8cc214873a8854e3a621e67d7"
-  version = "v1.15.0"
+  revision = "4b16798b9c96550bd504aa87cab3106db185f61a"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -313,7 +305,6 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/360EntSecGroup-Skylar/excelize",
     "github.com/Sirupsen/logrus",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/credentials",
