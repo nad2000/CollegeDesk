@@ -23,8 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/360EntSecGroup-Skylar/excelize"
 	log "github.com/Sirupsen/logrus"
+	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 	"github.com/spf13/cobra"
 )

@@ -3,6 +3,7 @@ package excelize
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/gob"
 	"io"
 	"log"
 	"math"
@@ -49,7 +50,7 @@ func readFile(file *zip.File) []byte {
 		log.Fatal(err)
 	}
 	buff := bytes.NewBuffer(nil)
-	_, _ = io.Copy(buff, rc)
+	io.Copy(buff, rc)
 	rc.Close()
 	return buff.Bytes()
 }
@@ -114,6 +115,17 @@ func intOnlyMapF(rune rune) rune {
 	return -1
 }
 
+// deepCopy provides method to creates a deep copy of whatever is passed to it
+// and returns the copy in an interface. The returned value will need to be
+// asserted to the correct type.
+func deepCopy(dst, src interface{}) error {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(src); err != nil {
+		return err
+	}
+	return gob.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(dst)
+}
+
 // boolPtr returns a pointer to a bool with the given value.
 func boolPtr(b bool) *bool { return &b }
 
@@ -163,13 +175,4 @@ func getCellColRow(cell string) (col, row string) {
 	}
 
 	return cell, ""
-}
-
-// parseFormatSet provides a method to convert format string to []byte and
-// handle empty string.
-func parseFormatSet(formatSet string) []byte {
-	if formatSet != "" {
-		return []byte(formatSet)
-	}
-	return []byte("{}")
 }

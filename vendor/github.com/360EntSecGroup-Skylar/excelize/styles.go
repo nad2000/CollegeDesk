@@ -988,7 +988,7 @@ func is12HourTime(format string) bool {
 func (f *File) stylesReader() *xlsxStyleSheet {
 	if f.Styles == nil {
 		var styleSheet xlsxStyleSheet
-		_ = xml.Unmarshal([]byte(f.readXML("xl/styles.xml")), &styleSheet)
+		xml.Unmarshal([]byte(f.readXML("xl/styles.xml")), &styleSheet)
 		f.Styles = &styleSheet
 	}
 	return f.Styles
@@ -1404,7 +1404,7 @@ func parseFormatStyleSet(style string) (*formatStyle, error) {
 //     173   | $ English (New Zealand)
 //     174   | $ English (Singapore)
 //     175   | $ English (Trinidad & Tobago)
-//     176   | $ English (U.S. Virgin Islands)
+//     176   | $ English (U.S. Vigin Islands)
 //     177   | $ English (United States)
 //     178   | $ French (Canada)
 //     179   | $ Hawaiian (United States)
@@ -2407,7 +2407,7 @@ func (f *File) SetCellStyle(sheet, hcell, vcell string, styleID int) {
 //
 // The criteria parameter is used to set the criteria by which the cell data
 // will be evaluated. It has no default value. The most common criteria as
-// applied to {"type"："cell"} are:
+// applied to {'type': 'cell'} are:
 //
 //    between                  |
 //    not between              |
@@ -2562,12 +2562,10 @@ func (f *File) SetCellStyle(sheet, hcell, vcell string, styleID int) {
 //
 // bar_color - Used for data_bar. Same as min_color, see above.
 //
-func (f *File) SetConditionalFormat(sheet, area, formatSet string) error {
+func (f *File) SetConditionalFormat(sheet, area, formatSet string) {
 	var format []*formatConditional
-	err := json.Unmarshal([]byte(formatSet), &format)
-	if err != nil {
-		return err
-	}
+	json.Unmarshal([]byte(formatSet), &format)
+
 	drawContFmtFunc := map[string]func(p int, ct string, fmtCond *formatConditional) *xlsxCfRule{
 		"cellIs":          drawCondFmtCellIs,
 		"top10":           drawCondFmtTop10,
@@ -2603,7 +2601,6 @@ func (f *File) SetConditionalFormat(sheet, area, formatSet string) error {
 		SQRef:  area,
 		CfRule: cfRule,
 	})
-	return err
 }
 
 // drawCondFmtCellIs provides function to create conditional formatting rule for
@@ -2722,30 +2719,4 @@ func drawConfFmtExp(p int, ct string, format *formatConditional) *xlsxCfRule {
 // getPaletteColor provides function to convert the RBG color by given string.
 func getPaletteColor(color string) string {
 	return "FF" + strings.Replace(strings.ToUpper(color), "#", "", -1)
-}
-
-// themeReader provides function to get the pointer to the xl/theme/theme1.xml
-// structure after deserialization.
-func (f *File) themeReader() *xlsxTheme {
-	var theme xlsxTheme
-	_ = xml.Unmarshal([]byte(f.readXML("xl/theme/theme1.xml")), &theme)
-	return &theme
-}
-
-// ThemeColor applied the color with tint value.
-func ThemeColor(baseColor string, tint float64) string {
-	if tint == 0 {
-		return "FF" + baseColor
-	}
-	r, _ := strconv.ParseInt(baseColor[0:2], 16, 64)
-	g, _ := strconv.ParseInt(baseColor[2:4], 16, 64)
-	b, _ := strconv.ParseInt(baseColor[4:6], 16, 64)
-	h, s, l := RGBToHSL(uint8(r), uint8(g), uint8(b))
-	if tint < 0 {
-		l *= (1 + tint)
-	} else {
-		l = l*(1-tint) + (1 - (1 - tint))
-	}
-	br, bg, bb := HSLToRGB(h, s, l)
-	return fmt.Sprintf("FF%02X%02X%02X", br, bg, bb)
 }

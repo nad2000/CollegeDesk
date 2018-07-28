@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/mohae/deepcopy"
 )
 
 // NewSheet provides function to create a new sheet by given worksheet name,
@@ -41,7 +39,7 @@ func (f *File) NewSheet(name string) int {
 func (f *File) contentTypesReader() *xlsxTypes {
 	if f.ContentTypes == nil {
 		var content xlsxTypes
-		_ = xml.Unmarshal([]byte(f.readXML("[Content_Types].xml")), &content)
+		xml.Unmarshal([]byte(f.readXML("[Content_Types].xml")), &content)
 		f.ContentTypes = &content
 	}
 	return f.ContentTypes
@@ -61,7 +59,7 @@ func (f *File) contentTypesWriter() {
 func (f *File) workbookReader() *xlsxWorkbook {
 	if f.WorkBook == nil {
 		var content xlsxWorkbook
-		_ = xml.Unmarshal([]byte(f.readXML("xl/workbook.xml")), &content)
+		xml.Unmarshal([]byte(f.readXML("xl/workbook.xml")), &content)
 		f.WorkBook = &content
 	}
 	return f.WorkBook
@@ -96,15 +94,13 @@ func (f *File) worksheetWriter() {
 
 // trimCell provides function to trim blank cells which created by completeCol.
 func trimCell(column []xlsxC) []xlsxC {
-	col := make([]xlsxC, len(column))
-	i := 0
+	col := []xlsxC{}
 	for _, c := range column {
 		if c.S != 0 || c.V != "" || c.F != nil || c.T != "" {
-			col[i] = c
-			i++
+			col = append(col, c)
 		}
 	}
-	return col[0:i]
+	return col
 }
 
 // Read and update property of contents type of XLSX.
@@ -132,17 +128,9 @@ func (f *File) setSheet(index int, name string) {
 // allowed in sheet title.
 func (f *File) setWorkbook(name string, rid int) {
 	content := f.workbookReader()
-	rID := 0
-	for _, v := range content.Sheets.Sheet {
-		t, _ := strconv.Atoi(v.SheetID)
-		if t > rID {
-			rID = t
-		}
-	}
-	rID++
 	content.Sheets.Sheet = append(content.Sheets.Sheet, xlsxSheet{
 		Name:    trimSheetName(name),
-		SheetID: strconv.Itoa(rID),
+		SheetID: strconv.Itoa(rid),
 		ID:      "rId" + strconv.Itoa(rid),
 	})
 }
@@ -152,7 +140,7 @@ func (f *File) setWorkbook(name string, rid int) {
 func (f *File) workbookRelsReader() *xlsxWorkbookRels {
 	if f.WorkBookRels == nil {
 		var content xlsxWorkbookRels
-		_ = xml.Unmarshal([]byte(f.readXML("xl/_rels/workbook.xml.rels")), &content)
+		xml.Unmarshal([]byte(f.readXML("xl/_rels/workbook.xml.rels")), &content)
 		f.WorkBookRels = &content
 	}
 	return f.WorkBookRels
@@ -205,6 +193,12 @@ func (f *File) setAppXML() {
 // library doesn't multiple namespace declarations in a single element of a
 // document. This function is a horrible hack to fix that after the XML
 // marshalling is completed.
+func replaceRelationshipsNameSpace(workbookMarshal string) string {
+	oldXmlns := `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+	newXmlns := `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x15" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">`
+	return strings.Replace(workbookMarshal, oldXmlns, newXmlns, -1)
+}
+
 func replaceRelationshipsNameSpaceBytes(workbookMarshal []byte) []byte {
 	oldXmlns := []byte(`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
 	newXmlns := []byte(`<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x15" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main">`)
@@ -257,7 +251,7 @@ func (f *File) GetActiveSheetIndex() int {
 		buffer.WriteString("xl/worksheets/sheet")
 		buffer.WriteString(strings.TrimPrefix(v.ID, "rId"))
 		buffer.WriteString(".xml")
-		_ = xml.Unmarshal([]byte(f.readXML(buffer.String())), &xlsx)
+		xml.Unmarshal([]byte(f.readXML(buffer.String())), &xlsx)
 		for _, sheetView := range xlsx.SheetViews.SheetView {
 			if sheetView.TabSelected {
 				ID, _ := strconv.Atoi(strings.TrimPrefix(v.ID, "rId"))
@@ -451,7 +445,8 @@ func (f *File) CopySheet(from, to int) error {
 // target worksheet name.
 func (f *File) copySheet(from, to int) {
 	sheet := f.workSheetReader("sheet" + strconv.Itoa(from))
-	worksheet := deepcopy.Copy(sheet).(*xlsxWorksheet)
+	worksheet := xlsxWorksheet{}
+	deepCopy(&worksheet, &sheet)
 	path := "xl/worksheets/sheet" + strconv.Itoa(to) + ".xml"
 	if len(worksheet.SheetViews.SheetView) > 0 {
 		worksheet.SheetViews.SheetView[0].TabSelected = false
@@ -459,7 +454,7 @@ func (f *File) copySheet(from, to int) {
 	worksheet.Drawing = nil
 	worksheet.TableParts = nil
 	worksheet.PageSetUp = nil
-	f.Sheet[path] = worksheet
+	f.Sheet[path] = &worksheet
 	toRels := "xl/worksheets/_rels/sheet" + strconv.Itoa(to) + ".xml.rels"
 	fromRels := "xl/worksheets/_rels/sheet" + strconv.Itoa(from) + ".xml.rels"
 	_, ok := f.XLSX[fromRels]
@@ -511,10 +506,10 @@ func (f *File) SetSheetVisible(name string, visible bool) {
 }
 
 // parseFormatPanesSet provides function to parse the panes settings.
-func parseFormatPanesSet(formatSet string) (*formatPanes, error) {
+func parseFormatPanesSet(formatSet string) *formatPanes {
 	format := formatPanes{}
-	err := json.Unmarshal([]byte(formatSet), &format)
-	return &format, err
+	json.Unmarshal([]byte(formatSet), &format)
+	return &format
 }
 
 // SetPanes provides function to create and remove freeze panes and split panes
@@ -603,7 +598,7 @@ func parseFormatPanesSet(formatSet string) (*formatPanes, error) {
 //    xlsx.SetPanes("Sheet1", `{"freeze":false,"split":false}`)
 //
 func (f *File) SetPanes(sheet, panes string) {
-	fs, _ := parseFormatPanesSet(panes)
+	fs := parseFormatPanesSet(panes)
 	xlsx := f.workSheetReader(sheet)
 	p := &xlsxPane{
 		ActivePane:  fs.ActivePane,
@@ -652,16 +647,8 @@ func (f *File) GetSheetVisible(name string) bool {
 // trimSheetName provides function to trim invaild characters by given worksheet
 // name.
 func trimSheetName(name string) string {
-	r := []rune{}
-	for _, v := range name {
-		switch v {
-		case 58, 92, 47, 63, 42, 91, 93: // replace :\/?*[]
-			continue
-		default:
-			r = append(r, v)
-		}
-	}
-	name = string(r)
+	r := strings.NewReplacer(":", "", "\\", "", "/", "", "?", "", "*", "", "[", "", "]", "")
+	name = r.Replace(name)
 	if utf8.RuneCountInString(name) > 31 {
 		name = string([]rune(name)[0:31])
 	}

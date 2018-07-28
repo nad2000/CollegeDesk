@@ -2,23 +2,23 @@
 
 
 [[projects]]
-  branch = "master"
-  digest = "1:0ef4cfd6df458be7fe83a850b3331885bc1d204aa3eb42f9489a0240b19db069"
+  digest = "1:4b94878e125f31ec67c892ecfe38c13211da40653281588598218f807ae72bf7"
   name = "github.com/360EntSecGroup-Skylar/excelize"
   packages = ["."]
   pruneopts = "UT"
-  revision = "a3571ee39bec82d15d9a183aed7f7db39e0a160f"
+  revision = "eb62256d165607c6877ce88efbba10c119137b3d"
+  version = "v1.3.0"
 
 [[projects]]
-  digest = "1:9e9193aa51197513b3abcb108970d831fbcf40ef96aa845c4f03276e1fa316d2"
+  digest = "1:d867dfa6751c8d7a435821ad3b736310c2ed68945d05b50fb9d23aee0540c8cc"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   pruneopts = "UT"
-  revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
-  version = "v1.0.5"
+  revision = "3e01752db0189b9157070a0e1668a620f9a85da2"
+  version = "v1.0.6"
 
 [[projects]]
-  digest = "1:889fa2b7f1057e046128e997089d338aca12b403baa751a6634ba3181195a128"
+  digest = "1:eb21ecabbe5f5c371f72a0efa000d6b0805c784ef90fd80600a674a3c9e69cc0"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -56,8 +56,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "8cf662a972fa7fba8f2c1ec57648cf840e2bb401"
-  version = "v1.14.30"
+  revision = "8475c414b1bd58b8cc214873a8854e3a621e67d7"
+  version = "v1.15.0"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -185,6 +185,14 @@
   revision = "c48cc78d482608239f6c4c92a4abd87eb8761c90"
 
 [[projects]]
+  branch = "issues/238"
+  digest = "1:78f5160cc41139b3cfe40d2b3d549856e153ce3e185fd5bd76bdca0d0fc4e45f"
+  name = "github.com/nad2000/excelize"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c2555efbb94f078178347fd9dfa0cb77e5ea221f"
+
+[[projects]]
   branch = "cell-comment-reading"
   digest = "1:405ea246217514a77b09aa83c90b81250c073d688711ebf64bd60c29267b97ad"
   name = "github.com/nad2000/xlsx"
@@ -257,18 +265,18 @@
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
   pruneopts = "UT"
-  revision = "a2144134853fc9a27a7b1e3eb4f19f1a76df13c9"
+  revision = "c126467f60eb25f8f27e5a981f32a87e3965053f"
 
 [[projects]]
   branch = "master"
-  digest = "1:72d6244a51be9611f08994aca19677fcc31676b3e7b742c37e129e6ece4ad8fc"
+  digest = "1:0871b2afdec96b08397ac286e7dbd2a0875bb75c1d3b22d046e389b9ed68cd83"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "ac767d655b305d4e9612f5f6e33120b9176c4ad4"
+  revision = "bd9dbc187b6e1dacfdd2722a87e83093c2d7bd6e"
 
 [[projects]]
   digest = "1:038003d098ffc345c4c5c6d47bcc6920b2649ee0c0d557162e54e75c76cadf8b"
@@ -317,7 +325,7 @@
     "github.com/jinzhu/gorm/dialects/sqlite",
     "github.com/jinzhu/now",
     "github.com/mitchellh/go-homedir",
-    "github.com/mohae/deepcopy",
+    "github.com/nad2000/excelize",
     "github.com/nad2000/xlsx",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",

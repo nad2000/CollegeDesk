@@ -67,10 +67,10 @@
   unused-packages = true
 
 [[constraint]]
-  name = "github.com/360EntSecGroup-Skylar/excelize"
+  name = "github.com/nad2000/excelize"
   # version = "1.2.0"
-  branch = "master"
+  branch = "issues/238"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/mohae/deepcopy"

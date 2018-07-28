@@ -36,7 +36,6 @@ func NewFile() *File {
 	f.WorkBookRels = f.workbookRelsReader()
 	f.Sheet["xl/worksheets/sheet1.xml"] = f.workSheetReader("Sheet1")
 	f.sheetMap["Sheet1"] = "xl/worksheets/sheet1.xml"
-	f.Theme = f.themeReader()
 	return f
 }
 
@@ -61,12 +60,6 @@ func (f *File) SaveAs(name string) error {
 
 // Write provides function to write to an io.Writer.
 func (f *File) Write(w io.Writer) error {
-	_, err := f.WriteTo(w)
-	return err
-}
-
-// WriteTo implements io.WriterTo to write the file.
-func (f *File) WriteTo(w io.Writer) (int64, error) {
 	buf := new(bytes.Buffer)
 	zw := zip.NewWriter(buf)
 	f.contentTypesWriter()
@@ -77,17 +70,21 @@ func (f *File) WriteTo(w io.Writer) (int64, error) {
 	for path, content := range f.XLSX {
 		fi, err := zw.Create(path)
 		if err != nil {
-			return 0, err
+			return err
 		}
-		_, err = fi.Write(content)
+		_, err = fi.Write([]byte(content))
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
 	err := zw.Close()
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	return buf.WriteTo(w)
+	if _, err := buf.WriteTo(w); err != nil {
+		return err
+	}
+
+	return nil
 }
