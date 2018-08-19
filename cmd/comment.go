@@ -158,13 +158,22 @@ type commentEntry struct {
 	boxRow      int
 }
 
+// addCommentsToWorksheet
+func addCommentsToWorksheet(file *excelize.File, sheetName string, columns [][]commentEntry, boxCols []int) {
+	for i := len(boxCols) - 1; i >= 0; i-- {
+		addCommentsToColumn(file, sheetName, columns[i], boxCols[i])
+	}
+}
+
 // addCommentsToColumn
-func addCommentToColumn(file *excelize.File, sheetName string, column []commentEntry) {
+func addCommentsToColumn(file *excelize.File, sheetName string, column []commentEntry, boxCol int) {
 
 	if column == nil || len(column) == 0 {
 		return
 	}
-
+	if boxCol < 1 {
+		boxCol = column[0].col + 1
+	}
 	address := column[0].address
 	col, _, err := xlsx.GetCoordsFromCellIDString(address)
 	if err != nil {
@@ -172,14 +181,13 @@ func addCommentToColumn(file *excelize.File, sheetName string, column []commentE
 	}
 	col1Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+1))
 	col2Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+2))
-	maxChar := ((col1Width+col2Width)/10.452839 - 0.007) / 0.17390901
+	maxChar := ((col1Width+col2Width)/5.2264195 - 0.007) / 0.17390901
 
 	nextBoxRow := 1
-	for i := len(column) - 1; i >= 0; i-- {
+	for i := range column {
 		cell := &column[i]
-		hight := 0.0
-		lines := strings.Split(cell.commentText, "\n")
-		for _, l := range lines {
+		hight := 0.4
+		for _, l := range strings.Split(cell.commentText, "\n") {
 			hight += float64(len(l)) / maxChar
 		}
 		if nextBoxRow <= cell.row {
@@ -194,13 +202,13 @@ func addCommentToColumn(file *excelize.File, sheetName string, column []commentE
 			log.Debugf(
 				"Adding comment to %q sheet at %q: %s (box: %q)",
 				sheetName, cell.address, cell.commentText,
-				xlsx.GetCellIDStringFromCoords(cell.col+1, cell.boxRow))
+				xlsx.GetCellIDStringFromCoords(boxCol, cell.boxRow))
 		}
 		file.AddCommentAt(
 			sheetName,
 			cell.address,
 			fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, cell.commentText),
-			cell.col+1, cell.boxRow)
+			boxCol, cell.boxRow)
 	}
 }
 
@@ -217,9 +225,12 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	}
 
 	var (
+		row, col, boxCol                                  int
 		sheetName, address, commentText, currentSheetName string
 		column                                            []commentEntry
 		currentCol                                        = -1
+		boxCols                                           []int
+		columns                                           [][]commentEntry
 	)
 
 	rows, err := Db.Raw(`
@@ -244,7 +255,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
         JOIN Comments AS c
           ON c.CommentID = bc.ExcelCommentID
         WHERE a.StudentAnswerID = ?
-		ORDER BY ws.name, 2 DESC
+		ORDER BY ws.name, 2
 		`, answerID).Rows()
 	if err != nil {
 		return err
@@ -261,12 +272,27 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 		if debugLevel > 1 {
 			log.Debugf("COMMENT: %q, %q, %q", sheetName, address, commentText)
 		}
-		col, row, _ := xlsx.GetCoordsFromCellIDString(address)
+		col, row, _ = xlsx.GetCoordsFromCellIDString(address)
 
 		if currentSheetName != sheetName || currentCol != col {
+			if currentSheetName != sheetName && currentSheetName != "" {
+				addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
 
+				boxCol = 0
+			}
 			if (currentSheetName != "" || currentCol != -1) && len(column) > 0 {
-				addCommentToColumn(file, sheetName, column)
+
+				if len(column) > 0 {
+					columns = append(columns, column)
+					boxCols = append(boxCols, boxCol)
+				}
+				if currentCol == col-1 {
+					boxCol += 2
+				} else if boxCol == 0 || boxCol < col {
+					boxCol = col + 1
+				} else {
+					boxCol++
+				}
 			}
 			currentSheetName = sheetName
 			currentCol = col
@@ -282,7 +308,8 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	}
 	// Add the last column of the workbook
 	if column != nil && len(column) > 0 {
-		addCommentToColumn(file, currentSheetName, column)
+		addCommentsToColumn(file, currentSheetName, column, boxCol)
+		addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
 	}
 
 	if fileName == outputName || outputName == "" {
