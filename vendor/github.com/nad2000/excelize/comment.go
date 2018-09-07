@@ -88,7 +88,7 @@ func (f *File) AddCommentAt(sheet, cell, format string, col, row int) error {
 	}
 	commentsXML := "xl/comments" + strconv.Itoa(commentID) + ".xml"
 	f.addComment(commentsXML, cell, formatSet)
-	var hight float64
+	hight := 1.0
 	for i, l := range strings.Split(formatSet.Text, "\n") {
 		ll := len(l)
 		if i == 0 {
@@ -97,8 +97,8 @@ func (f *File) AddCommentAt(sheet, cell, format string, col, row int) error {
 		hight += float64(ll) / maxChar
 	}
 	// f.addDrawingVML(commentID, drawingVML, cell, strings.Count(formatSet.Text, "\n")+1, colCount)
-	if hight < 0.5 {
-		hight = 1.0
+	if hight < 1.5 {
+		hight = 2.0
 	}
 	f.addBoxDrawingVML(
 		commentID, drawingVML, cell,
@@ -131,10 +131,10 @@ func (f *File) addBoxDrawingVML(commentID int, drawingVML, cell string,
 	xAxis := TitleToNumber(col)
 	yAxis := row - 1
 	vml := vmlDrawing{
-		XMLNSv:  "urn:schemas-microsoft-com:vml",
-		XMLNSo:  "urn:schemas-microsoft-com:office:office",
-		XMLNSx:  "urn:schemas-microsoft-com:office:excel",
-		XMLNSmv: "http://macVmlSchemaUri",
+		XMLNSv: "urn:schemas-microsoft-com:vml",
+		XMLNSo: "urn:schemas-microsoft-com:office:office",
+		XMLNSx: "urn:schemas-microsoft-com:office:excel",
+		// XMLNSmv: "http://macVmlSchemaUri",
 		Shapelayout: &xlsxShapelayout{
 			Ext: "edit",
 			IDmap: &xlsxIDmap{

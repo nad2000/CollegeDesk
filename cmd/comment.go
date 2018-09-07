@@ -186,9 +186,12 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 	nextBoxRow := 1
 	for i := range column {
 		cell := &column[i]
-		hight := 0.4
+		hight := 1.0
 		for _, l := range strings.Split(cell.commentText, "\n") {
 			hight += float64(len(l)) / maxChar
+		}
+		if hight < 2.0 {
+			hight = 2.0
 		}
 		if nextBoxRow <= cell.row {
 			cell.boxRow = cell.row + 1

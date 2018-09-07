@@ -9,7 +9,7 @@ type vmlDrawing struct {
 	XMLNSv      string           `xml:"xmlns:v,attr"`
 	XMLNSo      string           `xml:"xmlns:o,attr"`
 	XMLNSx      string           `xml:"xmlns:x,attr"`
-	XMLNSmv     string           `xml:"xmlns:mv,attr"`
+	XMLNSmv     string           `xml:"xmlns:mv,attr,omitempty"`
 	Shapelayout *xlsxShapelayout `xml:"o:shapelayout"`
 	Shapetype   *xlsxShapetype   `xml:"v:shapetype"`
 	Shape       []xlsxShape      `xml:"v:shape"`
