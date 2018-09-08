@@ -179,20 +179,13 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 	if err != nil {
 		log.Errorf("Error occured while adding commment to column starting with %q: %s", address, err)
 	}
-	col1Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+1))
-	col2Width := file.GetColWidth(sheetName, excelize.ColIndexToLetters(col+2))
-	maxChar := ((col1Width+col2Width)/5.2264195 - 0.007) / 0.17390901
 
 	nextBoxRow := 1
 	for i := range column {
 		cell := &column[i]
-		hight := 1.0
-		for _, l := range strings.Split(cell.commentText, "\n") {
-			hight += float64(len(l)) / maxChar
-		}
-		if hight < 2.0 {
-			hight = 2.0
-		}
+		hight := file.CommmentCalloutBoxHightAt(
+			sheetName, fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, cell.commentText), col, 0)
+
 		if nextBoxRow <= cell.row {
 			cell.boxRow = cell.row + 1
 		} else {

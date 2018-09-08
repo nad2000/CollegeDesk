@@ -468,6 +468,8 @@ func TestCommenting(t *testing.T) {
 			UNION SELECT 'C3'
 			UNION SELECT 'D2:F1'
 			UNION SELECT 'C2:F1'
+			UNION SELECT 'C12:E21'
+			UNION SELECT 'C13:D16'
 		) AS r
 		WHERE b.ExcelBlockID IS NULL`)
 
@@ -486,12 +488,14 @@ func TestCommenting(t *testing.T) {
 		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3'), ('MULTILINE COMMENT:
 2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
 3: 123 1234 45676756 87585765 5767
-4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123')`)
+4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123'),
+		('this is not correct, you have selected an extra row in both return and probability which is unwarranted.),
+		('an extra row has been selected which is not correct, even though your answer is coming correct')`)
 	db.Exec(`
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, CommentID
 		FROM ExcelBlocks AS b, Comments AS c
-		WHERE c.CommentID % 4 = b.ExcelBlockID % 4`)
+		WHERE c.CommentID %  8 = b.ExcelBlockID %  8`)
 
 	var assignment model.Assignment
 	db.First(&assignment, "State = ?", "GRADED")
@@ -531,18 +535,23 @@ func TestCommenting(t *testing.T) {
 				bcm := model.BlockCommentMapping{Block: block, Comment: comment}
 				db.Create(&bcm)
 			}
-			for i, r := range []string{"A1", "C3", "D2:F13", "C2:F14"} {
+			for i, r := range []string{"A1", "C3", "D2:F13", "C2:F14", "C12:E21", "C13:D16"} {
 				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
 				db.Create(&block)
 				var ct string
 				if !isIndirect {
-					if i < 3 {
+					switch {
+					case i < 3:
 						ct = fmt.Sprintf("*** Comment in %q for the range %q", sn, r)
-					} else {
+					case i == 4:
 						ct = `MULTILINE COMMENT:
 2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
 3: 123 1234 45676756 87585765 5767
 4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123`
+					case i == 5:
+						ct = "this is not correct, you have selected an extra row in both return and probability which is unwarranted."
+					default:
+						ct = "an extra row has been selected which is not correct, even though your answer is coming correct"
 					}
 					comment := model.Comment{Text: ct}
 					db.Create(&comment)
@@ -633,7 +642,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 8, len(rows); got != expected {
+	if expected, got := 2, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {

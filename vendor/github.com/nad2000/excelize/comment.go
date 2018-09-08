@@ -51,6 +51,49 @@ func (f *File) AddComment(sheet, cell, format string) error {
 	return f.AddCommentAt(sheet, cell, format, xAxis+1, yAxis+1)
 }
 
+// CommmentCalloutBoxHightAt - calculates the hight of the comment callout box
+// assuming the box goes across 2 columns
+func (f *File) CommmentCalloutBoxHightAt(sheet, format string, col, row int) (hight float64) {
+	formatSet, err := parseFormatCommentsSet(format)
+	if err != nil {
+		return
+	}
+	col1Width := f.GetColWidth(sheet, ColIndexToLetters(col+1))
+	col2Width := f.GetColWidth(sheet, ColIndexToLetters(col+2))
+	maxChar := ((col1Width+col2Width)/5.2264195 - 0.007) / 0.18122
+	hight = float64(strings.Count(formatSet.Text, "\n") + 1)
+	wordCount := 0
+	for i, l := range strings.Split(formatSet.Text, "\n") {
+		ll := len(l)
+		if i == 0 {
+			ll += len(formatSet.Author)
+			if formatSet.Author != "" {
+				wordCount += strings.Count(formatSet.Author, " ") + 1
+			}
+		}
+		line := strings.Replace(formatSet.Text, "  ", " ", -1)
+		wordCount += strings.Count(line, " ") + strings.Count(line, ",") + 1
+		hight += float64(ll) / maxChar
+	}
+	// f.addDrawingVML(commentID, drawingVML, cell, strings.Count(formatSet.Text, "\n")+1, colCount)
+	if hight < 1.5 {
+		hight = 2.0
+	}
+	var hightByWordCount float64
+	switch {
+	case wordCount <= 10:
+		hightByWordCount = 3.0
+	case wordCount <= 15:
+		hightByWordCount = 5.0
+	default:
+		hightByWordCount = 8.0
+	}
+	if hightByWordCount > hight {
+		return hightByWordCount
+	}
+	return
+}
+
 // AddComment provides the method to add comment in a sheet by given worksheet
 // index, cell and format set (such as author and text). Note that the max
 // author length is 255 and the max text length is 32512. For example, add a
@@ -63,12 +106,6 @@ func (f *File) AddCommentAt(sheet, cell, format string, col, row int) error {
 	if err != nil {
 		return err
 	}
-	col1Width := f.GetColWidth(sheet, ColIndexToLetters(col+1))
-	col2Width := f.GetColWidth(sheet, ColIndexToLetters(col+2))
-	// maxChar := ((col1Width+col2Width)/10.452839 - 0.007) / 0.17390901
-	// maxChar := (col1Width/5.2264195 - 0.007) / 0.17390901
-	maxChar := ((col1Width+col2Width)/5.2264195 - 0.007) / 0.15
-	// maxChar := ((col1Width+col2Width)/5.2264195 - 0.007) / 0.17390901
 	// Read sheet data.
 	xlsx := f.workSheetReader(sheet)
 	commentID := f.countComments() + 1
@@ -88,18 +125,7 @@ func (f *File) AddCommentAt(sheet, cell, format string, col, row int) error {
 	}
 	commentsXML := "xl/comments" + strconv.Itoa(commentID) + ".xml"
 	f.addComment(commentsXML, cell, formatSet)
-	hight := 1.0
-	for i, l := range strings.Split(formatSet.Text, "\n") {
-		ll := len(l)
-		if i == 0 {
-			ll += len(formatSet.Author)
-		}
-		hight += float64(ll) / maxChar
-	}
-	// f.addDrawingVML(commentID, drawingVML, cell, strings.Count(formatSet.Text, "\n")+1, colCount)
-	if hight < 1.5 {
-		hight = 2.0
-	}
+	hight := f.CommmentCalloutBoxHightAt(sheet, format, col, row)
 	f.addBoxDrawingVML(
 		commentID, drawingVML, cell,
 		col, 23, row, 5, col+2, 23, row+int(hight+0.5), 5)
