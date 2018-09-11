@@ -14,6 +14,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
+
 	//"github.com/tealeg/xlsx"
 	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
@@ -508,8 +509,10 @@ type Block struct {
 	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
 	ChartID         sql.NullInt64
 
-	s struct{ r, c int } `gorm:"-"` // Top-left cell
-	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
+	s       struct{ r, c int }           `gorm:"-"` // Top-left cell
+	e       struct{ r, c int }           `gorm:"-"` // Bottom-right cell
+	i       struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
+	isEmpty bool                         `gorm:"-"` // All block cells are empty
 }
 
 func (b Block) String() string {
@@ -533,6 +536,10 @@ func (b *Block) address() string {
 	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
 }
 
+func (b *Block) innerAddress() string {
+	return cellAddress(b.i.sr, b.i.sc) + ":" + cellAddress(b.i.er, b.i.ec)
+}
+
 //  getCellComment returns cell comment text value
 func getCellComment(file *xlsx.File, cellID string) string {
 	if file.Comments != nil {
@@ -543,6 +550,21 @@ func getCellComment(file *xlsx.File, cellID string) string {
 		}
 	}
 	return ""
+}
+
+// cellValue returns cell value
+func cellValue(cell *xlsx.Cell) (value string) {
+	var err error
+	if cell.Type() == 2 {
+		if value, err = cell.FormattedValue(); err != nil {
+			log.Error(err.Error())
+			value = cell.Value
+		}
+	} else {
+		value = cell.Value
+	}
+	//fmt.Println("=============================================\n\n", value, cell)
+	return
 }
 
 // fildWhole finds whole range of the specified color
@@ -559,7 +581,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
-		//log.Infof("*** b.e.c: %d, len: %d, %#v", b.e.c, len(row.Cells), row.Cells)
 		if len(row.Cells) <= b.e.c ||
 			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
 			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
@@ -586,30 +607,22 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				if ok {
 					commentText = comment.Text
 				}
-				var value string
-				var err error
-				if cell.Type() == 2 {
-					if value, err = cell.FormattedValue(); err != nil {
-						log.Error(err.Error())
-						value = cell.Value
+				if value := cellValue(cell); value != "" {
+					c := Cell{
+						BlockID:     b.ID,
+						WorksheetID: b.WorksheetID,
+						Formula:     cell.Formula(),
+						Value:       value,
+						Range:       cellID,
+						Comment:     commentText,
 					}
-				} else {
-					value = cell.Value
-				}
-				c := Cell{
-					BlockID:     b.ID,
-					WorksheetID: b.WorksheetID,
-					Formula:     cell.Formula(),
-					Value:       value,
-					Range:       cellID,
-					Comment:     commentText,
-				}
-				if DebugLevel > 1 {
-					log.Debugf("Inserting %#v", c)
-				}
-				Db.Create(&c)
-				if Db.Error != nil {
-					log.Error("Error occured: ", Db.Error.Error())
+					if DebugLevel > 1 {
+						log.Debugf("Inserting %#v", c)
+					}
+					Db.Create(&c)
+					if Db.Error != nil {
+						log.Error("Error occured: ", Db.Error.Error())
+					}
 				}
 				b.e.c = j
 			} else {
@@ -621,6 +634,50 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			}
 		}
 	}
+
+	sr, sc, er, ec := b.s.r, b.s.c, b.e.r, b.e.c
+	for sc <= ec {
+		for r := sr; r <= er; r++ {
+			if value := cellValue(sheet.Cell(r, sc)); value != "" {
+				goto RIGHT_COL
+			}
+		}
+		sc++
+	}
+	if sc > ec {
+		b.isEmpty = true
+		return
+	}
+
+RIGHT_COL:
+	for ec >= sc {
+		for r := sr; r <= er; r++ {
+			if value := cellValue(sheet.Cell(r, ec)); value != "" {
+				goto TOP_ROW
+			}
+		}
+		ec--
+	}
+TOP_ROW:
+	for sr <= er {
+		for c := sc; c <= ec; c++ {
+			if value := cellValue(sheet.Cell(sr, c)); value != "" {
+				goto BOTTOM_ROW
+			}
+		}
+		sr++
+	}
+BOTTOM_ROW:
+	for er >= sr {
+		for c := sc; c <= ec; c++ {
+			if value := cellValue(sheet.Cell(er, c)); value != "" {
+				goto FOUND
+			}
+		}
+		er--
+	}
+FOUND:
+	b.i.sr, b.i.sc, b.i.er, b.i.ec = sr, sc, er, ec
 }
 
 // IsInside tests if the cell with given coordinates is inside the coordinates
