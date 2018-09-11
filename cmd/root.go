@@ -112,7 +112,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			if !model.DryRun {
 				Db.FirstOrCreate(&a, &a)
 			}
-			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, a.ID)
+			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, false, a.ID)
 		}
 	} else {
 		manager := createS3Manager()
@@ -150,7 +150,7 @@ func HandleAnswers(manager s3.FileManager) error {
 			continue
 		}
 		log.Infof("Processing %q", fileName)
-		model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID)
+		model.ExtractBlocksFromFile(fileName, color, force, verbose, false, r.StudentAnswerID)
 
 		Db.Model(&a).UpdateColumns(model.Answer{WasXLProcessed: 1})
 

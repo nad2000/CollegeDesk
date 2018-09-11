@@ -78,7 +78,7 @@ func AddComments(fileNames ...string) {
 	var book model.Workbook
 	base := filepath.Base(fileName)
 	Db.First(&book, "file_name LIKE ?", "%"+base)
-	if err := addCommentsToFile(book.AnswerID, fileName, outputName); err != nil {
+	if err := addCommentsToFile(int(book.AnswerID.Int64), fileName, outputName); err != nil {
 		log.Errorln(err)
 	}
 }

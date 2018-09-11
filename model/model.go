@@ -14,6 +14,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
+
 	//"github.com/tealeg/xlsx"
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/nad2000/xlsx"
@@ -269,12 +270,13 @@ func (Assignment) TableName() string {
 
 // Workbook - Excel file / workbook
 type Workbook struct {
-	ID         int `gorm:"primary_key:true"`
-	FileName   string
-	CreatedAt  time.Time
-	AnswerID   int         `gorm:"column:StudentAnswerID;index;type:int"`
-	Answer     Answer      `gorm:"ForeignKey:AnswerID"`
-	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID"`
+	ID          int `gorm:"primary_key:true"`
+	FileName    string
+	CreatedAt   time.Time
+	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
+	Answer      Answer        `gorm:"ForeignKey:AnswerID"`
+	Worksheets  []Worksheet   `gorm:"ForeignKey:WorkbookID"`
+	IsReference bool          // the workbook is used for referencing the expected bloks
 }
 
 // TableName overrides default table name for the model
@@ -443,11 +445,11 @@ type Worksheet struct {
 	ID               int
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block  `gorm:"ForeignKey:WorksheetID"`
-	Answer           Answer   `gorm:"ForeignKey:AnswerID"`
-	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
-	Workbook         Workbook `gorm:"ForeignKey:WorkbookId"`
-	WorkbookID       int      `gorm:"index"`
+	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
+	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
+	AnswerID         sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
+	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
+	WorkbookID       int           `gorm:"index"`
 }
 
 // TableName overrides default table name for the model
@@ -455,7 +457,7 @@ func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
 
-// Block - the univormly filled with specific color block
+// Block - the uniformly filled with specific color block
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	Color           string
@@ -468,19 +470,20 @@ type Block struct {
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
 	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
 	ChartID         sql.NullInt64
+	IsReference     bool // the block is used for referencing the expected bloks
 
 	s struct{ r, c int } `gorm:"-"` // Top-left cell
 	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
 }
 
-func (b Block) String() string {
-	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q, Relative Formula: %q}",
-		b.Range, b.Color, b.Formula, b.RelativeFormula)
-}
-
 // TableName overrides default table name for the model
 func (b Block) TableName() string {
 	return "ExcelBlocks"
+}
+
+func (b Block) String() string {
+	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q, Relative Formula: %q}",
+		b.Range, b.Color, b.Formula, b.RelativeFormula)
 }
 
 func (b *Block) save() {
@@ -855,18 +858,25 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook) {
+func ExtractBlocksFromFile(fileName, color string, force, verbose bool, isReference bool, answerIDs ...int) (wb Workbook) {
 	xlFile, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var answerID int
-	if len(answerIDs) > 0 {
-		answerID = int(answerIDs[0])
+	var answerID sql.NullInt64
+	if isReference || len(answerIDs) == 0 {
+		answerID.Valid = false
+	} else if len(answerIDs) > 0 {
+		answerID = NewNullInt64(answerIDs[0])
 	}
 
-	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
+	var result *gorm.DB
+	if isReference {
+		result = Db.First(&wb, Workbook{FileName: fileName, IsReference: isReference})
+	} else {
+		result = Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
+	}
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -878,7 +888,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	} else if !DryRun {
 
-		wb = Workbook{FileName: fileName, AnswerID: answerID}
+		wb = Workbook{FileName: fileName, AnswerID: answerID, IsReference: isReference}
 		result = Db.Create(&wb)
 		if result.Error != nil {
 			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
