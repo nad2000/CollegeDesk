@@ -958,6 +958,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, isRefere
 						Color:           color,
 						Formula:         cell.Formula(),
 						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+						IsReference:     isReference,
 					}
 					b.s.r, b.s.c = i, j
 

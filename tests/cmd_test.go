@@ -269,6 +269,27 @@ func testQuestionsToProcess(t *testing.T) {
 
 }
 
+func testImportFile(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 123,
+		QuestionText:     "Test Import Question...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+
+	var count int
+	db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	if expected := 8; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+
+}
+
 func testRowsToProcess(t *testing.T) {
 
 	rows, _ := model.RowsToProcess()
@@ -314,6 +335,7 @@ func TestProcessing(t *testing.T) {
 	defer db.Close()
 
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
+	t.Run("ImportFile", testImportFile)
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("S3Downloading", testS3Downloading)
