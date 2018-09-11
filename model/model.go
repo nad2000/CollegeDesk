@@ -113,6 +113,7 @@ type Question struct {
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	ReferenceID        sql.NullInt64       `gorm:"index"`
 }
 
 // TableName overrides default table name for the model
@@ -121,7 +122,7 @@ func (Question) TableName() string {
 }
 
 // ImportFile imports form Excel file QuestionExcleData
-func (q *Question) ImportFile(fileName string) error {
+func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 	xlFile, err := xlsx.OpenFile(fileName)
 
 	if err != nil {
@@ -170,7 +171,11 @@ func (q *Question) ImportFile(fileName string) error {
 				}
 			}
 		}
+
 	}
+	wb := ExtractBlocksFromFile(fileName, color, true, verbose, true)
+	q.ReferenceID = NewNullInt64(wb.ID)
+	Db.Save(&q)
 	return nil
 }
 
