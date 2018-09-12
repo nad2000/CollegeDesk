@@ -58,6 +58,10 @@ func HandleQuestions(manager s3.FileManager) error {
 	}
 	var fileCount int
 	for _, q := range rows {
+		result := Db.Where("QuestionID = ?", q.ID).Delete(&model.QuestionExcelData{})
+		if result.Error != nil {
+			log.Error(result.Error)
+		}
 		var s model.Source
 		Db.Model(&q).Related(&s, "FileID")
 		fileName, err := s.DownloadTo(manager, dest)
