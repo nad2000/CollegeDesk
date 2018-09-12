@@ -578,7 +578,7 @@ func testComments(t *testing.T) {
 func testRowsToComment(t *testing.T) {
 
 	// db.LogMode(true)
-	rows, err := model.RowsToComment()
+	rows, err := model.RowsToComment(-1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,6 +590,14 @@ func testRowsToComment(t *testing.T) {
 		for _, r := range rows {
 			t.Log(r)
 		}
+	}
+	rows, err = model.RowsToComment(999999)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected, got := 0, len(rows); got != expected {
+		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 }
 
