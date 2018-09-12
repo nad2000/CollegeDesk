@@ -16,7 +16,7 @@ import (
 	"github.com/jinzhu/gorm"
 
 	//"github.com/tealeg/xlsx"
-	"github.com/360EntSecGroup-Skylar/excelize"
+	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 )
 
@@ -309,6 +309,44 @@ func (wb *Workbook) Reset() {
 	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
+// ImportComments - import comments form workbook file
+func (wb *Workbook) ImportComments(fileName string) (err error) {
+
+	xlsx, err := excelize.OpenFile(fileName)
+	if err != nil {
+		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+	}
+	for name, comments := range xlsx.GetComments() {
+		var ws Worksheet
+		Db.First(&ws, Worksheet{
+			Name:       name,
+			AnswerID:   wb.AnswerID,
+			WorkbookID: wb.ID,
+		})
+		authors := comments.Authors
+		for _, c := range comments.CommentList.Comment {
+			var a string
+			if len(authors) > 0 && c.AuthorID >= 0 && c.AuthorID < len(authors) {
+				a = strings.Split(authors[c.AuthorID].Author, ":")[0]
+			}
+			for _, t := range c.Text.R {
+				if a != "" && !strings.HasPrefix(t.T, a) {
+					log.Debugf("*** [%s] %s: %s", c.Ref, a, t.T)
+					var cell Cell
+					result := Db.First(&cell, "worksheet_id = ? AND range = ?", ws.ID, c.Ref)
+					if !result.RecordNotFound() {
+						Db.LogMode(true)
+						Db.Model(&cell).UpdateColumn("comment", t.T)
+						Db.LogMode(false)
+					}
+				}
+			}
+
+		}
+	}
+	return
+}
+
 // ImportCharts - import charts form workbook file
 func (wb *Workbook) ImportCharts(fileName string) {
 
@@ -415,9 +453,10 @@ func (wb *Workbook) ImportCharts(fileName string) {
 							}
 							Db.Create(&block)
 							Db.Create(&Cell{
-								Block:   block,
-								Range:   block.Range,
-								Formula: block.Formula,
+								Block:       block,
+								WorksheetID: ws.ID,
+								Range:       block.Range,
+								Formula:     block.Formula,
 							})
 							propCount++
 						}
@@ -559,11 +598,12 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					value = cell.Value
 				}
 				c := Cell{
-					BlockID: b.ID,
-					Formula: cell.Formula(),
-					Value:   value,
-					Range:   cellID,
-					Comment: commentText,
+					BlockID:     b.ID,
+					WorksheetID: b.WorksheetID,
+					Formula:     cell.Formula(),
+					Value:       value,
+					Range:       cellID,
+					Comment:     commentText,
 				}
 				if DebugLevel > 1 {
 					log.Debugf("Inserting %#v", c)
@@ -594,13 +634,15 @@ func (b *Block) IsInside(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID      int
-	Block   Block `gorm:"ForeignKey:BlockID"`
-	BlockID int   `gorm:"index"`
-	Range   string
-	Formula string
-	Value   string
-	Comment string
+	ID          int
+	Block       Block `gorm:"ForeignKey:BlockID"`
+	BlockID     int   `gorm:"index"`
+	Worksheet   Worksheet
+	WorksheetID int `gorm:"index"`
+	Range       string
+	Formula     string
+	Value       string
+	Comment     string
 }
 
 // TableName overrides default table name for the model
@@ -769,11 +811,12 @@ func QuestionsToProcess() ([]Question, error) {
 
 // RowsToProcessResult stores query resut
 type RowsToProcessResult struct {
-	ID              int    `gorm:"column:FileID"`
-	S3BucketName    string `gorm:"column:S3BucketName"`
-	S3Key           string `gorm:"column:S3Key"`
-	FileName        string `gorm:"column:FileName"`
-	StudentAnswerID int    `gorm:"column:StudentAnswerID"`
+	ID              int           `gorm:"column:FileID"`
+	S3BucketName    string        `gorm:"column:S3BucketName"`
+	S3Key           string        `gorm:"column:S3Key"`
+	FileName        string        `gorm:"column:FileName"`
+	StudentAnswerID int           `gorm:"column:StudentAnswerID"`
+	QuestionID      sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 }
 
 // RowsToProcess returns answer file sources
@@ -781,7 +824,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
 	rows, err := Db.Table("FileSources").
-		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
+		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID, QuestionID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
@@ -978,6 +1021,65 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 	wb.ImportCharts(fileName)
+	wb.ImportComments(fileName)
+
+	if _, err := Db.DB().
+		Exec(`
+			UPDATE StudentAnswers
+			SET was_xl_processed = 1
+			WHERE StudentAnswerID = ?`, answerID); err != nil {
+		log.Errorf("Failed to update the answer entry: %s", err.Error())
+	}
+
+	// Comments that should be linked with the file:
+	const commentsToMapSql = `
+	SELECT
+		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+	-- Newly added/processed answers
+	FROM StudentAnswers AS nsa
+	JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+	JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+	JOIN ExcelBlocks AS nb
+	ON nb.worksheet_id = nws.id
+	-- Existing asnwers with mapped comments
+	JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+		AND sa.was_xl_processed != 0
+		AND sa.StudentAnswerID != nsa.StudentAnswerID
+	JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+	JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+		AND b.BlockCellRange = nb.BlockCellRange
+		AND b.BlockFormula = nb.BlockFormula
+	JOIN BlockCommentMapping AS bc
+	ON bc.ExcelBlockID = b.ExcelBlockID
+	-- Make sure the newly added block isn't mapped already
+	LEFT OUTER JOIN BlockCommentMapping AS nbc
+	ON nbc.ExcelBlockID = nb.ExcelBlockID
+	WHERE nwb.StudentAnswerID = ?
+	AND nbc.ExcelCommentID IS NULL
+	GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
+
+	// Insert block -> comment mapping:
+	sql := `
+		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
+		SELECT ExcelBlockID, ExcelCommentID FROM (` +
+		commentsToMapSql + ") AS c"
+	_, err = Db.DB().Exec(sql, answerID)
+	if err != nil {
+		log.Info("SQL: ", sql)
+		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
+	}
+
+	// Insert block -> comment mapping:
+	sql = `
+		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
+		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (` +
+		commentsToMapSql + ") AS c"
+	_, err = Db.DB().Exec(sql, answerID)
+	if err != nil {
+		log.Info("SQL: ", sql)
+		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
+	}
 
 	return
 }

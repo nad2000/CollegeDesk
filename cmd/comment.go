@@ -24,8 +24,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/360EntSecGroup-Skylar/excelize"
 	log "github.com/Sirupsen/logrus"
+	"github.com/nad2000/excelize"
+	"github.com/nad2000/xlsx"
 	"github.com/spf13/cobra"
 )
 
@@ -161,27 +162,95 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 	return nil
 }
 
-// AddCommentsToFile addes chart properties and comments to the answer files.
+type commentEntry struct {
+	address     string
+	row, col    int
+	commentText string
+	boxRow      int
+}
+
+// addCommentsToWorksheet
+func addCommentsToWorksheet(file *excelize.File, sheetName string, columns [][]commentEntry, boxCols []int) {
+	for i := len(boxCols) - 1; i >= 0; i-- {
+		addCommentsToColumn(file, sheetName, columns[i], boxCols[i])
+	}
+}
+
+// addCommentsToColumn
+func addCommentsToColumn(file *excelize.File, sheetName string, column []commentEntry, boxCol int) {
+
+	if column == nil || len(column) == 0 {
+		return
+	}
+	if boxCol < 1 {
+		boxCol = column[0].col + 1
+	}
+	address := column[0].address
+	col, _, err := xlsx.GetCoordsFromCellIDString(address)
+	if err != nil {
+		log.Errorf("Error occured while adding commment to column starting with %q: %s", address, err)
+	}
+
+	nextBoxRow := 1
+	for i := range column {
+		cell := &column[i]
+		hight := file.CommmentCalloutBoxHightAt(
+			sheetName, fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, cell.commentText), col, 0)
+
+		if nextBoxRow <= cell.row {
+			cell.boxRow = cell.row + 1
+		} else {
+			cell.boxRow = nextBoxRow
+		}
+		nextBoxRow = cell.boxRow + int(hight+0.5)
+	}
+	for _, cell := range column {
+		if debug {
+			log.Debugf(
+				"Adding comment to %q sheet at %q: %s (box: %q)",
+				sheetName, cell.address, cell.commentText,
+				xlsx.GetCellIDStringFromCoords(boxCol, cell.boxRow))
+		}
+		file.AddCommentAt(
+			sheetName,
+			cell.address,
+			fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, cell.commentText),
+			boxCol, cell.boxRow)
+	}
+}
+
+// addCommentsToFile addes chart properties and comments to the answer files.
 func addCommentsToFile(answerID int, fileName, outputName string) error {
 
 	// Iterate via assosiated comments and add them to the file
-	xlsx, err := excelize.OpenFile(fileName)
+	file, err := excelize.OpenFile(fileName)
 	if err != nil {
 		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
 	}
-
-	if err := addChartProperties(xlsx, answerID); err != nil {
+	if err := addChartProperties(file, answerID); err != nil {
 		return err
 	}
 
-	var sheetName, blockRange, commentText string
-	commens, err := Db.Raw(`
+	var (
+		row, col, boxCol                                  int
+		sheetName, address, commentText, currentSheetName string
+		column                                            []commentEntry
+		currentCol                                        = -1
+		boxCols                                           []int
+		columns                                           [][]commentEntry
+	)
+
+	rows, err := Db.Raw(`
         SELECT DISTINCT
           ws.name,
           CASE
-            WHEN b.chart_id IS NULL THEN b.BlockCellRange
+            WHEN b.chart_id IS NULL THEN
+			  CASE
+                WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1)
+                ELSE BlockCellRange
+              END
             ELSE b.relative_formula
-          END AS CellRange,
+          END AS Address,
           c.CommentText
         FROM StudentAnswers AS a
         JOIN WorkSheets AS ws
@@ -193,32 +262,67 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
         JOIN Comments AS c
           ON c.CommentID = bc.ExcelCommentID
         WHERE a.StudentAnswerID = ?
+		ORDER BY ws.name, 2
 		`, answerID).Rows()
 	if err != nil {
 		return err
 	}
-	defer commens.Close()
+	defer rows.Close()
 
-	if err := addChartProperties(xlsx, answerID); err != nil {
+	if err := addChartProperties(file, answerID); err != nil {
 		return err
 	}
 
-	for commens.Next() {
-		commens.Scan(&sheetName, &blockRange, &commentText)
-		rangeCells := strings.Split(blockRange, ":")
-		if debug {
-			log.Debugf("Adding comment to %q sheet at %q: %s", sheetName, rangeCells[0], commentText)
+	for rows.Next() {
+		rows.Scan(&sheetName, &address, &commentText)
+
+		if debugLevel > 1 {
+			log.Debugf("COMMENT: %q, %q, %q", sheetName, address, commentText)
 		}
-		xlsx.AddComment(
-			sheetName,
-			rangeCells[0],
-			fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, commentText))
+		col, row, _ = xlsx.GetCoordsFromCellIDString(address)
+
+		if currentSheetName != sheetName || currentCol != col {
+			if currentSheetName != sheetName && currentSheetName != "" {
+				addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
+
+				boxCol = 0
+			}
+			if (currentSheetName != "" || currentCol != -1) && len(column) > 0 {
+
+				if len(column) > 0 {
+					columns = append(columns, column)
+					boxCols = append(boxCols, boxCol)
+				}
+				if currentCol == col-1 {
+					boxCol += 2
+				} else if boxCol == 0 || boxCol < col {
+					boxCol = col + 1
+				} else {
+					boxCol++
+				}
+			}
+			currentSheetName = sheetName
+			currentCol = col
+			column = make([]commentEntry, 0, 1)
+		}
+
+		column = append(column, commentEntry{
+			address:     address,
+			row:         row,
+			col:         col,
+			commentText: commentText,
+		})
+	}
+	// Add the last column of the workbook
+	if column != nil && len(column) > 0 {
+		addCommentsToColumn(file, currentSheetName, column, boxCol)
+		addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
 	}
 
 	if fileName == outputName || outputName == "" {
-		err = xlsx.Save()
+		err = file.Save()
 	} else {
-		err = xlsx.SaveAs(outputName)
+		err = file.SaveAs(outputName)
 	}
 
 	if err != nil {
@@ -232,7 +336,7 @@ func addCommentsToFile(answerID int, fileName, outputName string) error {
 	return nil
 }
 
-func addChartProperties(xlsx *excelize.File, answerID int) error {
+func addChartProperties(file *excelize.File, answerID int) error {
 	chartProperties, err := Db.Raw(`
 			SELECT
 				ws.name,
@@ -255,12 +359,12 @@ func addChartProperties(xlsx *excelize.File, answerID int) error {
 
 	for chartProperties.Next() {
 		chartProperties.Scan(&sheetName, &cellAddress, &propName, &propValue)
-		xlsx.SetCellStr(sheetName, cellAddress, propName)
+		file.SetCellStr(sheetName, cellAddress, propName)
 		nextAddress, err := model.RelCellAddress(cellAddress, 0, 1)
 		if err != nil {
 			return err
 		}
-		xlsx.SetCellStr(sheetName, nextAddress, propValue)
+		file.SetCellStr(sheetName, nextAddress, propValue)
 	}
 	return nil
 }
