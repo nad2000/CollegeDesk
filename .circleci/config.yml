@@ -47,5 +47,8 @@ jobs:
           name: Upload the buid
           command: |
             OUTPUT="${GOPATH}/bin/extract-blocks"
-            [ "${CIRCLE_BRANCH}" == "master" ] || OUTPUT="${OUTPUT}-${CIRCLE_BRANCH}"
+            if [ "${CIRCLE_BRANCH}" == "master" ] ; then
+              OUTPUT="${OUTPUT}-${CIRCLE_BRANCH}"
+              mv "${GOPATH}/bin/extract-blocks" "${OUTPUT}"
+            fi
             curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${OUTPUT}"
