@@ -47,7 +47,7 @@ jobs:
           name: Upload the buid
           command: |
             OUTPUT="${GOPATH}/bin/extract-blocks"
-            if [ "${CIRCLE_BRANCH}" == "master" ] ; then
+            if [ "${CIRCLE_BRANCH}" != "master" ] ; then
               OUTPUT="${OUTPUT}-${CIRCLE_BRANCH}"
               mv "${GOPATH}/bin/extract-blocks" "${OUTPUT}"
             fi
