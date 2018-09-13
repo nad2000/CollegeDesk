@@ -352,6 +352,36 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
+	t.Run("HandleQuestions", testHandleQuestions)
+}
+func testHandleQuestions(t *testing.T) {
+
+	var fileID int
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS LastFileID FROM FileSources").Scan(&fileID)
+	f := model.Source{
+		ID:           fileID,
+		FileName:     "merged.xlsx",
+		S3BucketName: "studentanswers",
+		S3Key:        "merged.xlsx",
+	}
+	result := db.Create(&f)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	result = db.Create(&model.Question{
+		SourceID:     model.NewNullInt64(fileID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: "Question wiht merged cells",
+		MaxScore:     8888.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	})
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+
+	tm := testManager{}
+	cmd.HandleQuestions(&tm)
 }
 
 func testQuestions(t *testing.T) {
