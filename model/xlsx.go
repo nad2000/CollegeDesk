@@ -3,7 +3,49 @@ package model
 import (
 	"encoding/xml"
 	"strings"
+
+	"github.com/nad2000/excelize"
 )
+
+// saveFileList provides a function to update given file content in file list
+// of XLSX.
+func saveFileList(file *excelize.File, name string, content []byte) {
+	newContent := make([]byte, 0, len(excelize.XMLHeader)+len(content))
+	newContent = append(newContent, []byte(excelize.XMLHeader)...)
+	newContent = append(newContent, content...)
+	file.XLSX[name] = newContent
+}
+
+func deleteAllRelationshipsToName(file *excelize.File, name string) {
+	for _, n := range file.GetSheetMap() {
+		rels := "xl/worksheets/_rels/" + strings.TrimPrefix(n, "xl/worksheets/") + ".rels"
+		var sheetRels xlsxWorkbookRels
+		content, ok := file.XLSX[rels]
+		if !ok {
+			continue
+		}
+		_ = xml.Unmarshal(content, &sheetRels)
+		for k, v := range sheetRels.Relationships {
+			if strings.Contains(v.Target, name) {
+				sheetRels.Relationships = append(sheetRels.Relationships[:k], sheetRels.Relationships[k+1:]...)
+			}
+		}
+		output, _ := xml.Marshal(sheetRels)
+		saveFileList(file, rels, output)
+	}
+}
+
+// DeleteAllComments deletes all the comments in the workbook
+func DeleteAllComments(file *excelize.File) {
+	for name := range file.XLSX {
+		if strings.HasPrefix(name, "xl/comment") {
+			delete(file.XLSX, name)
+			id := strings.TrimPrefix(strings.TrimSuffix(name, ".xml"), "xl/comment")
+			vmlName := "xl/drawings/vmlDrawing" + id + ".vml"
+			deleteAllRelationshipsToName(file, vmlName)
+		}
+	}
+}
 
 // XmlxWorkbookRels contains xmlxWorkbookRelations which maps sheet id and sheet XML.
 type xlsxRelationships struct {
@@ -202,4 +244,18 @@ func unmarshalDrawing(fileContent []byte) (content xlsxBareDrawing) {
 	// log.Info("----", fileContent)
 	xml.Unmarshal(fileContent, &content)
 	return
+}
+
+// xmlxWorkbookRels contains xmlxWorkbookRelations which maps sheet id and sheet XML.
+type xlsxWorkbookRels struct {
+	XMLName       xml.Name               `xml:"http://schemas.openxmlformats.org/package/2006/relationships Relationships"`
+	Relationships []xlsxWorkbookRelation `xml:"Relationship"`
+}
+
+// xmlxWorkbookRelation maps sheet id and xl/worksheets/_rels/sheet%d.xml.rels
+type xlsxWorkbookRelation struct {
+	ID         string `xml:"Id,attr"`
+	Target     string `xml:",attr"`
+	Type       string `xml:",attr"`
+	TargetMode string `xml:",attr,omitempty"`
 }
