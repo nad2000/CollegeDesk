@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/tealeg/xlsx"
+	"github.com/nad2000/xlsx"
 )
 
 func TestMerged(t *testing.T) {
