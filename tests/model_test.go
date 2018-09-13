@@ -13,12 +13,12 @@ func TestMerged(t *testing.T) {
 	}
 
 	for _, sheet := range file.Sheets {
-
-		t.Log("***", sheet.Name)
-		for i, row := range sheet.Rows {
-			for j, cell := range row.Cells {
-				t.Logf("[%d,%d]: %s", i, j, cell)
-			}
+		var count int
+		for _, row := range sheet.Rows {
+			count += len(row.Cells)
+		}
+		if expected := 352; expected != count {
+			t.Errorf("Expeced %d cells, got: %d", expected, count)
 		}
 	}
 }

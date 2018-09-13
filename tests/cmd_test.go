@@ -519,7 +519,7 @@ func TestCommenting(t *testing.T) {
 2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
 3: 123 1234 45676756 87585765 5767
 4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123'),
-		('this is not correct, you have selected an extra row in both return and probability which is unwarranted.),
+		('this is not correct, you have selected an extra row in both return and probability which is unwarranted.'),
 		('an extra row has been selected which is not correct, even though your answer is coming correct')`)
 	db.Exec(`
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
