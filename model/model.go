@@ -309,7 +309,7 @@ func (wb *Workbook) Reset() {
 	Db.Where("workbook_id = ?", wb.ID).Delete(Worksheet{})
 }
 
-// ImportComments - import comments form workbook file
+// ImportComments - import comments from workbook file
 func (wb *Workbook) ImportComments(fileName string) (err error) {
 
 	xlsx, err := excelize.OpenFile(fileName)
@@ -1072,7 +1072,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 	wb.ImportCharts(fileName)
-	wb.ImportComments(fileName)
 
 	if _, err := Db.DB().
 		Exec(`
