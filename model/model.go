@@ -526,11 +526,11 @@ func (b Block) TableName() string {
 }
 
 func (b *Block) save() {
-	b.Range = b.innerAddress()
 	if !DryRun {
 		for i := b.s.c; i <= b.e.c; i++ {
 			for j := b.s.r; j <= b.e.r; j++ {
 				address := cellAddress(j, i)
+				address += ":" + address
 				if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
 					empty := Block{WorksheetID: b.WorksheetID, Range: address, Color: b.Color}
 					r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
@@ -545,6 +545,7 @@ func (b *Block) save() {
 			Db.Delete(&Cell{}, "block_id = ?", b.ID)
 			Db.Delete(b)
 		} else {
+			b.Range = b.innerAddress()
 			Db.Save(b)
 		}
 	}
