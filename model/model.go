@@ -913,9 +913,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, isRefere
 	}
 
 	var answerID sql.NullInt64
-	if isReference || len(answerIDs) == 0 {
-		answerID.Valid = false
-	} else if len(answerIDs) > 0 {
+	if !isReference && len(answerIDs) > 0 {
 		answerID = NewNullInt64(answerIDs[0])
 	}
 
