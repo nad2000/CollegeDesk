@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"database/sql"
 	"os"
 	"path"
 	"strings"
@@ -104,10 +105,21 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 	if testing || len(args) > 0 {
 		// read up the file list from the arguments
 		for _, excelFileName := range args {
+			q := model.Question{
+				QuestionType:      "ShortAnswer",
+				QuestionSequence:  0,
+				QuestionText:      "DUMMY",
+				AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
+				MaxScore:          999.99,
+			}
+			if !model.DryRun {
+				Db.FirstOrCreate(&q, &q)
+			}
 			// Create Student answer entry
 			a := model.Answer{
 				ShortAnswer:    excelFileName,
 				SubmissionTime: *parseTime("2017-01-01 14:42"),
+				QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
 			}
 			if !model.DryRun {
 				Db.FirstOrCreate(&a, &a)
@@ -151,8 +163,6 @@ func HandleAnswers(manager s3.FileManager) error {
 		}
 		log.Infof("Processing %q", fileName)
 		model.ExtractBlocksFromFile(fileName, color, force, verbose, false, r.StudentAnswerID)
-
-		Db.Model(&a).UpdateColumns(model.Answer{WasXLProcessed: 1})
 
 		fileCount++
 	}

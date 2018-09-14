@@ -105,12 +105,25 @@ func TestRelativeFormulas(t *testing.T) {
 func TestDemoFile(t *testing.T) {
 	deletData()
 	var wb model.Workbook
+
+	db, _ := model.OpenDb(url)
+	db.Close()
+
+	q := model.Question{
+		QuestionType:      "ShortAnswer",
+		QuestionSequence:  0,
+		QuestionText:      "DUMMY",
+		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
+		MaxScore:          999.99,
+	}
+	db.FirstOrCreate(&q, &q)
+	db.Close()
+
 	cmd.RootCmd.SetArgs([]string{
 		"run", "-U", url, "-t", "-f", "demo.xlsx"})
 	cmd.Execute()
 
-	db, _ := model.OpenDb(url)
-	defer db.Close()
+	db, _ = model.OpenDb(url)
 
 	result := db.First(&wb, "file_name = ?", "demo.xlsx")
 	if result.Error != nil {
@@ -130,6 +143,26 @@ func TestDemoFile(t *testing.T) {
 	db.Model(&model.Cell{}).Count(&count)
 	if expected := 42; count != expected {
 		t.Errorf("Expected %d cells, got: %d", expected, count)
+	}
+
+	db.DB().Exec("UPDATE StudentAnswers SET ShortAnswerText = 'FIRST-DEMO.xlsx'")
+	db.DB().Exec("INSERT INTO Comments (CommentText) VALUES('DUMMY')")
+	db.DB().Exec(`INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
+		SELECT ExcelBlockID, (SELECT CommentID FROM Comments LIMIT 1)
+		FROM ExcelBlocks
+		WHERE color = 'FFFFFF00'`)
+	db.Close()
+
+	cmd.RootCmd.SetArgs([]string{
+		"run", "-U", url, "-t", "-f", "demo.xlsx"})
+	cmd.Execute()
+
+	db, _ = model.OpenDb(url)
+	defer db.Close()
+
+	db.Model(&model.BlockCommentMapping{}).Count(&count)
+	if expected := 6; count != expected {
+		t.Errorf("Expected %d block -> comment mapping entries, got: %d", expected, count)
 	}
 }
 
@@ -341,6 +374,36 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
+	t.Run("HandleQuestions", testHandleQuestions)
+}
+func testHandleQuestions(t *testing.T) {
+
+	var fileID int
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS LastFileID FROM FileSources").Scan(&fileID)
+	f := model.Source{
+		ID:           fileID,
+		FileName:     "merged.xlsx",
+		S3BucketName: "studentanswers",
+		S3Key:        "merged.xlsx",
+	}
+	result := db.Create(&f)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	result = db.Create(&model.Question{
+		SourceID:     model.NewNullInt64(fileID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: "Question wiht merged cells",
+		MaxScore:     8888.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	})
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+
+	tm := testManager{}
+	cmd.HandleQuestions(&tm)
 }
 
 func testQuestions(t *testing.T) {
@@ -440,9 +503,13 @@ func TestCommenting(t *testing.T) {
 			workbook_file_name,
 			StudentAnswerID
 		)
-		SELECT wb.id, 'Sheet1', FileName, sa.StudentAnswerID
+		SELECT wb.id, wsn.Name, FileName, sa.StudentAnswerID
 		FROM FileSources NATURAL JOIN StudentAnswers AS sa
-		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID`)
+		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID,
+		(
+			SELECT 'Sheet1' AS Name
+			UNION SELECT 'Sheet2'
+		) AS wsn`)
 	db.Exec(`
 		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
 		SELECT id, r.v
@@ -452,6 +519,9 @@ func TestCommenting(t *testing.T) {
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
 			UNION SELECT 'D2:F1'
+			UNION SELECT 'C2:F1'
+			UNION SELECT 'C12:E21'
+			UNION SELECT 'C13:D16'
 		) AS r
 		WHERE b.ExcelBlockID IS NULL`)
 
@@ -467,12 +537,17 @@ func TestCommenting(t *testing.T) {
 		WHERE QuestionID % 2 != AssignmentID % 2`)
 	db.Exec(`
 		INSERT INTO Comments (CommentText)
-		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3')`)
+		VALUES ('COMMENT #1'), ('COMMENT #2'), ('COMMENT #3'), ('MULTILINE COMMENT:
+2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
+3: 123 1234 45676756 87585765 5767
+4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123'),
+		('this is not correct, you have selected an extra row in both return and probability which is unwarranted.'),
+		('an extra row has been selected which is not correct, even though your answer is coming correct')`)
 	db.Exec(`
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, CommentID
 		FROM ExcelBlocks AS b, Comments AS c
-		WHERE c.CommentID % 3 = b.ExcelBlockID % 3`)
+		WHERE c.CommentID %  8 = b.ExcelBlockID %  8`)
 
 	var assignment model.Assignment
 	db.First(&assignment, "State = ?", "GRADED")
@@ -512,11 +587,25 @@ func TestCommenting(t *testing.T) {
 				bcm := model.BlockCommentMapping{Block: block, Comment: comment}
 				db.Create(&bcm)
 			}
-			for i, r := range []string{"A1", "C3", "D2:F13"} {
+			for i, r := range []string{"A1", "C3", "D2:F13", "C2:F14", "C12:E21", "C13:D16"} {
 				block := model.Block{Worksheet: sheet, Range: r, Formula: fmt.Sprintf("FORMULA #%d", i)}
 				db.Create(&block)
+				var ct string
 				if !isIndirect {
-					comment := model.Comment{Text: fmt.Sprintf("*** Comment in %q for the range %q", sn, r)}
+					switch {
+					case i < 3:
+						ct = fmt.Sprintf("*** Comment in %q for the range %q", sn, r)
+					case i == 4:
+						ct = `MULTILINE COMMENT:
+2: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC
+3: 123 1234 45676756 87585765 5767
+4: 1234567890ABCDEF ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC ABC 123`
+					case i == 5:
+						ct = "this is not correct, you have selected an extra row in both return and probability which is unwarranted."
+					default:
+						ct = "an extra row has been selected which is not correct, even though your answer is coming correct"
+					}
+					comment := model.Comment{Text: ct}
 					db.Create(&comment)
 					bcm := model.BlockCommentMapping{Block: block, Comment: comment}
 					db.Create(&bcm)
