@@ -526,9 +526,27 @@ func (b Block) TableName() string {
 }
 
 func (b *Block) save() {
-	b.Range = b.address()
+	b.Range = b.innerAddress()
 	if !DryRun {
-		Db.Save(b)
+		for i := b.s.c; i <= b.e.c; i++ {
+			for j := b.s.r; j <= b.e.r; j++ {
+				address := cellAddress(j, i)
+				if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
+					empty := Block{WorksheetID: b.WorksheetID, Range: address, Color: b.Color}
+					r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
+						First(&empty)
+					if r.RecordNotFound() {
+						Db.Create(&empty)
+					}
+				}
+			}
+		}
+		if b.isEmpty {
+			Db.Delete(&Cell{}, "block_id = ?", b.ID)
+			Db.Delete(b)
+		} else {
+			Db.Save(b)
+		}
 	}
 }
 
@@ -563,7 +581,6 @@ func cellValue(cell *xlsx.Cell) (value string) {
 	} else {
 		value = cell.Value
 	}
-	//fmt.Println("=============================================\n\n", value, cell)
 	return
 }
 
@@ -1082,7 +1099,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	// Comments that should be linked with the file:
-	const commentsToMapSql = `
+	const commentsToMapSQL = `
 	SELECT
 		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
 	-- Newly added/processed answers
@@ -1113,7 +1130,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	sql := `
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, ExcelCommentID FROM (` +
-		commentsToMapSql + ") AS c"
+		commentsToMapSQL + ") AS c"
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
@@ -1124,7 +1141,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (` +
-		commentsToMapSql + ") AS c"
+		commentsToMapSQL + ") AS c"
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
