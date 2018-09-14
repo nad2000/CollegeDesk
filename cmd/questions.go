@@ -73,7 +73,7 @@ func HandleQuestions(manager s3.FileManager) error {
 		err = q.ImportFile(fileName)
 		if err != nil {
 			log.Errorf(
-				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error.Error())
+				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error)
 			continue
 		}
 		q.IsProcessed = true

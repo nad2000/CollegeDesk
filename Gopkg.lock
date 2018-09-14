@@ -10,7 +10,7 @@
   version = "v1.0.6"
 
 [[projects]]
-  digest = "1:11706047514df7b24864417d921a9016d3345c133616956c4a0a0b418edffa5b"
+  digest = "1:e5110c9cfdd205490341bacf2fc3cd97ecdc6d63d838c81696447d14e0dd20f8"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -48,8 +48,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "9333060a8d957db41bff1c80603a802aa674fad8"
-  version = "v1.15.30"
+  revision = "10d5f1478e28a17062fd79617a8022f5499462d5"
+  version = "v1.15.34"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -178,19 +178,19 @@
 
 [[projects]]
   branch = "issues/238"
-  digest = "1:ed8ea2f024d0303ec7224b9815bd0b3c5cf91ea378f2a83742a9673855394fd2"
+  digest = "1:c1e6c244ded047ba0357877e80532ae3085735fe55ffcf9d2b7d47a91ed2f11b"
   name = "github.com/nad2000/excelize"
   packages = ["."]
   pruneopts = "UT"
-  revision = "8b31c59ebefdb22e6922243c865787442900cfcb"
+  revision = "cb1b3ce9bb90fe5a32246cfa0667c1d80e5383b1"
 
 [[projects]]
   branch = "cell-comment-reading"
-  digest = "1:405ea246217514a77b09aa83c90b81250c073d688711ebf64bd60c29267b97ad"
+  digest = "1:2057d7530b78350538420e68c01739324bfbd6e71685c7a0773adef89f4cd3fd"
   name = "github.com/nad2000/xlsx"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5cea7d05a5eb7c8add5e7f93b72fc6cb4d918fbb"
+  revision = "25aeb379f2c1653e074a13da12c7a8995c890607"
 
 [[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
@@ -201,15 +201,15 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:bd1ae00087d17c5a748660b8e89e1043e1e5479d0fea743352cda2f8dd8c4f84"
+  digest = "1:6a4a11ba764a56d2758899ec6f3848d24698d48442ebce85ee7a3f63284526cd"
   name = "github.com/spf13/afero"
   packages = [
     ".",
     "mem",
   ]
   pruneopts = "UT"
-  revision = "787d034dfe70e44075ccc060d346146ef53270ad"
-  version = "v1.1.1"
+  revision = "d40851caa0d747393da1ffb28f7f9d8b4eeffebd"
+  version = "v1.1.2"
 
 [[projects]]
   digest = "1:516e71bed754268937f57d4ecb190e01958452336fa73dbac880894164e91c1f"
@@ -228,12 +228,12 @@
   version = "v0.0.3"
 
 [[projects]]
-  branch = "master"
-  digest = "1:8a020f916b23ff574845789daee6818daf8d25a4852419aae3f0b12378ba432a"
+  digest = "1:68ea4e23713989dc20b1bded5d9da2c5f9be14ff9885beef481848edd18c26cb"
   name = "github.com/spf13/jwalterweatherman"
   packages = ["."]
   pruneopts = "UT"
-  revision = "14d3d4c518341bea657dd8a226f5121c0ff8c9f2"
+  revision = "4a4406e478ca629068e7768fc33f3f044173c0a6"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:dab83a1bbc7ad3d7a6ba1a1cc1760f25ac38cdf7d96a5cdd55cd915a4f5ceaf9"
@@ -244,12 +244,20 @@
   version = "v1.0.2"
 
 [[projects]]
-  digest = "1:4fc8a61287ccfb4286e1ca5ad2ce3b0b301d746053bf44ac38cf34e40ae10372"
+  digest = "1:6e30a27eac59a148b3f7a32e0ba54706b31dcde5a42f63b22cb47873b62fa343"
   name = "github.com/spf13/viper"
   packages = ["."]
   pruneopts = "UT"
-  revision = "907c19d40d9a6c9bb55f040ff4ae45271a4754b9"
-  version = "v1.1.0"
+  revision = "8fb642006536c8d3760c99d4fa2389f5e2205631"
+  version = "v1.2.0"
+
+[[projects]]
+  digest = "1:e60f2f1cd2e8dfdea48c2440c303d103266e754ab1d8b75796a4e4caddb7a68c"
+  name = "github.com/tealeg/xlsx"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "8be35264fa75a1bbe954ce51eba04f273e2c59e5"
+  version = "v1.0.3"
 
 [[projects]]
   branch = "master"
@@ -257,18 +265,18 @@
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
   pruneopts = "UT"
-  revision = "0709b304e793a5edb4a2c0145f281ecdc20838a4"
+  revision = "0e37d006457bf46f9e6692014ba72ef82c33022c"
 
 [[projects]]
   branch = "master"
-  digest = "1:eb687625ffed87cbfa4d219ddb6c344bd9d0dc5900e461b86269373470534bae"
+  digest = "1:374fc90fcb026e9a367e3fad29e988e5dd944b68ca3f24a184d77abc5307dda4"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "8cf3aee429924738c56c34bb819c4ea8273fc434"
+  revision = "d0be0721c37eeb5299f245a996a483160fc36940"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
@@ -320,6 +328,7 @@
     "github.com/nad2000/xlsx",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
+    "github.com/tealeg/xlsx",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
