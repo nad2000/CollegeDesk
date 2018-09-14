@@ -15,13 +15,10 @@
 package cmd
 
 import (
-	"database/sql"
 	"os"
-	"path"
 	"strings"
 
 	model "extract-blocks/model"
-	"extract-blocks/s3"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
@@ -44,7 +41,7 @@ var (
 	awsRegion          string
 	awsSecretAccessKey string
 	cfgFile            string
-	color              string
+	color              = defaultColor
 	debug              bool
 	debugLevel         int
 	dest               string
@@ -85,92 +82,6 @@ func getConfig() {
 	if !strings.HasPrefix(dest, "/") {
 		dest += "/"
 	}
-}
-
-func extractBlocks(cmd *cobra.Command, args []string) {
-
-	getConfig()
-	debugCmd(cmd)
-
-	var err error
-
-	Db, err = model.OpenDb(url)
-	if err != nil {
-		log.Error(err)
-		log.Fatalf("failed to connect database %q", url)
-	}
-	defer Db.Close()
-	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
-
-	if testing || len(args) > 0 {
-		// read up the file list from the arguments
-		for _, excelFileName := range args {
-			q := model.Question{
-				QuestionType:      "ShortAnswer",
-				QuestionSequence:  0,
-				QuestionText:      "DUMMY",
-				AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
-				MaxScore:          999.99,
-			}
-			if !model.DryRun {
-				Db.FirstOrCreate(&q, &q)
-			}
-			// Create Student answer entry
-			a := model.Answer{
-				ShortAnswer:    excelFileName,
-				SubmissionTime: *parseTime("2017-01-01 14:42"),
-				QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
-			}
-			if !model.DryRun {
-				Db.FirstOrCreate(&a, &a)
-			}
-			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, false, a.ID)
-		}
-	} else {
-		manager := createS3Manager()
-		HandleAnswers(manager)
-	}
-}
-
-// HandleAnswers - iterates through student answers and retrievs answer workbooks
-// it thaks the funcion that actuatualy performs file download from S3 bucket
-// and returns the downloades file name or an error.
-func HandleAnswers(manager s3.FileManager) error {
-
-	rows, err := model.RowsToProcess()
-	if err != nil {
-		log.Fatalf("Failed to retrieve list of source files to process: %s", err.Error())
-	}
-	var fileCount int
-	for _, r := range rows {
-		var a model.Answer
-		err = Db.First(&a, r.StudentAnswerID).Error
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		destinationName := path.Join(dest, r.FileName)
-		log.Infof(
-			"Downloading %q (%q) form %q into %q",
-			r.S3Key, r.FileName, r.S3BucketName, destinationName)
-		fileName, err := manager.Download(
-			r.FileName, r.S3BucketName, r.S3Key, destinationName)
-		if err != nil {
-			log.Errorf(
-				"Failed to retrieve file %q from %q into %q: %s",
-				r.S3Key, r.S3BucketName, destinationName, err.Error())
-			continue
-		}
-		log.Infof("Processing %q", fileName)
-		model.ExtractBlocksFromFile(fileName, color, force, verbose, false, r.StudentAnswerID)
-
-		fileCount++
-	}
-	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
-	if len(rows) != fileCount {
-		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
-	}
-	return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
