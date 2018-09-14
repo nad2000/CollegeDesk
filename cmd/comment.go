@@ -90,7 +90,7 @@ func AddComments(fileNames ...string) {
 	var book model.Workbook
 	base := filepath.Base(fileName)
 	Db.First(&book, "file_name LIKE ?", "%"+base)
-	if err := addCommentsToFile(book.AnswerID, fileName, outputName); err != nil {
+	if err := addCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }
@@ -127,7 +127,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
 		outputName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_Reviewed"+extension)
 
-		if err := addCommentsToFile(a.ID, fileName, outputName); err != nil {
+		if err := addCommentsToFile(a.ID, fileName, outputName, true); err != nil {
 			log.Errorln(err)
 		}
 
@@ -220,12 +220,15 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 }
 
 // addCommentsToFile addes chart properties and comments to the answer files.
-func addCommentsToFile(answerID int, fileName, outputName string) error {
+func addCommentsToFile(answerID int, fileName, outputName string, deleteComments bool) error {
 
 	// Iterate via assosiated comments and add them to the file
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
 		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+	}
+	if deleteComments {
+		model.DeleteAllComments(file)
 	}
 	if err := addChartProperties(file, answerID); err != nil {
 		return err
