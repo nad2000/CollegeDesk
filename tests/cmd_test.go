@@ -324,6 +324,51 @@ func testImportFile(t *testing.T) {
 
 }
 
+func testHandleNotcolored(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	assignment := model.Assignment{
+		Title: "Test handle answers without the colorcodes...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{"answer.xlsx", "answer.nocolor.xlsx"} {
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		a := model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-14 14:42"),
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, false, a.ID)
+	}
+	// var count int
+	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	// if expected := 8; count != expected {
+	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
+	// }
+
+}
+
 func testRowsToProcess(t *testing.T) {
 
 	rows, _ := model.RowsToProcess()
@@ -372,6 +417,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("ImportFile", testImportFile)
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("HandleAnswers", testHandleAnswers)
+	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
