@@ -122,8 +122,7 @@ func (Question) TableName() string {
 
 // ImportFile imports form Excel file QuestionExcleData
 func (q *Question) ImportFile(fileName string) error {
-	xlFile, err := xlsx.OpenFile(fileName)
-
+	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		return err
 	}
@@ -132,7 +131,7 @@ func (q *Question) ImportFile(fileName string) error {
 		log.Infof("Processing workbook: %s", fileName)
 	}
 
-	for _, sheet := range xlFile.Sheets {
+	for _, sheet := range file.Sheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -350,14 +349,14 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 // ImportCharts - import charts form workbook file
 func (wb *Workbook) ImportCharts(fileName string) {
 
-	xlFile, err := excelize.OpenFile(fileName)
+	file, err := excelize.OpenFile(fileName)
 	if err != nil {
 		log.Errorf("Failed to open file %q", fileName)
 		log.Errorln(err)
 		return
 	}
 
-	for _, sheet := range xlFile.WorkBook.Sheets.Sheet {
+	for _, sheet := range file.WorkBook.Sheets.Sheet {
 		var ws Worksheet
 		result := Db.First(&ws, Worksheet{
 			Name:       sheet.Name,
@@ -380,16 +379,16 @@ func (wb *Workbook) ImportCharts(fileName string) {
 		}
 
 		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
-		sheetRels := unmarshalRelationships(xlFile.XLSX[name])
+		sheetRels := unmarshalRelationships(file.XLSX[name])
 		for _, r := range sheetRels.Relationships {
 			if strings.Contains(r.Target, "drawings/drawing") {
 				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
-				drawing := unmarshalDrawing(xlFile.XLSX["xl/drawings/"+filepath.Base(r.Target)])
-				drawingRels := unmarshalRelationships(xlFile.XLSX[name])
+				drawing := unmarshalDrawing(file.XLSX["xl/drawings/"+filepath.Base(r.Target)])
+				drawingRels := unmarshalRelationships(file.XLSX[name])
 				for _, dr := range drawingRels.Relationships {
 					if strings.Contains(dr.Target, "charts/chart") {
 						chartName := "xl/charts/" + filepath.Base(dr.Target)
-						chart := UnmarshalChart(xlFile.XLSX[chartName])
+						chart := UnmarshalChart(file.XLSX[chartName])
 						chartTitle := chart.Title.Value()
 						log.Debugf("*** %s: %#v", chartName, chart)
 						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
@@ -745,9 +744,9 @@ func (AnswerComment) TableName() string {
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
-	AssignmentID uint `gorm:"column:AssignmentID"`
+	AssignmentID int `gorm:"column:AssignmentID;type:uint"`
 	Question     Question
-	QuestionID   uint `gorm:"column:QuestionID"`
+	QuestionID   int `gorm:"column:QuestionID;type:uint"`
 }
 
 // TableName overrides default table name for the model
@@ -899,15 +898,32 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook) {
-	xlFile, err := xlsx.OpenFile(fileName)
-	if err != nil {
-		log.Fatal(err)
-	}
+func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook, err error) {
 
-	var answerID int
+	var (
+		answerID int
+		answer   Answer
+	)
 	if len(answerIDs) > 0 {
 		answerID = int(answerIDs[0])
+	}
+	res := Db.First(&answer, answerID)
+	if res.RecordNotFound() {
+		err = fmt.Errorf("Answer (ID: %d) not found.", answerID)
+		log.Error(err.Error())
+		return
+	}
+	defer func() {
+		res := Db.Model(&answer).UpdateColumn("was_xl_processed", 1)
+		if res.Error != nil {
+			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+		}
+	}()
+
+	file, err := xlsx.OpenFile(fileName)
+	if err != nil {
+		log.Errorf("Failed to open the file %q: %s", fileName, err.Error())
+		return
 	}
 
 	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
@@ -936,7 +952,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
 
-	for _, sheet := range xlFile.Sheets {
+	for _, sheet := range file.Sheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -1016,14 +1032,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 	wb.ImportCharts(fileName)
-
-	if _, err := Db.DB().
-		Exec(`
-			UPDATE StudentAnswers
-			SET was_xl_processed = 1
-			WHERE StudentAnswerID = ?`, answerID); err != nil {
-		log.Errorf("Failed to update the answer entry: %s", err.Error())
-	}
 
 	// Comments that should be linked with the file:
 	const commentsToMapSql = `

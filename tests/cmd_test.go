@@ -353,7 +353,9 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 	t.Run("HandleQuestions", testHandleQuestions)
+	t.Run("CurruptedFiles", testCorruptedFiles)
 }
+
 func testHandleQuestions(t *testing.T) {
 
 	var fileID int
@@ -382,6 +384,61 @@ func testHandleQuestions(t *testing.T) {
 
 	tm := testManager{}
 	cmd.HandleQuestions(&tm)
+}
+
+func testCorruptedFiles(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 77,
+		QuestionText:     "Test handle answers without the colorcodes...",
+		MaxScore:         7777.77,
+		AuthorUserID:     987654321,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	assignment := model.Assignment{
+		Title: "Test handle answers without the colorcodes...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{"corrupt1.xlsx", "corrupt2.xlsx", "demo.xlsx"} {
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		a := model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-14 14:42"),
+		}
+		db.Create(&a)
+	}
+	// model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, false, a.ID)
+
+	// var count int
+	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	// if expected := 8; count != expected {
+	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
+	// }
+	var countBefore, countAfter int
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countBefore)
+	tm := testManager{}
+	cmd.HandleAnswers(&tm)
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
+	if countBefore <= countAfter {
+		t.Errorf(
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			countBefore, countAfter)
+	}
+
 }
 
 func testQuestions(t *testing.T) {
