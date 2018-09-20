@@ -10,7 +10,7 @@
   version = "v1.0.6"
 
 [[projects]]
-  digest = "1:e5110c9cfdd205490341bacf2fc3cd97ecdc6d63d838c81696447d14e0dd20f8"
+  digest = "1:0076822c88267b829e770eb952592e7960987420ed6cdd0a66cea683da1357d7"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -48,8 +48,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "10d5f1478e28a17062fd79617a8022f5499462d5"
-  version = "v1.15.34"
+  revision = "949f7800d745d1df9af349380e5deec8de206144"
+  version = "v1.15.38"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -186,11 +186,11 @@
 
 [[projects]]
   branch = "cell-comment-reading"
-  digest = "1:2057d7530b78350538420e68c01739324bfbd6e71685c7a0773adef89f4cd3fd"
+  digest = "1:4016c3d7a1059eb40943ee07ca8c30d75c94293baa2d72ad6ef6270426081dae"
   name = "github.com/nad2000/xlsx"
   packages = ["."]
   pruneopts = "UT"
-  revision = "25aeb379f2c1653e074a13da12c7a8995c890607"
+  revision = "a604e89c62060741d244fcc495940e67fb50b88d"
 
 [[projects]]
   digest = "1:95741de3af260a92cc5c7f3f3061e85273f5a81b5db20d4bd68da74bd521675e"
@@ -252,14 +252,6 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:e60f2f1cd2e8dfdea48c2440c303d103266e754ab1d8b75796a4e4caddb7a68c"
-  name = "github.com/tealeg/xlsx"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "8be35264fa75a1bbe954ce51eba04f273e2c59e5"
-  version = "v1.0.3"
-
-[[projects]]
   branch = "master"
   digest = "1:3f3a05ae0b95893d90b9b3b5afdb79a9b3d96e4e36e099d841ae602e4aca0da8"
   name = "golang.org/x/crypto"
@@ -269,14 +261,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:374fc90fcb026e9a367e3fad29e988e5dd944b68ca3f24a184d77abc5307dda4"
+  digest = "1:3bb4674103eef9bf860b88e59048c67ad646de4274ea7de8d71d16e9f8209bff"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "d0be0721c37eeb5299f245a996a483160fc36940"
+  revision = "d641721ec2dead6fe5ca284096fe4b1fcd49e427"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
@@ -298,8 +290,8 @@
   name = "google.golang.org/appengine"
   packages = ["cloudsql"]
   pruneopts = "UT"
-  revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
-  version = "v1.1.0"
+  revision = "ae0ab99deb4dc413a2b4bd6c8bdd0eb67f1e4d06"
+  version = "v1.2.0"
 
 [[projects]]
   digest = "1:342378ac4dcb378a5448dd723f0784ae519383532f5e70ade24132c4c8693202"
@@ -328,7 +320,6 @@
     "github.com/nad2000/xlsx",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
-    "github.com/tealeg/xlsx",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
