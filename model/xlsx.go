@@ -124,8 +124,8 @@ type xlsxPlotArea struct {
 	Chart           xlsxAnyChart `xml:",any"`
 }
 
-// xlsxBareChart - minial requiered implementation of the Chart object
-type xlsxBareChart struct {
+// XlsxBareChart - minial requiered implementation of the Chart object
+type XlsxBareChart struct {
 	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/drawingml/2006/chart chartSpace"`
 	// XMLNSc         string          `xml:"xmlns:c,attr"`
 	// XMLNSa         string          `xml:"xmlns:a,attr"`
@@ -144,7 +144,7 @@ type xlsxBareChart struct {
 }
 
 // ItemCount - shortcut for number of itmems displayed
-func (c *xlsxBareChart) ItemCount() int {
+func (c *XlsxBareChart) ItemCount() int {
 	chart := c.PlotArea.Chart
 	if chart.CategoryCount.Value > chart.XPointCount.Value {
 		return chart.CategoryCount.Value
@@ -153,7 +153,7 @@ func (c *xlsxBareChart) ItemCount() int {
 }
 
 // Type - chart type - short-cut
-func (c *xlsxBareChart) Type() string {
+func (c *XlsxBareChart) Type() string {
 	fromElementName := strings.Title(strings.TrimSuffix(c.PlotArea.Chart.XMLName.Local, "Chart"))
 	if fromElementName == "Bar" && c.PlotArea.Chart.BarDir.Value == "col" {
 		return "Column"
@@ -162,7 +162,7 @@ func (c *xlsxBareChart) Type() string {
 }
 
 // XLabel - X-axis title
-func (c *xlsxBareChart) XLabel() string {
+func (c *XlsxBareChart) XLabel() string {
 	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
 		return c.PlotArea.ValAxes[0].Title.Value()
 	}
@@ -173,7 +173,7 @@ func (c *xlsxBareChart) XLabel() string {
 }
 
 // YLabel - Y-axis title
-func (c *xlsxBareChart) YLabel() string {
+func (c *XlsxBareChart) YLabel() string {
 	if c.PlotArea.ValAxes != nil {
 		if len(c.PlotArea.ValAxes) > 1 {
 			return c.PlotArea.ValAxes[1].Title.Value()
@@ -184,7 +184,7 @@ func (c *xlsxBareChart) YLabel() string {
 }
 
 // XMinValue - X-axis min value
-func (c *xlsxBareChart) XMinValue() string {
+func (c *XlsxBareChart) XMinValue() string {
 	if c.PlotArea.ValAxes != nil {
 		return c.PlotArea.ValAxes[0].Min.Value
 	}
@@ -192,7 +192,7 @@ func (c *xlsxBareChart) XMinValue() string {
 }
 
 // XMaxValue - X-axis max value
-func (c *xlsxBareChart) XMaxValue() string {
+func (c *XlsxBareChart) XMaxValue() string {
 	if c.PlotArea.ValAxes != nil {
 		return c.PlotArea.ValAxes[0].Max.Value
 	}
@@ -200,7 +200,7 @@ func (c *xlsxBareChart) XMaxValue() string {
 }
 
 // YMinValue - Y-axis min value
-func (c *xlsxBareChart) YMinValue() string {
+func (c *XlsxBareChart) YMinValue() string {
 	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
 		return c.PlotArea.ValAxes[1].Min.Value
 	}
@@ -208,7 +208,7 @@ func (c *xlsxBareChart) YMinValue() string {
 }
 
 // YMaxValue - Y-axis max value
-func (c *xlsxBareChart) YMaxValue() string {
+func (c *XlsxBareChart) YMaxValue() string {
 	if c.PlotArea.ValAxes != nil && len(c.PlotArea.ValAxes) > 1 {
 		return c.PlotArea.ValAxes[1].Max.Value
 	}
@@ -235,7 +235,8 @@ func unmarshalRelationships(fileContent []byte) (content xlsxRelationships) {
 	return
 }
 
-func UnmarshalChart(fileContent []byte) (content xlsxBareChart) {
+// UnmarshalChart unmarshals the chart data
+func UnmarshalChart(fileContent []byte) (content XlsxBareChart) {
 	xml.Unmarshal(fileContent, &content)
 	return
 }

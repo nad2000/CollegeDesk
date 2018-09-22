@@ -229,7 +229,7 @@ func createTestDB() *gorm.DB {
 		}
 		db.Create(&q)
 		db.Create(&model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
@@ -237,7 +237,7 @@ func createTestDB() *gorm.DB {
 
 	ignore := model.Source{FileName: "ignore.abc"}
 	db.Create(&ignore)
-	db.Create(&model.Answer{SourceID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+	db.Create(&model.Answer{SourceID: model.NewNullInt64(ignore.ID), SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	//db.LogMode(true)
 	var fileID int
@@ -415,7 +415,7 @@ func testCorruptedFiles(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
@@ -438,6 +438,16 @@ func testCorruptedFiles(t *testing.T) {
 		t.Errorf(
 			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
 			countBefore, countAfter)
+	}
+	var answerCount int
+	if err := db.DB().QueryRow(`
+			SELECT COUNT(*) FROM StudentAnswers AS a
+			WHERE a.FileID IS NULL
+			  AND a.was_xl_processed = 0`).Scan(&answerCount); err != nil {
+		t.Error(err)
+	}
+	if answerCount != 2 {
+		t.Errorf("Expecte 2 answers rejected: %d", answerCount)
 	}
 
 }
@@ -603,7 +613,7 @@ func TestCommenting(t *testing.T) {
 		db.Create(&f)
 		answer := model.Answer{
 			AssignmentID:   assignment.ID,
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			QuestionID:     sql.NullInt64{Int64: int64(question.ID), Valid: true},
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		}

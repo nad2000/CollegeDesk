@@ -178,7 +178,7 @@ type QuestionExcelData struct {
 	ID         int    `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
 	SheetName  string `gorm:"column:SheetName"`
 	CellRange  string `gorm:"column:CellRange"`
-	Value      string `gorm:"column:Value"`
+	Value      string `gorm:"column:Value;size:2000"`
 	Comment    string `gorm:"column:Comment"`
 	Formula    string `gorm:"column:Formula"`
 	Question   Question
@@ -233,7 +233,7 @@ type Answer struct {
 	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
-	SourceID            int           `gorm:"column:FileID"`
+	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64   `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8           `gorm:"type:tinyint unsigned;default:0"`
@@ -762,7 +762,7 @@ type MySQLQuestion struct {
 	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
 	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
-	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
+	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
 	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
@@ -792,9 +792,9 @@ func (Comment) TableName() string {
 // BlockCommentMapping - block-comment mapping
 type BlockCommentMapping struct {
 	Block     Block
-	BlockID   uint `gorm:"column:ExcelBlockID"`
+	BlockID   int `gorm:"column:ExcelBlockID;type:int unsigned"`
 	Comment   Comment
-	CommentID uint `gorm:"column:ExcelCommentID"`
+	CommentID int `gorm:"column:ExcelCommentID;type:int unsigned"`
 }
 
 // TableName overrides default table name for the model
@@ -818,9 +818,9 @@ func (AnswerComment) TableName() string {
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
-	AssignmentID int `gorm:"column:AssignmentID;type:uint"`
+	AssignmentID int `gorm:"column:AssignmentID;type:int unsigned"`
 	Question     Question
-	QuestionID   int `gorm:"column:QuestionID;type:uint"`
+	QuestionID   int `gorm:"column:QuestionID;type:int unsigned"`
 }
 
 // TableName overrides default table name for the model
@@ -988,20 +988,26 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 	res := Db.First(&answer, answerID)
 	if res.RecordNotFound() {
-		err = fmt.Errorf("Answer (ID: %d) not found.", answerID)
+		err = fmt.Errorf("Answer (ID: %d) not found", answerID)
 		log.Error(err.Error())
 		return
 	}
-	defer func() {
-		res := Db.Model(&answer).UpdateColumn("was_xl_processed", 1)
-		if res.Error != nil {
-			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
-		}
-	}()
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		log.Errorf("Failed to open the file %q: %s", fileName, err.Error())
+		log.Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt: %s",
+			fileName, answerID, err.Error())
+		Db.LogMode(true)
+		res := Db.Model(&answer).Updates(map[string]interface{}{
+			"was_xl_processed": 0,
+			"FileID":           gorm.Expr("NULL"),
+		})
+		Db.LogMode(false)
+		// res := Db.Model(&answer).UpdateColumns(
+		// 	Answer{SourceID: sql.NullInt64{}, WasXLProcessed: 0})
+		if res.Error != nil {
+			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+		}
 		return
 	}
 
@@ -1162,6 +1168,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
 	}
 
+	res = Db.Model(&answer).UpdateColumn("was_xl_processed", 1)
+	if res.Error != nil {
+		log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+	}
 	return
 }
 
