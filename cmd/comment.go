@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -28,6 +29,8 @@ import (
 	"github.com/nad2000/xlsx"
 	"github.com/spf13/cobra"
 )
+
+var assignmentID int
 
 // commentCmd represents the comment command
 var commentCmd = &cobra.Command{
@@ -43,6 +46,12 @@ the new file will be stored with the given name.`,
 		debugCmd(cmd)
 
 		var err error
+		assignmentID, err = strconv.Atoi(flagString(cmd, "assignment"))
+		if err != nil {
+			log.Error(err)
+			assignmentID = -1
+		}
+
 		Db, err = model.OpenDb(url)
 		if err != nil {
 			log.Error(err)
@@ -64,6 +73,8 @@ the new file will be stored with the given name.`,
 
 func init() {
 	RootCmd.AddCommand(commentCmd)
+	flags := commentCmd.Flags()
+	flags.IntP("assignment", "a", -1, "The assignment ID to process.")
 }
 
 // AddComments addes comments to the given file from the DB and stores file with the given name
@@ -87,7 +98,7 @@ func AddComments(fileNames ...string) {
 // AddCommentsInBatch addes comments to the answer files.
 func AddCommentsInBatch(manager s3.FileManager) error {
 
-	rows, err := model.RowsToComment()
+	rows, err := model.RowsToComment(assignmentID)
 	if err != nil {
 		log.Fatalf("Failed to retrieve list of question source files to process: %s",
 			err.Error())
