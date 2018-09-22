@@ -508,8 +508,10 @@ type Block struct {
 	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
 	ChartID         sql.NullInt64
 
-	s struct{ r, c int } `gorm:"-"` // Top-left cell
-	e struct{ r, c int } `gorm:"-"` //  Bottom-right cell
+	s       struct{ r, c int }           `gorm:"-"` // Top-left cell
+	e       struct{ r, c int }           `gorm:"-"` // Bottom-right cell
+	i       struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
+	isEmpty bool                         `gorm:"-"` // All block cells are empty
 }
 
 func (b Block) String() string {
@@ -523,14 +525,37 @@ func (b Block) TableName() string {
 }
 
 func (b *Block) save() {
-	b.Range = b.address()
 	if !DryRun {
-		Db.Save(b)
+		for i := b.s.c; i <= b.e.c; i++ {
+			for j := b.s.r; j <= b.e.r; j++ {
+				address := cellAddress(j, i)
+				address += ":" + address
+				if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
+					empty := Block{WorksheetID: b.WorksheetID, Range: address, Color: b.Color}
+					r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
+						First(&empty)
+					if r.RecordNotFound() {
+						Db.Create(&empty)
+					}
+				}
+			}
+		}
+		if b.isEmpty {
+			Db.Delete(&Cell{}, "block_id = ?", b.ID)
+			Db.Delete(b)
+		} else {
+			b.Range = b.innerAddress()
+			Db.Save(b)
+		}
 	}
 }
 
 func (b *Block) address() string {
 	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
+}
+
+func (b *Block) innerAddress() string {
+	return cellAddress(b.i.sr, b.i.sc) + ":" + cellAddress(b.i.er, b.i.ec)
 }
 
 //  getCellComment returns cell comment text value
@@ -543,6 +568,20 @@ func getCellComment(file *xlsx.File, cellID string) string {
 		}
 	}
 	return ""
+}
+
+// cellValue returns cell value
+func cellValue(cell *xlsx.Cell) (value string) {
+	var err error
+	if cell.Type() == 2 {
+		if value, err = cell.FormattedValue(); err != nil {
+			log.Error(err.Error())
+			value = cell.Value
+		}
+	} else {
+		value = cell.Value
+	}
+	return
 }
 
 // fildWhole finds whole range of the specified color
@@ -559,7 +598,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
-		//log.Infof("*** b.e.c: %d, len: %d, %#v", b.e.c, len(row.Cells), row.Cells)
 		if len(row.Cells) <= b.e.c ||
 			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
 			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
@@ -586,30 +624,22 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				if ok {
 					commentText = comment.Text
 				}
-				var value string
-				var err error
-				if cell.Type() == 2 {
-					if value, err = cell.FormattedValue(); err != nil {
-						log.Error(err.Error())
-						value = cell.Value
+				if value := cellValue(cell); value != "" {
+					c := Cell{
+						BlockID:     b.ID,
+						WorksheetID: b.WorksheetID,
+						Formula:     cell.Formula(),
+						Value:       value,
+						Range:       cellID,
+						Comment:     commentText,
 					}
-				} else {
-					value = cell.Value
-				}
-				c := Cell{
-					BlockID:     b.ID,
-					WorksheetID: b.WorksheetID,
-					Formula:     cell.Formula(),
-					Value:       value,
-					Range:       cellID,
-					Comment:     commentText,
-				}
-				if DebugLevel > 1 {
-					log.Debugf("Inserting %#v", c)
-				}
-				Db.Create(&c)
-				if Db.Error != nil {
-					log.Error("Error occured: ", Db.Error.Error())
+					if DebugLevel > 1 {
+						log.Debugf("Inserting %#v", c)
+					}
+					Db.Create(&c)
+					if Db.Error != nil {
+						log.Error("Error occured: ", Db.Error.Error())
+					}
 				}
 				b.e.c = j
 			} else {
@@ -621,6 +651,50 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			}
 		}
 	}
+
+	sr, sc, er, ec := b.s.r, b.s.c, b.e.r, b.e.c
+	for sc <= ec {
+		for r := sr; r <= er; r++ {
+			if value := cellValue(sheet.Cell(r, sc)); value != "" {
+				goto RIGHT_COL
+			}
+		}
+		sc++
+	}
+	if sc > ec {
+		b.isEmpty = true
+		return
+	}
+
+RIGHT_COL:
+	for ec >= sc {
+		for r := sr; r <= er; r++ {
+			if value := cellValue(sheet.Cell(r, ec)); value != "" {
+				goto TOP_ROW
+			}
+		}
+		ec--
+	}
+TOP_ROW:
+	for sr <= er {
+		for c := sc; c <= ec; c++ {
+			if value := cellValue(sheet.Cell(sr, c)); value != "" {
+				goto BOTTOM_ROW
+			}
+		}
+		sr++
+	}
+BOTTOM_ROW:
+	for er >= sr {
+		for c := sc; c <= ec; c++ {
+			if value := cellValue(sheet.Cell(er, c)); value != "" {
+				goto FOUND
+			}
+		}
+		er--
+	}
+FOUND:
+	b.i.sr, b.i.sc, b.i.er, b.i.ec = sr, sc, er, ec
 }
 
 // IsInside tests if the cell with given coordinates is inside the coordinates
@@ -847,14 +921,16 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 
 // RowsToComment returns slice with all recored of source files
 // and AswerIDs that need to be commeted
-func RowsToComment() ([]RowsToProcessResult, error) {
-	rows, err := Db.Table("FileSources").
+func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
+	q := Db.Table("FileSources").
 		Select("DISTINCT FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
-		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
-		// Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
-		Where("was_comment_processed = ?", 0).
+		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID")
+	if assignmentID > 0 {
+		q = q.Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID")
+	}
+	q = q.Where("was_comment_processed = ?", 0).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
@@ -865,9 +941,12 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 				JOIN BlockCommentMapping AS bcm ON bcm.ExcelBlockID = b.ExcelBlockID
 				WHERE ws.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
-		`).
+		`)
 		// Where("CourseAssignments.State = ?", "GRADED").
-		Rows()
+	if assignmentID > 0 {
+		q = q.Where("QuestionAssignmentMapping.AssignmentID = ?", assignmentID)
+	}
+	rows, err := q.Rows()
 	defer rows.Close()
 
 	if err != nil {
@@ -1034,7 +1113,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wb.ImportCharts(fileName)
 
 	// Comments that should be linked with the file:
-	const commentsToMapSql = `
+	const commentsToMapSQL = `
 	SELECT
 		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
 	-- Newly added/processed answers
@@ -1065,7 +1144,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	sql := `
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
 		SELECT ExcelBlockID, ExcelCommentID FROM (` +
-		commentsToMapSql + ") AS c"
+		commentsToMapSQL + ") AS c"
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
@@ -1076,7 +1155,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (` +
-		commentsToMapSql + ") AS c"
+		commentsToMapSQL + ") AS c"
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)

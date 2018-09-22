@@ -28,6 +28,7 @@ import (
 
 var testFileNames = []string{
 	"demo.xlsx",
+	"partial.xlsx",
 	"Sample3_A2E1.xlsx",
 	"Sample4_A2E1.xlsx",
 	"test2.xlsx",
@@ -239,11 +240,11 @@ func createTestDB() *gorm.DB {
 	db.Create(&model.Answer{SourceID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	//db.LogMode(true)
-	var lastFileId int
-	db.DB().QueryRow("SELECT MAX(FileID) AS LastFileID FROM FileSources").Scan(&lastFileId)
-	for i := lastFileId + 1; i < lastFileId+10; i++ {
+	var fileID int
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS FileID FROM FileSources").Scan(&fileID)
+	for i := fileID + 1; i < fileID+10; i++ {
 		fn := "question" + strconv.Itoa(i)
-		if i < lastFileId+4 {
+		if i < fileID+4 {
 			fn += ".xlsx"
 		} else {
 			fn += ".ignore"
@@ -280,8 +281,8 @@ func testQuestionsToProcess(t *testing.T) {
 		var s model.Source
 		db.Model(&r).Related(&s, "FileID")
 	}
-	if len(rows) != 15 {
-		t.Errorf("Expected 15 question rows, got %d", len(rows))
+	if expected, count := 16, len(rows); expected != count {
+		t.Errorf("Expected %d question rows, got %d", expected, count)
 	}
 
 	questions, err := model.QuestionsToProcess()
@@ -296,8 +297,8 @@ func testQuestionsToProcess(t *testing.T) {
 			t.Errorf("Wrong extension: %q, expected: '.xlsx'", s.FileName)
 		}
 	}
-	if len(questions) != 9 {
-		t.Errorf("Expected 9 rows, got %d", len(questions))
+	if expected, count := 10, len(questions); expected != count {
+		t.Errorf("Expected %d rows, got %d", expected, count)
 	}
 
 }
@@ -724,18 +725,26 @@ func testComments(t *testing.T) {
 func testRowsToComment(t *testing.T) {
 
 	// db.LogMode(true)
-	rows, err := model.RowsToComment()
+	rows, err := model.RowsToComment(-1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if expected, got := 8, len(rows); got != expected {
+	if expected, got := 9, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {
 		for _, r := range rows {
 			t.Log(r)
 		}
+	}
+	rows, err = model.RowsToComment(999999)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if expected, got := 0, len(rows); got != expected {
+		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 }
 
