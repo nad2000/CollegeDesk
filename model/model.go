@@ -922,14 +922,16 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 
 // RowsToComment returns slice with all recored of source files
 // and AswerIDs that need to be commeted
-func RowsToComment() ([]RowsToProcessResult, error) {
-	rows, err := Db.Table("FileSources").
+func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
+	q := Db.Table("FileSources").
 		Select("DISTINCT FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Joins("JOIN Questions ON Questions.QuestionID = StudentAnswers.QuestionID").
-		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID").
-		// Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID").
-		Where("was_comment_processed = ?", 0).
+		Joins("JOIN QuestionAssignmentMapping ON QuestionAssignmentMapping.QuestionID = Questions.QuestionID")
+	if assignmentID > 0 {
+		q = q.Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID")
+	}
+	q = q.Where("was_comment_processed = ?", 0).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
@@ -940,9 +942,12 @@ func RowsToComment() ([]RowsToProcessResult, error) {
 				JOIN BlockCommentMapping AS bcm ON bcm.ExcelBlockID = b.ExcelBlockID
 				WHERE ws.StudentAnswerID = StudentAnswers.StudentAnswerID
 			)
-		`).
+		`)
 		// Where("CourseAssignments.State = ?", "GRADED").
-		Rows()
+	if assignmentID > 0 {
+		q = q.Where("QuestionAssignmentMapping.AssignmentID = ?", assignmentID)
+	}
+	rows, err := q.Rows()
 	defer rows.Close()
 
 	if err != nil {

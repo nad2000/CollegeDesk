@@ -45,6 +45,7 @@ jobs:
             go test -v -short ./...
       - run:
           name: Upload the buid
+          # BB_AUTH_STRING=<bb_user_name>:<APP Password>
           command: |
             OUTPUT="${GOPATH}/bin/extract-blocks"
             if [ "${CIRCLE_BRANCH}" != "master" ] ; then
