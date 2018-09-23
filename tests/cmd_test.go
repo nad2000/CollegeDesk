@@ -104,7 +104,7 @@ func TestRelativeFormulas(t *testing.T) {
 }
 
 func TestDemoFile(t *testing.T) {
-	deletData()
+	deleteData()
 	var wb model.Workbook
 
 	db, _ := model.OpenDb(url)
@@ -167,7 +167,7 @@ func TestDemoFile(t *testing.T) {
 	}
 }
 
-func deletData() {
+func deleteData() {
 
 	if db == nil || db.DB() == nil {
 		db, _ = model.OpenDb(url)
@@ -207,7 +207,7 @@ func createTestDB() *gorm.DB {
 	db, _ = model.OpenDb(url)
 	cmd.Db = db
 
-	deletData()
+	deleteData()
 	//db.LogMode(true)
 
 	for _, fn := range testFileNames {

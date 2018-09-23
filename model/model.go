@@ -226,7 +226,8 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 
 // Answer - student submitted answers
 type Answer struct {
-	ID                  int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	Assignment          Assignment
 	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
 	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
@@ -620,11 +621,11 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 			// Reached the top-right corner:
 			if fgColor == color && relFormula == b.RelativeFormula {
 				cellID := cellAddress(i, j)
-				commentText := ""
-				comment, ok := sheet.Comment[cellID]
-				if ok {
-					commentText = comment.Text
-				}
+				// commentText := ""
+				// comment, ok := sheet.Comment[cellID]
+				// if ok {
+				// 	commentText = comment.Text
+				// }
 				if value := cellValue(cell); value != "" {
 					c := Cell{
 						BlockID:     b.ID,
@@ -632,7 +633,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 						Formula:     cell.Formula(),
 						Value:       value,
 						Range:       cellID,
-						Comment:     commentText,
+						// Comment:     commentText,
 					}
 					if DebugLevel > 1 {
 						log.Debugf("Inserting %#v", c)
@@ -716,7 +717,8 @@ type Cell struct {
 	Range       string
 	Formula     string
 	Value       string
-	Comment     string
+	Comment     Comment
+	CommentID   sql.NullInt64 `gorm:"type:int"`
 }
 
 // TableName overrides default table name for the model
