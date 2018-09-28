@@ -242,8 +242,7 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		boxCols                                           []int
 		columns                                           [][]commentEntry
 	)
-
-	rows, err := Db.Raw(`
+	sql := `WITH c AS (
         SELECT DISTINCT
           ws.name,
           CASE
@@ -264,10 +263,19 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
           ON bc.ExcelBlockID = b.ExcelBlockID
         JOIN Comments AS c
           ON c.CommentID = bc.ExcelCommentID
-        WHERE a.StudentAnswerID = ?
-		ORDER BY ws.name, 2
-		`, answerID).Rows()
+        WHERE a.StudentAnswerID = ?)
+	SELECT name, Address, CommentText FROM (SELECT *, `
+	if Db.Dialect().GetName() == "sqlite3" {
+		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
+			RTRIM(Address, '0123456789') AS Col`
+	} else {
+		sql += `CAST(REGEXP_SUBSTR(Address, '[0-9]+') AS UNSIGNED INTEGER) AS Row,
+			REGEXP_SUBSTR(Address, '[A-Za-z]+') AS Col`
+	}
+	sql += " FROM c) AS s ORDER BY name, LENGTH(Col), Col, Row"
+	rows, err := Db.Raw(sql, answerID).Rows()
 	if err != nil {
+		log.Errorf("SQL:\n%s", sql)
 		return err
 	}
 	defer rows.Close()
@@ -277,8 +285,10 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	}
 
 	for rows.Next() {
-		rows.Scan(&sheetName, &address, &commentText)
-
+		err = rows.Scan(&sheetName, &address, &commentText)
+		if err != nil {
+			log.Error(err)
+		}
 		if debugLevel > 1 {
 			log.Debugf("COMMENT: %q, %q, %q", sheetName, address, commentText)
 		}
