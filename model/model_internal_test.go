@@ -24,6 +24,7 @@ func TestModel(t *testing.T) {
 		log.Fatalf("failed to connect database %q", url)
 	}
 	defer Db.Close()
+	t.Log("DIALECT: ", Db.Dialect().GetName(), Db.Dialect().CurrentDatabase())
 
 	source := Source{S3Key: "KEY", FileName: "test.xlsx"}
 	answer := Answer{
