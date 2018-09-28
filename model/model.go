@@ -1109,7 +1109,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
 				Where("ExcelBlocks.is_reference").
 				Where("WorkSheets.workbook_id = ?", q.ReferenceID).
-				Where("Worksheets.order_num = ?", orderNum).
+				Where("WorkSheets.order_num = ?", orderNum).
 				Find(&references)
 			if result.Error != nil {
 				log.Error(result.Error)
