@@ -243,7 +243,7 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		columns                                           [][]commentEntry
 	)
 	sql := `WITH c AS (
-        SELECT DISTINCT
+        SELECT
           ws.name,
           CASE
             WHEN b.chart_id IS NULL THEN
@@ -254,16 +254,21 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
             ELSE b.relative_formula
           END AS Address,
           c.CommentText
-        FROM StudentAnswers AS a
-        JOIN WorkSheets AS ws
-          ON ws.StudentAnswerID = a.StudentAnswerID
-        JOIN ExcelBlocks AS b
-          ON b.worksheet_id = ws.id
-        JOIN BlockCommentMapping AS bc
-          ON bc.ExcelBlockID = b.ExcelBlockID
-        JOIN Comments AS c
-          ON c.CommentID = bc.ExcelCommentID
-        WHERE a.StudentAnswerID = ?)
+		FROM WorkSheets AS ws
+        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+        JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+        JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+        WHERE ws.StudentAnswerID = ?
+	  UNION
+        SELECT
+          ws.name,
+		  cell.range,
+          c.CommentText
+        FROM WorkSheets AS ws
+        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+        JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
+        JOIN Comments AS c ON c.CommentID = cell.comment_id
+        WHERE ws.StudentAnswerID = ?)
 	SELECT name, Address, CommentText FROM (SELECT *, `
 	if Db.Dialect().GetName() == "sqlite3" {
 		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
@@ -273,7 +278,7 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 			REGEXP_SUBSTR(Address, '[A-Za-z]+') AS Col`
 	}
 	sql += " FROM c) AS s ORDER BY name, LENGTH(Col), Col, Row"
-	rows, err := Db.Raw(sql, answerID).Rows()
+	rows, err := Db.Raw(sql, answerID, answerID).Rows()
 	if err != nil {
 		log.Errorf("SQL:\n%s", sql)
 		return err

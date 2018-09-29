@@ -490,20 +490,19 @@ func TestCommenting(t *testing.T) {
 			UNION SELECT 'Sheet2'
 		) AS wsn`)
 	db.Exec(`
-		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
+		INSERT INTO ExcelBlocks(worksheet_id, BlockCellRange)
 		SELECT id, r.v
 		FROM WorkSheets AS s LEFT JOIN ExcelBlocks AS b
 		ON b.worksheet_id = s.id,
 		(
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
-			UNION SELECT 'D2:F1'
-			UNION SELECT 'C2:F1'
+			UNION SELECT 'D1:F2'
+			UNION SELECT 'C1:F2'
 			UNION SELECT 'C12:E21'
 			UNION SELECT 'C13:D16'
 		) AS r
 		WHERE b.ExcelBlockID IS NULL`)
-
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
 	db.Exec(`
@@ -591,6 +590,51 @@ func TestCommenting(t *testing.T) {
 				}
 			}
 		}
+	}
+	db.Exec(`INSERT INTO Cells(block_id, worksheet_id, range, value)
+		SELECT b.ExcelBlockID, b.worksheet_id, r.range, "CELL VALUE"
+		--, ROW_NUMBER() OVER(ORDER BY ExcelBlockId)
+		FROM ExcelBlocks AS b JOIN
+		(
+			SELECT 'A1' AS v, 'A1' AS range
+			UNION SELECT 'C3', 'C3'
+			UNION SELECT 'D1:F2', 'D1'
+			UNION SELECT 'D1:F2', 'E1'
+			UNION SELECT 'D1:F2', 'F1'
+			UNION SELECT 'D1:F2', 'D2'
+			UNION SELECT 'D1:F2', 'E2'
+			UNION SELECT 'D1:F2', 'F2'
+			UNION SELECT 'C4:F5', 'C4'
+			UNION SELECT 'C4:F5', 'D4'
+			UNION SELECT 'C4:F5', 'E4'
+			UNION SELECT 'C4:F5', 'F4'
+			UNION SELECT 'C4:F5', 'C5'
+			UNION SELECT 'C4:F5', 'D5'
+			UNION SELECT 'C4:F5', 'E5'
+			UNION SELECT 'C4:F5', 'F5'
+			UNION SELECT 'D2:F13', 'F3'
+			UNION SELECT 'D2:F13', 'F4'
+			UNION SELECT 'D2:F13', 'F5'
+			UNION SELECT 'D2:F13', 'F6'
+			UNION SELECT 'D2:F13', 'F7'
+			UNION SELECT 'D2:F13', 'F8'
+			UNION SELECT 'D2:F13', 'F9'
+			UNION SELECT 'D2:F13', 'F10'
+			UNION SELECT 'D2:F13', 'F11'
+			UNION SELECT 'D2:F13', 'F12'
+			UNION SELECT 'D2:F13', 'F13'
+	) AS r ON r.v = b.BlockCellRange
+	LEFT JOIN Cells AS ce ON ce.block_id = b.ExcelBlockID AND r.range = ce.range
+	WHERE ce.id IS NULL`)
+	var cells []model.Cell
+	res := db.Where("comment_id IS NULL AND id %  2 = 1").Find(&cells)
+	if res.Error != nil {
+		t.Error(res.Error)
+	}
+	for no, c := range cells {
+		c.Comment = model.Comment{Text: fmt.Sprintf("VALUE COMMENT FOR %q // %d", c.Range, no)}
+		c.Value = fmt.Sprintf("CELL %q VALUE: %d", c.Range, no)
+		db.Save(&c)
 	}
 	if err := db.Exec(`
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)

@@ -55,6 +55,10 @@ func TestModel(t *testing.T) {
 			Comment:   Comment{Text: fmt.Sprintf("JUST A COMMENT FOR %q", r)},
 		})
 	}
+	Db.Create(&BlockCommentMapping{
+		Block:   block,
+		Comment: Comment{Text: fmt.Sprintf("A COMMENT FOR BLOCK %q", block.Range)},
+	})
 	var count int
 	if err := Db.DB().QueryRow(`
 			SELECT COUNT(DISTINCT worksheet_id) AS WorksheetCount
