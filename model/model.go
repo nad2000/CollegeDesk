@@ -753,8 +753,8 @@ type Cell struct {
 	Block       Block `gorm:"ForeignKey:BlockID"`
 	BlockID     int   `gorm:"index"`
 	Worksheet   Worksheet
-	WorksheetID int `gorm:"index"`
-	Range       string
+	WorksheetID int    `gorm:"index"`
+	Range       string `gorm:"column:cell_range"`
 	Formula     string
 	Value       string
 	Comment     string
