@@ -242,7 +242,22 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		boxCols                                           []int
 		columns                                           [][]commentEntry
 	)
-	sql := `WITH c AS (
+	sql := "SELECT name, Address, CommentText FROM (SELECT *, "
+	if Db.Dialect().GetName() == "sqlite3" {
+		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
+			RTRIM(Address, '0123456789') AS Col`
+	} else {
+		sql += `CAST(CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
+					WHEN 1 THEN right(Address, length(Address)-2)
+					ELSE right(Address, length(Address)-1)
+				END AS UNSIGNED INTEGER) AS Row,
+			CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
+			  WHEN 1 THEN left(Address, 2)
+			  ELSE left(Address, 1)
+			END AS Col`
+	}
+	sql += `
+	FROM (
         SELECT
           ws.name,
           CASE
@@ -262,22 +277,15 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	  UNION
         SELECT
           ws.name,
-		  cell.range,
+		  cell.cell_range,
           c.CommentText
         FROM WorkSheets AS ws
         JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
         JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
-        JOIN Comments AS c ON c.CommentID = cell.comment_id
-        WHERE ws.StudentAnswerID = ?)
-	SELECT name, Address, CommentText FROM (SELECT *, `
-	if Db.Dialect().GetName() == "sqlite3" {
-		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
-			RTRIM(Address, '0123456789') AS Col`
-	} else {
-		sql += `CAST(REGEXP_SUBSTR(Address, '[0-9]+') AS UNSIGNED INTEGER) AS Row,
-			REGEXP_SUBSTR(Address, '[A-Za-z]+') AS Col`
-	}
-	sql += " FROM c) AS s ORDER BY name, LENGTH(Col), Col, Row"
+        JOIN Comments AS c ON c.CommentID = cell.CommentID
+        WHERE ws.StudentAnswerID = ?) AS r
+	) AS s 
+	ORDER BY name, LENGTH(Col), Col, Row`
 	rows, err := Db.Raw(sql, answerID, answerID).Rows()
 	if err != nil {
 		log.Errorf("SQL:\n%s", sql)

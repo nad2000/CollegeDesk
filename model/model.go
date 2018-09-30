@@ -718,7 +718,7 @@ type Cell struct {
 	Formula     string
 	Value       string `gorm:"size:2000"`
 	Comment     Comment
-	CommentID   sql.NullInt64 `gorm:"type:int"`
+	CommentID   sql.NullInt64 `gorm:"column:CommentID;type:int"`
 }
 
 // TableName overrides default table name for the model
@@ -745,6 +745,9 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
 	}
 	db, err = gorm.Open(parts[0], parts[1])
+	if parts[0] == "mysql" {
+		db.Set("gorm:table_options", "collation_connection=utf8_bin")
+	}
 	if err != nil {
 		log.Error(err)
 		log.Fatalf("failed to connect database %q", url)

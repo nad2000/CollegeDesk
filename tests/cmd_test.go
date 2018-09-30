@@ -174,20 +174,24 @@ func deleteData() {
 		defer db.Close()
 	}
 	for _, m := range []interface{}{
-		&model.AnswerComment{},
-		&model.BlockCommentMapping{},
-		&model.QuestionAssignment{},
-		&model.Comment{},
 		&model.Cell{},
 		&model.Block{},
 		&model.Chart{},
+		&model.BlockCommentMapping{},
+		&model.AnswerComment{},
+		&model.QuestionExcelData{},
+		&model.QuestionAssignment{},
 		&model.Worksheet{},
 		&model.Workbook{},
-		&model.QuestionExcelData{},
 		&model.Question{},
 		&model.Answer{},
-		&model.Source{}} {
-		db.Delete(m)
+		&model.Source{},
+		&model.Comment{},
+	} {
+		err := db.Delete(m).Error
+		if err != nil {
+			fmt.Println("ERROR: ", err)
+		}
 	}
 }
 
@@ -591,12 +595,11 @@ func TestCommenting(t *testing.T) {
 			}
 		}
 	}
-	db.Exec(`INSERT INTO Cells(block_id, worksheet_id, range, value)
-		SELECT b.ExcelBlockID, b.worksheet_id, r.range, "CELL VALUE"
-		--, ROW_NUMBER() OVER(ORDER BY ExcelBlockId)
+	err := db.Exec(`INSERT INTO Cells(block_id, worksheet_id, cell_range, value)
+		SELECT b.ExcelBlockID, b.worksheet_id, r.range, 'CELL VALUE'
 		FROM ExcelBlocks AS b JOIN
 		(
-			SELECT 'A1' AS v, 'A1' AS range
+			SELECT 'A1' AS v, 'A1' AS "range"
 			UNION SELECT 'C3', 'C3'
 			UNION SELECT 'D1:F2', 'D1'
 			UNION SELECT 'D1:F2', 'E1'
@@ -624,10 +627,13 @@ func TestCommenting(t *testing.T) {
 			UNION SELECT 'D2:F13', 'F12'
 			UNION SELECT 'D2:F13', 'F13'
 	) AS r ON r.v = b.BlockCellRange
-	LEFT JOIN Cells AS ce ON ce.block_id = b.ExcelBlockID AND r.range = ce.range
-	WHERE ce.id IS NULL`)
+	LEFT JOIN Cells AS ce ON ce.block_id = b.ExcelBlockID AND r.range = ce.cell_range
+	WHERE ce.id IS NULL`).Error
+	if err != nil {
+		t.Error(err)
+	}
 	var cells []model.Cell
-	res := db.Where("comment_id IS NULL AND id %  2 = 1").Find(&cells)
+	res := db.Where("CommentID IS NULL AND id %  2 = 1").Find(&cells)
 	if res.Error != nil {
 		t.Error(res.Error)
 	}
