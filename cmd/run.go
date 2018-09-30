@@ -86,7 +86,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			a := model.Answer{
 				ShortAnswer:    excelFileName,
 				SubmissionTime: *parseTime("2017-01-01 14:42"),
-				QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
+				QuestionID:     model.NewNullInt64(q.ID),
 			}
 			if !model.DryRun {
 				Db.FirstOrCreate(&a, &a)
