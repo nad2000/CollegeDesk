@@ -811,6 +811,7 @@ type MySQLQuestion struct {
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 }
 
 // TableName overrides default table name for the model
@@ -1213,10 +1214,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 					Row:             sr,
 					Col:             sc,
 				}
-				Db.Create(&b)
+				err = Db.Create(&b).Error
+				if err != nil {
+					log.Error(err.Error())
+				}
 				for r := sr; r <= er; r++ {
 					for c := sc; c <= ec; c++ {
-						var b Block
 						cell := sheet.Cell(sc, sr)
 						if value := cellValue(cell); value != "" {
 							c := Cell{

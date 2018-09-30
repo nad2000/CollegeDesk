@@ -325,8 +325,14 @@ func testImportFile(t *testing.T) {
 }
 
 func testHandleNotcolored(t *testing.T) {
-	q := model.Question{
-		SourceID:         sql.NullInt64{},
+
+	var (
+		q          model.Question
+		assignment model.Assignment
+		f          model.Source
+		a          model.Answer
+	)
+	q = model.Question{
 		QuestionType:     model.QuestionType("FileUpload"),
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes...",
@@ -336,7 +342,7 @@ func testHandleNotcolored(t *testing.T) {
 	}
 	db.Create(&q)
 	q.ImportFile("question.xlsx", "FFFFFF00", true)
-	assignment := model.Assignment{
+	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes...",
 		State: "READY_FOR_GRADING",
 	}
@@ -361,11 +367,45 @@ func testHandleNotcolored(t *testing.T) {
 		db.Create(&a)
 		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, false, a.ID)
 	}
+
 	// var count int
 	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
 	// if expected := 8; count != expected {
 	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
 	// }
+
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes #2...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes #2...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	f = model.Source{
+		FileName:     "Q1 Solution different color stud4.xlsx",
+		S3BucketName: "studentanswers",
+	}
+	db.Create(&f)
+	a = model.Answer{
+		SourceID:       f.ID,
+		AssignmentID:   assignment.ID,
+		QuestionID:     model.NewNullInt64(q.ID),
+		SubmissionTime: *parseTime("2018-09-30 12:42"),
+	}
+	db.Create(&a)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, false, a.ID)
 
 }
 
