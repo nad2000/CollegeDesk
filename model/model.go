@@ -178,8 +178,8 @@ func (q *Question) ImportFile(fileName string) error {
 type QuestionExcelData struct {
 	ID         int    `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
 	SheetName  string `gorm:"column:SheetName"`
-	CellRange  string `gorm:"column:CellRange"`
-	Value      string `gorm:"column:Value"`
+	CellRange  string `gorm:"column:CellRange;size:10"`
+	Value      string `gorm:"column:Value;size:2000"`
 	Comment    string `gorm:"column:Comment"`
 	Formula    string `gorm:"column:Formula"`
 	Question   Question
@@ -231,15 +231,15 @@ type Answer struct {
 	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
 	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64       `gorm:"column:Marks"`
+	Marks               float64       `gorm:"column:Marks;type:float"`
 	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            int           `gorm:"column:FileID"`
 	Question            Question
 	QuestionID          sql.NullInt64   `gorm:"column:QuestionID;type:int"`
-	WasCommentProcessed uint8           `gorm:"type:tinyint unsigned;default:0"`
-	WasXLProcessed      uint8           `gorm:"type:tinyint unsigned;default:0"`
+	WasCommentProcessed uint8           `gorm:"type:tinyint;default:0"`
+	WasXLProcessed      uint8           `gorm:"type:tinyint;default:0"`
 	AnswerComments      []AnswerComment `gorm:"ForeignKey:AnswerID"`
 }
 
@@ -508,7 +508,7 @@ type Block struct {
 	WorksheetID     int                   `gorm:"index"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
 	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
-	ChartID         sql.NullInt64
+	ChartID         sql.NullInt64         `grom:"type:int"`
 
 	s       struct{ r, c int }           `gorm:"-"` // Top-left cell
 	e       struct{ r, c int }           `gorm:"-"` // Bottom-right cell
@@ -713,10 +713,10 @@ type Cell struct {
 	Block       Block `gorm:"ForeignKey:BlockID"`
 	BlockID     int   `gorm:"index"`
 	Worksheet   Worksheet
-	WorksheetID int `gorm:"index"`
-	Range       string
+	WorksheetID int    `gorm:"index"`
+	Range       string `gorm:"column:cell_range"`
 	Formula     string
-	Value       string
+	Value       string `gorm:"size:2000"`
 	Comment     Comment
 	CommentID   sql.NullInt64 `gorm:"type:int"`
 }
@@ -767,7 +767,7 @@ type MySQLQuestion struct {
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
 	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
-	WasCompared        bool                `gorm:"column:was_compared;type:tinyint(1)"`
+	WasCompared        bool                `gorm:"type:tinyint(1);default:0"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
@@ -783,6 +783,7 @@ func (MySQLQuestion) TableName() string {
 type Comment struct {
 	ID              int                   `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
 	Text            string                `gorm:"column:CommentText"`
+	Marks           sql.NullFloat64       `gorm:"column:Marks;type:float"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelCommentID"`
 	AnswerComments  []AnswerComment       `gorm:"ForeignKey:CommentID"`
 }
@@ -863,9 +864,9 @@ func SetDb() {
 		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Blocks...")
-		Db.Model(&Block{}).AddForeignKey("worksheet_id", "worksheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
-		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "workbooks(id)", "CASCADE", "CASCADE")
+		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "WorkBooks(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Questions...")
 		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to QuestionExcelData...")
