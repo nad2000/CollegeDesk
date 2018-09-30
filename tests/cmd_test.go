@@ -219,7 +219,7 @@ func createTestDB() *gorm.DB {
 
 		db.Create(&f)
 		q := model.Question{
-			SourceID:         sql.NullInt64{Int64: int64(f.ID), Valid: true},
+			SourceID:         model.NewNullInt64(f.ID),
 			QuestionType:     model.QuestionType("FileUpload"),
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
@@ -230,7 +230,7 @@ func createTestDB() *gorm.DB {
 		db.Create(&q)
 		db.Create(&model.Answer{
 			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     sql.NullInt64{Int64: int64(q.ID), Valid: true},
+			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 	}
@@ -614,7 +614,7 @@ func TestCommenting(t *testing.T) {
 		answer := model.Answer{
 			AssignmentID:   assignment.ID,
 			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     sql.NullInt64{Int64: int64(question.ID), Valid: true},
+			QuestionID:     model.NewNullInt64(question.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		}
 		db.Create(&answer)
