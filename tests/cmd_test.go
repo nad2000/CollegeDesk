@@ -365,7 +365,7 @@ func testHandleNotcolored(t *testing.T) {
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
 		}
 		db.Create(&a)
-		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, false, a.ID)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)
 	}
 
 	// var count int
@@ -405,7 +405,7 @@ func testHandleNotcolored(t *testing.T) {
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
 	db.Create(&a)
-	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, false, a.ID)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
 
 }
 
@@ -462,6 +462,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 	t.Run("HandleQuestions", testHandleQuestions)
+	t.Run("ImportQuestionFile", testImportQuestionFile)
 }
 func testHandleQuestions(t *testing.T) {
 
@@ -491,6 +492,36 @@ func testHandleQuestions(t *testing.T) {
 
 	tm := testManager{}
 	cmd.HandleQuestions(&tm)
+}
+
+func testImportQuestionFile(t *testing.T) {
+
+	var fileID int
+	fileName := "Q1 Question different color.xlsx"
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS LastFileID FROM FileSources").Scan(&fileID)
+	f := model.Source{
+		ID:           fileID,
+		FileName:     fileName,
+		S3BucketName: "studentanswers",
+		S3Key:        fileName,
+	}
+	result := db.Create(&f)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q := model.Question{
+		Source:       f,
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: fileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+	result = db.Create(&q)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q.ImportFile(fileName, "FFFFFF00", true)
 }
 
 func testQuestions(t *testing.T) {

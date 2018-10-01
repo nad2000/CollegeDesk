@@ -128,7 +128,7 @@ func (q Question) String() string {
 
 // ImportFile imports form Excel file QuestionExcleData
 func (q *Question) ImportFile(fileName, color string, verbose bool) error {
-	xlFile, err := xlsx.OpenFile(fileName)
+	file, err := xlsx.OpenFile(fileName)
 
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 		log.Infof("Processing workbook: %s", fileName)
 	}
 
-	for _, sheet := range xlFile.Sheets {
+	for _, sheet := range file.Sheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -178,10 +178,127 @@ func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 		}
 
 	}
-	wb := ExtractBlocksFromFile(fileName, color, true, verbose, true)
+	q.ImportBlocks(file, color, verbose)
+
+	return nil
+}
+
+// ImportBlocks extracts blocks from the given question file and stores in the DB for referencing
+func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb Workbook) {
+
+	var source Source
+	Db.Model(&q).Related(&source, "Source")
+	fileName := source.FileName
+	result := Db.First(&wb, Workbook{FileName: fileName, IsReference: true})
+	if !result.RecordNotFound() {
+		log.Warnf("File %q was already processed.", fileName)
+		if !DryRun {
+			wb.Reset()
+		}
+	} else if !DryRun {
+
+		wb = Workbook{FileName: fileName, IsReference: true}
+		result = Db.Create(&wb)
+		if result.Error != nil {
+			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
+		}
+		if DebugLevel > 1 {
+			log.Debugf("Ceated workbook entry %#v", wb)
+		}
+	}
+
+	if verbose {
+		log.Infof("*** Processing workbook: %s", fileName)
+	}
+
+	for orderNum, sheet := range file.Sheets {
+
+		if sheet.Hidden {
+			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+			continue
+		}
+
+		if verbose {
+			log.Infof("Processing worksheet %q", sheet.Name)
+		}
+
+		var ws Worksheet
+		if !DryRun {
+			Db.FirstOrCreate(&ws, Worksheet{
+				Name:             sheet.Name,
+				WorkbookID:       wb.ID,
+				WorkbookFileName: fileName,
+				IsReference:      true,
+				OrderNum:         orderNum,
+			})
+		}
+		if Db.Error != nil {
+			log.Fatalf("*** Failed to create worksheet entry: %s", Db.Error.Error())
+		}
+
+		blocks := blockList{}
+		sheetFillColors := []string{}
+
+		for i, row := range sheet.Rows {
+			for j, cell := range row.Cells {
+
+				if blocks.alreadyFound(i, j) {
+					continue
+				}
+				style := cell.GetStyle()
+				fgColor := style.Fill.FgColor
+				if fgColor != "" {
+					for _, c := range sheetFillColors {
+						if c == fgColor {
+							goto MATCH
+						}
+					}
+					sheetFillColors = append(sheetFillColors, fgColor)
+				}
+			MATCH:
+
+				if fgColor == color {
+
+					b := Block{
+						WorksheetID:     ws.ID,
+						Color:           color,
+						Formula:         cell.Formula(),
+						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+						IsReference:     true,
+						Row:             i,
+						Col:             j,
+					}
+
+					if !DryRun {
+						Db.Create(&b)
+					}
+
+					if DebugLevel > 1 {
+						log.Debugf("Created %#v", b)
+					}
+
+					b.findWhole(sheet, color)
+					b.save()
+					blocks = append(blocks, b)
+					if verbose && b.Range != "" {
+						log.Infof("Found: %s", b)
+					}
+
+				}
+			}
+		}
+		if len(blocks) == 0 {
+			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+			if len(sheetFillColors) > 0 {
+				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+			}
+		}
+	}
+
 	q.ReferenceID = NewNullInt64(wb.ID)
 	Db.Save(&q)
-	return nil
+
+	return
 }
 
 // QuestionExcelData - extracted celles from question Workbooks
@@ -268,7 +385,7 @@ type Assignment struct {
 	// IsHidden           int8      `gorm:"type:tinyint(4)"`
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
-	// CourseID           uint      `gorm:"column:CourseID;type:int(10) unsigned"`
+	// CourseID           int      `gorm:"column:CourseID"`
 	State        string `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
 	WasProcessed int8   `gorm:"type:tinyint(1)"`
 }
@@ -836,9 +953,9 @@ func (Comment) TableName() string {
 // BlockCommentMapping - block-comment mapping
 type BlockCommentMapping struct {
 	Block     Block
-	BlockID   uint `gorm:"column:ExcelBlockID"`
+	BlockID   int `gorm:"column:ExcelBlockID"`
 	Comment   Comment
-	CommentID uint `gorm:"column:ExcelCommentID"`
+	CommentID int `gorm:"column:ExcelCommentID"`
 }
 
 // TableName overrides default table name for the model
@@ -849,7 +966,7 @@ func (BlockCommentMapping) TableName() string {
 // AnswerComment - answer-comment mapping:
 type AnswerComment struct {
 	Answer    Answer
-	AnswerID  int `gorm:"column:StudentAnswerID;index;type:int unsigned"`
+	AnswerID  int `gorm:"column:StudentAnswerID;index"`
 	Comment   Comment
 	CommentID int `gorm:"column:CommentID"`
 }
@@ -862,9 +979,9 @@ func (AnswerComment) TableName() string {
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
-	AssignmentID int `gorm:"column:AssignmentID;type:uint"`
+	AssignmentID int `gorm:"column:AssignmentID"`
 	Question     Question
-	QuestionID   int `gorm:"column:QuestionID;type:uint"`
+	QuestionID   int `gorm:"column:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -1021,23 +1138,22 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference bool, answerIDs ...int) (wb Workbook) {
-	xlFile, err := xlsx.OpenFile(fileName)
+func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook) {
+	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var answerID sql.NullInt64
-	if !isReference && len(answerIDs) > 0 {
-		answerID = NewNullInt64(answerIDs[0])
+	var answerID int
+	if len(answerIDs) > 0 {
+		answerID = answerIDs[0]
+	} else {
+		log.Errorln("Missing AnswerID.")
+		return
 	}
 
 	var result *gorm.DB
-	if isReference {
-		result = Db.First(&wb, Workbook{FileName: fileName, IsReference: isReference})
-	} else {
-		result = Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
-	}
+	result = Db.First(&wb, Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)})
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -1049,7 +1165,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 		}
 	} else if !DryRun {
 
-		wb = Workbook{FileName: fileName, AnswerID: answerID, IsReference: isReference}
+		wb = Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)}
 		result = Db.Create(&wb)
 		if result.Error != nil {
 			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
@@ -1063,22 +1179,20 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
 	var q Question
-	if answerID.Valid && !isReference {
-		// Attempt to use reference blocks for the answer:
-		result := Db.
-			Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
-			Where("StudentAnswers.StudentAnswerID = ?", answerID).
-			Where("Questions.reference_id IS NOT NULL").
-			First(&q)
-		if result.Error != nil {
-			log.Error(result.Error)
-		}
-		if verbose {
-			log.Infof("*** Processing the answer ID:%d for the queestion %s", answerID.Int64, q)
-		}
+	result = Db.
+		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
+		Where("StudentAnswers.StudentAnswerID = ?", answerID).
+		Where("Questions.reference_id IS NOT NULL").
+		First(&q)
+	if result.Error != nil {
+		log.Error(result.Error)
+		return
+	}
+	if verbose {
+		log.Infof("*** Processing the answer ID:%d for the queestion %s", answerID, q)
 	}
 
-	for orderNum, sheet := range xlFile.Sheets {
+	for orderNum, sheet := range file.Sheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -1096,8 +1210,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 				Name:             sheet.Name,
 				WorkbookID:       wb.ID,
 				WorkbookFileName: wb.FileName,
-				AnswerID:         answerID,
-				IsReference:      isReference,
+				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
 			})
 		}
@@ -1105,7 +1218,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 			log.Fatalf("*** Failed to create worksheet entry: %s", Db.Error.Error())
 		}
 
-		if answerID.Valid && !isReference && q.ReferenceID.Valid {
+		if q.ReferenceID.Valid {
 			// Attempt to use reference blocks for the answer:
 			result = Db.
 				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
@@ -1116,67 +1229,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 			if result.Error != nil {
 				log.Error(result.Error)
 			}
-		}
-
-		blocks := blockList{}
-		sheetFillColors := []string{}
-
-		for i, row := range sheet.Rows {
-			for j, cell := range row.Cells {
-
-				if blocks.alreadyFound(i, j) {
-					continue
-				}
-				style := cell.GetStyle()
-				fgColor := style.Fill.FgColor
-				if fgColor != "" {
-					for _, c := range sheetFillColors {
-						if c == fgColor {
-							goto MATCH
-						}
-					}
-					sheetFillColors = append(sheetFillColors, fgColor)
-				}
-			MATCH:
-
-				if fgColor == color {
-
-					b := Block{
-						WorksheetID:     ws.ID,
-						Color:           color,
-						Formula:         cell.Formula(),
-						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
-						IsReference:     isReference,
-						Row:             i,
-						Col:             j,
-					}
-
-					if !DryRun {
-						Db.Create(&b)
-					}
-
-					if DebugLevel > 1 {
-						log.Debugf("Created %#v", b)
-					}
-
-					b.findWhole(sheet, color)
-					b.save()
-					blocks = append(blocks, b)
-					if verbose && b.Range != "" {
-						log.Infof("Found: %s", b)
-					}
-
-				}
-			}
-		}
-		if len(blocks) == 0 && references == nil {
-			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
-			if len(sheetFillColors) > 0 {
-				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
-			}
-		}
-
-		if answerID.Valid && references != nil {
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
 				var (
@@ -1194,11 +1246,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 				if err != nil {
 					log.Error(err)
 					continue
-				}
-				for _, b := range blocks {
-					if b.Row == rb.Row && b.Col == rb.Col {
-						goto NEXT
-					}
 				}
 				ec, er, err = xlsx.GetCoordsFromCellIDString(rangeAddr[1])
 				if err != nil {
@@ -1239,13 +1286,69 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, isReference b
 						}
 					}
 				}
-			NEXT:
+			}
+		} else {
+			// Keep looking for color-coded blocks
+			blocks := blockList{}
+			sheetFillColors := []string{}
+
+			for i, row := range sheet.Rows {
+				for j, cell := range row.Cells {
+
+					if blocks.alreadyFound(i, j) {
+						continue
+					}
+					style := cell.GetStyle()
+					fgColor := style.Fill.FgColor
+					if fgColor != "" {
+						for _, c := range sheetFillColors {
+							if c == fgColor {
+								goto MATCH
+							}
+						}
+						sheetFillColors = append(sheetFillColors, fgColor)
+					}
+				MATCH:
+
+					if fgColor == color {
+
+						b := Block{
+							WorksheetID:     ws.ID,
+							Color:           color,
+							Formula:         cell.Formula(),
+							RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+							Row:             i,
+							Col:             j,
+						}
+
+						if !DryRun {
+							Db.Create(&b)
+						}
+
+						if DebugLevel > 1 {
+							log.Debugf("Created %#v", b)
+						}
+
+						b.findWhole(sheet, color)
+						b.save()
+						blocks = append(blocks, b)
+						if verbose && b.Range != "" {
+							log.Infof("Found: %s", b)
+						}
+
+					}
+				}
+			}
+			if len(blocks) == 0 {
+				log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+				if len(sheetFillColors) > 0 {
+					log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+				}
 			}
 		}
 	}
 
 	wb.ImportCharts(fileName)
-
 	if _, err := Db.DB().
 		Exec(`
 			UPDATE StudentAnswers
