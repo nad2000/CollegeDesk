@@ -1182,7 +1182,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	result = Db.
 		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
 		Where("StudentAnswers.StudentAnswerID = ?", answerID).
-		Where("Questions.reference_id IS NOT NULL").
+		Order("Questions.reference_id DESC").
 		First(&q)
 	if result.Error != nil {
 		log.Error(result.Error)

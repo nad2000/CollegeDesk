@@ -106,10 +106,9 @@ func TestRelativeFormulas(t *testing.T) {
 func TestDemoFile(t *testing.T) {
 	deletData()
 	var wb model.Workbook
+	var fileName = "demo.xlsx"
 
 	db, _ := model.OpenDb(url)
-	db.Close()
-
 	q := model.Question{
 		QuestionType:      "ShortAnswer",
 		QuestionSequence:  0,
@@ -118,22 +117,24 @@ func TestDemoFile(t *testing.T) {
 		MaxScore:          999.99,
 	}
 	db.FirstOrCreate(&q, &q)
-	db.Close()
+	a := model.Answer{
+		ShortAnswer:    fileName,
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+		QuestionID:     model.NewNullInt64(q.ID),
+	}
+	db.FirstOrCreate(&a, &a)
 
-	cmd.RootCmd.SetArgs([]string{
-		"run", "-U", url, "-t", "-f", "demo.xlsx"})
-	cmd.Execute()
+	t.Log("+++ Start extration")
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 
-	db, _ = model.OpenDb(url)
-
-	result := db.First(&wb, "file_name = ?", "demo.xlsx")
+	result := db.First(&wb, "file_name = ?", fileName)
 	if result.Error != nil {
 		t.Error(result.Error)
 		t.Fail()
 	}
 
 	if wb.FileName != "demo.xlsx" {
-		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
+		t.Logf("Missing workbook: expected %q, got: %q", fileName, wb.FileName)
 		t.Fail()
 	}
 	var count int
@@ -164,6 +165,14 @@ func TestDemoFile(t *testing.T) {
 	db.Model(&model.BlockCommentMapping{}).Count(&count)
 	if expected := 6; count != expected {
 		t.Errorf("Expected %d block -> comment mapping entries, got: %d", expected, count)
+	}
+	db.Model(&model.Block{}).Count(&count)
+	if expected := 32; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+	db.Model(&model.Cell{}).Count(&count)
+	if expected := 84; count != expected {
+		t.Errorf("Expected %d cells, got: %d", expected, count)
 	}
 }
 
