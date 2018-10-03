@@ -656,6 +656,7 @@ func TestCommenting(t *testing.T) {
 	t.Run("Queries", testQueries)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
+	t.Run("CellComments", testCellComments)
 }
 
 func testQueries(t *testing.T) {
@@ -713,6 +714,81 @@ func testComments(t *testing.T) {
 	// if comment.Text != expect {
 	// 	t.Errorf("Expected %q, got: %q", expect, comment.Text)
 	// }
+}
+
+func testCellComments(t *testing.T) {
+	fileName := "cell_commenting.xlsx"
+	f := model.Source{
+		FileName:     fileName,
+		S3BucketName: "studentanswers",
+		S3Key:        fileName,
+	}
+	db.Create(&f)
+	assignment := model.Assignment{Title: "ASSIGNMENT 'Test Cell Comments'"}
+	db.Create(&assignment)
+	question := model.Question{
+		SourceID:     model.NewNullInt64(f.ID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: "Question wiht merged cells",
+		MaxScore:     8888.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+	db.Create(&question)
+	answer := model.Answer{
+		AssignmentID:   assignment.ID,
+		SourceID:       f.ID,
+		QuestionID:     model.NewNullInt64(question.ID),
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+	}
+	db.Create(&answer)
+	book := model.Workbook{FileName: fileName, Answer: answer}
+	db.Create(&book)
+
+	sheet := model.Worksheet{
+		Name:             "Sheet1",
+		Workbook:         book,
+		WorkbookFileName: book.FileName,
+		Answer:           answer}
+	db.Create(&sheet)
+	chart := model.Chart{Worksheet: sheet}
+	db.Create(&chart)
+	block := model.Block{
+		Worksheet:       sheet,
+		Range:           "ChartTitle",
+		Formula:         "TEST",
+		RelativeFormula: "E15",
+		Chart:           chart}
+	db.Create(&block)
+	block = model.Block{
+		Worksheet: sheet,
+		Range:     "D8:D20",
+		Formula:   "B8*C8",
+	}
+	db.Create(&block)
+	comments := []model.Comment{
+		{Text: "cell comment 40 1742"},
+		{Text: "cell comment 40 1743"},
+		{Text: "block comment 1101"},
+	}
+	for i := range comments {
+		db.Create(&comments[i])
+		db.Create(&model.AnswerComment{Answer: answer, Comment: comments[i]})
+	}
+	cells := []model.Cell{
+		{Range: "D8", Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
+		{Range: "D9", Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+	}
+	for i := range cells {
+		db.Create(&cells[i])
+	}
+	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
+	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	t.Log("OUTPUT:", outputName)
+	// db.LogMode(true)
+	if err := cmd.AddCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
+		log.Errorln(err)
+	}
 }
 
 func testRowsToComment(t *testing.T) {

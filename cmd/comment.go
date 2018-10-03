@@ -89,8 +89,8 @@ func AddComments(fileNames ...string) {
 
 	var book model.Workbook
 	base := filepath.Base(fileName)
-	Db.First(&book, "file_name LIKE ?", "%"+base)
-	if err := addCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
+	Db.Order("ID DESC").First(&book, "file_name LIKE ?", "%"+base)
+	if err := AddCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }
@@ -127,7 +127,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
 		outputName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_Reviewed"+extension)
 
-		if err := addCommentsToFile(a.ID, fileName, outputName, true); err != nil {
+		if err := AddCommentsToFile(a.ID, fileName, outputName, true); err != nil {
 			log.Errorln(err)
 		}
 
@@ -219,8 +219,8 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 	}
 }
 
-// addCommentsToFile addes chart properties and comments to the answer files.
-func addCommentsToFile(answerID int, fileName, outputName string, deleteComments bool) error {
+// AddCommentsToFile addes chart properties and comments to the answer files.
+func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments bool) error {
 
 	// Iterate via assosiated comments and add them to the file
 	file, err := excelize.OpenFile(fileName)
@@ -286,6 +286,7 @@ func addCommentsToFile(answerID int, fileName, outputName string, deleteComments
         WHERE ws.StudentAnswerID = ?) AS r
 	) AS s 
 	ORDER BY name, LENGTH(Col), Col, Row`
+	fmt.Println(sql)
 	rows, err := Db.Raw(sql, answerID, answerID).Rows()
 	if err != nil {
 		log.Errorf("SQL:\n%s", sql)
