@@ -209,6 +209,7 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 			log.Debugf(
 				"Adding comment to %q sheet at %q: %s (box: %q)",
 				sheetName, cell.address, cell.commentText,
+				// Save the file w/o comments and reopen it:
 				xlsx.GetCellIDStringFromCoords(boxCol, cell.boxRow))
 		}
 		file.AddCommentAt(
@@ -228,7 +229,20 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
 	}
 	if deleteComments {
-		model.DeleteAllComments(file)
+		if model.DeleteAllComments(file) {
+			// Save the file w/o comments and reopen it:
+			basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
+			fileName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_CLEANED"+extension)
+			err = file.SaveAs(fileName)
+			if err != nil {
+				return fmt.Errorf("Failed to remove comments from file %q: %s", fileName, err.Error())
+			}
+
+			file, err = excelize.OpenFile(fileName)
+			if err != nil {
+				return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+			}
+		}
 	}
 	if err := addChartProperties(file, answerID); err != nil {
 		return err
