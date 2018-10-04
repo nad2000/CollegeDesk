@@ -500,20 +500,21 @@ func (Worksheet) TableName() string {
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	Color           string
-	Range           string                `gorm:"column:BlockCellRange"`
-	Formula         string                `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string                // first block cell relative formula formula
-	Cells           []Cell                `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
-	WorksheetID     int                   `gorm:"index"`
-	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
-	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
-	ChartID         sql.NullInt64         `grom:"type:int"`
-
-	s       struct{ r, c int }           `gorm:"-"` // Top-left cell
-	e       struct{ r, c int }           `gorm:"-"` // Bottom-right cell
-	i       struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
-	isEmpty bool                         `gorm:"-"` // All block cells are empty
+	Range           string                       `gorm:"column:BlockCellRange"`
+	Formula         string                       `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string                       // first block cell relative formula formula
+	Cells           []Cell                       `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet                    `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID     int                          `gorm:"index"`
+	CommentMappings []BlockCommentMapping        `gorm:"ForeignKey:ExcelBlockID"`
+	Chart           Chart                        `gorm:"ForeignKey:ChartId"`
+	ChartID         sql.NullInt64                `grom:"type:int;index"`
+	TRow            int                          `gorm:"index"` // Top row
+	LCol            int                          `gorm:"index"` // Left column
+	BRow            int                          `gorm:"index"` // Bottom row
+	RCol            int                          `gorm:"index"` // Right column
+	i               struct{ sr, sc, er, ec int } `gorm:"-"`     // "Inner" block - the block containing values
+	isEmpty         bool                         `gorm:"-"`     // All block cells are empty
 }
 
 func (b Block) String() string {
@@ -528,8 +529,8 @@ func (b Block) TableName() string {
 
 func (b *Block) save() {
 	if !DryRun {
-		for i := b.s.c; i <= b.e.c; i++ {
-			for j := b.s.r; j <= b.e.r; j++ {
+		for i := b.LCol; i <= b.RCol; i++ {
+			for j := b.TRow; j <= b.BRow; j++ {
 				address := cellAddress(j, i)
 				address += ":" + address
 				if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
@@ -553,7 +554,7 @@ func (b *Block) save() {
 }
 
 func (b *Block) address() string {
-	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
+	return cellAddress(b.TRow, b.LCol) + ":" + cellAddress(b.BRow, b.RCol)
 }
 
 func (b *Block) innerAddress() string {
@@ -590,29 +591,30 @@ func cellValue(cell *xlsx.Cell) (value string) {
 // and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
-	b.e = b.s
+	b.BRow = b.TRow
+	b.RCol = b.LCol
 	for i, row := range sheet.Rows {
 
 		// skip all rows until the first block row
-		if i < b.s.r {
+		if i < b.TRow {
 			continue
 		}
 
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
-		if len(row.Cells) <= b.e.c ||
-			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
-			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
+		if len(row.Cells) <= b.RCol ||
+			row.Cells[b.RCol].GetStyle().Fill.FgColor != color ||
+			RelativeFormula(i, b.RCol, row.Cells[b.RCol].Formula()) != b.RelativeFormula {
 			log.Debugf("Reached the edge row of the block at row %d", i)
-			b.e.r = i - 1
+			b.BRow = i - 1
 			break
 		} else {
-			b.e.r = i
+			b.BRow = i
 		}
 
 		for j, cell := range row.Cells {
 			// skip columns until the start:
-			if j < b.s.c {
+			if j < b.LCol {
 				continue
 			}
 
@@ -633,7 +635,8 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 						Formula:     cell.Formula(),
 						Value:       value,
 						Range:       cellID,
-						// Comment:     commentText,
+						Row:         i,
+						Col:         j,
 					}
 					if DebugLevel > 1 {
 						log.Debugf("Inserting %#v", c)
@@ -643,18 +646,18 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 						log.Error("Error occured: ", Db.Error.Error())
 					}
 				}
-				b.e.c = j
+				b.RCol = j
 			} else {
 				log.Debugf("Reached the edge column  of the block at column %d", j)
-				if j > b.e.c {
-					b.e.c = j - 1
+				if j > b.RCol {
+					b.RCol = j - 1
 				}
 				break
 			}
 		}
 	}
 
-	sr, sc, er, ec := b.s.r, b.s.c, b.e.r, b.e.c
+	sr, sc, er, ec := b.TRow, b.LCol, b.BRow, b.RCol
 	for sc <= ec {
 		for r := sr; r <= er; r++ {
 			if value := cellValue(sheet.Cell(r, sc)); value != "" {
@@ -701,10 +704,10 @@ FOUND:
 
 // IsInside tests if the cell with given coordinates is inside the coordinates
 func (b *Block) IsInside(r, c int) bool {
-	return (b.s.r <= r &&
-		r <= b.e.r &&
-		b.s.c <= c &&
-		c <= b.e.c)
+	return (b.TRow <= r &&
+		r <= b.BRow &&
+		b.LCol <= c &&
+		c <= b.RCol)
 }
 
 // Cell - a sigle cell of the block
@@ -719,6 +722,8 @@ type Cell struct {
 	Value       string `gorm:"size:2000"`
 	Comment     Comment
 	CommentID   sql.NullInt64 `gorm:"column:CommentID;type:int"`
+	Row         int           `gorm:"index"`
+	Col         int           `gorm:"index"`
 }
 
 // TableName overrides default table name for the model
@@ -1073,7 +1078,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 						Formula:         cell.Formula(),
 						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
 					}
-					b.s.r, b.s.c = i, j
+					b.TRow, b.LCol = i, j
 
 					if !DryRun {
 						Db.Create(&b)

@@ -653,6 +653,64 @@ func TestCommenting(t *testing.T) {
 		t.Error(err)
 	}
 
+	var blockUpdate, cellUpdate string
+	if db.Dialect().GetName() == "sqlite3" {
+		blockUpdate = `TODO`
+	} else {
+		blockUpdate = `UPDATE ExcelBlocks, (
+			SELECT  b.*,
+			CAST(
+			CASE s REGEXP '[A-Za-z]{2}[0-9]+'       
+			WHEN 1 THEN right(s, length(s)-2)  
+			ELSE right(s, length(s)-1)         
+			END AS UNSIGNED INTEGER)-1 AS tr,                   
+			ascii(CASE s REGEXP '[A-Za-z]{2}[0-9]+'                
+			WHEN 1 THEN left(s, 2)                         
+			ELSE left(s, 1) END)-ascii('A') AS lc,
+			CAST(
+			CASE e REGEXP '[A-Za-z]{2}[0-9]+'       
+			WHEN 1 THEN right(e, length(e)-2)  
+			ELSE right(e, length(e)-1)         
+			END AS UNSIGNED INTEGER)-1 AS br,                   
+			ascii(CASE e REGEXP '[A-Za-z]{2}[0-9]+'                
+			WHEN 1 THEN left(e, 2)                         
+			ELSE left(e, 1) END)-ascii('A') AS rc
+			FROM (
+			SELECT
+			b.ExcelBlockID, 
+			SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s,
+			SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
+			FROM ExcelBlocks AS b
+			WHERE INSTR(b.BlockCellRange, ':') > 0) AS b
+			) AS u
+			SET t_row = tr, l_col = lc, b_row = br, r_col = rc
+			WHERE u.ExcelBlockID = ExcelBlocks.ExcelBlockID
+			AND (b_row IS NULL OR b_row <= 0)`
+		cellUpdate = `
+			UPDATE Cells, (
+			SELECT
+			id,
+			cell_range,
+			CAST(
+			CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'       
+			WHEN 1 THEN right(cell_range, length(cell_range)-2)  
+			ELSE right(cell_range, length(cell_range)-1)         
+			END AS UNSIGNED INTEGER)-1 AS r,                   
+			ascii(CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'                
+			WHEN 1 THEN left(cell_range, 2)                         
+			ELSE left(cell_range, 1) END)-ascii('A') AS c
+			FROM Cells
+			WHERE col IS NULL or row IS NULL OR (col <= 0  AND row <= 0)
+			) AS u
+			SET Cells.row=r, col=c
+			WHERE Cells.id = u.id`
+	}
+	if err := db.Exec(blockUpdate).Error; err != nil {
+		t.Error(err)
+	}
+	if err := db.Exec(cellUpdate).Error; err != nil {
+		t.Error(err)
+	}
 	t.Run("Queries", testQueries)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
@@ -764,6 +822,10 @@ func testCellComments(t *testing.T) {
 		Worksheet: sheet,
 		Range:     "D8:D20",
 		Formula:   "B8*C8",
+		TRow:      7,
+		LCol:      3,
+		BRow:      19,
+		RCol:      7,
 	}
 	db.Create(&block)
 	comments := []model.Comment{
@@ -776,8 +838,8 @@ func testCellComments(t *testing.T) {
 		db.Create(&model.AnswerComment{Answer: answer, Comment: comments[i]})
 	}
 	cells := []model.Cell{
-		{Range: "D8", Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
-		{Range: "D9", Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+		{Range: "D8", Row: 7, Col: 3, Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
+		{Range: "D9", Row: 7, Col: 3, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
 	}
 	for i := range cells {
 		db.Create(&cells[i])

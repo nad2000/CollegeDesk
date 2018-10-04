@@ -256,6 +256,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		boxCols                                           []int
 		columns                                           [][]commentEntry
 	)
+
 	sql := "SELECT name, Address, CommentText FROM (SELECT *, "
 	if Db.Dialect().GetName() == "sqlite3" {
 		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
