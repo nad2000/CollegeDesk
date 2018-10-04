@@ -655,7 +655,34 @@ func TestCommenting(t *testing.T) {
 
 	var blockUpdate, cellUpdate string
 	if db.Dialect().GetName() == "sqlite3" {
-		blockUpdate = `TODO`
+		blockUpdate = `WITH b AS (
+				SELECT  
+				b.ExcelBlockID AS id,
+				SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s, 
+				SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
+				FROM ExcelBlocks AS b                                           
+				WHERE INSTR(b.BlockCellRange, ':') > 0),
+			u AS (
+				SELECT 
+				b.id,
+				CAST(LTRIM(s, RTRIM(s, '0123456789')) AS INTEGER)-1 AS tr,
+				unicode(RTRIM(s, '0123456789'))-unicode('A') AS lc,
+				CAST(LTRIM(e, RTRIM(e, '0123456789')) AS INTEGER)-1 AS br,
+				unicode(RTRIM(e, '0123456789'))-unicode('A') AS rc
+				FROM b)
+			UPDATE ExcelBlocks
+			SET 
+				t_row = (SELECT tr FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
+				l_col = (SELECT lc FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
+				b_row = (SELECT br FROM u WHERE u.id = ExcelBlocks.ExcelBlockID), 
+				r_col = (SELECT rc
+			FROM u WHERE u.id = ExcelBlocks.ExcelBlockID)
+			WHERE b_row IS NULL OR b_row <= 0`
+		cellUpdate = `UPDATE Cells
+			SET
+			"row"=CAST(LTRIM(cell_range, RTRIM(cell_range, '0123456789')) AS INTEGER)-1,
+			col=unicode(RTRIM(cell_range, '0123456789'))-unicode('A') 
+			WHERE col IS NULL or row IS NULL OR (col <= 0  AND row <= 0)`
 	} else {
 		blockUpdate = `UPDATE ExcelBlocks, (
 			SELECT  b.*,
