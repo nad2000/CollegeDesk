@@ -255,56 +255,119 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 		currentCol                                        = -1
 		boxCols                                           []int
 		columns                                           [][]commentEntry
+		blockCommentText, blockCellRange, cellCommentText string
+		tRow, lCol, bRow, rCol                            int
 	)
 
-	sql := "SELECT name, Address, CommentText FROM (SELECT *, "
-	if Db.Dialect().GetName() == "sqlite3" {
-		sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
-			RTRIM(Address, '0123456789') AS Col`
-	} else {
-		sql += `CAST(CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
-					WHEN 1 THEN right(Address, length(Address)-2)
-					ELSE right(Address, length(Address)-1)
-				END AS UNSIGNED INTEGER) AS Row,
-			CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
-			  WHEN 1 THEN left(Address, 2)
-			  ELSE left(Address, 1)
-			END AS Col`
-	}
-	sql += `
+	bcSQL := `SELECT 
+	  ws.name,
+	  b.worksheet_id,
+	  b.BlockCellRange,
+	  c.CommentText,
+	  b.t_row, b.l_col, b.b_row, b.r_col
+    FROM WorkSheets AS ws
+    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+    JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+    JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+    WHERE ws.StudentAnswerID = ?`
+
+	ccSQL := `SELECT
+	  b.worksheet_id, cell.cell_range, cell.row, cell.col, c.CommentText
+    FROM WorkSheets AS ws
+    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+    JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
+    JOIN Comments AS c ON c.CommentID = cell.CommentID
+    WHERE ws.StudentAnswerID = ?`
+
+	sqlStmt := `SELECT 
+	  bc.name,
+	  bc.BlockCellRange,
+	  bc.CommentText AS CommentText,
+	  bc.t_row, 
+	  bc.l_col, 
+	  bc.b_row,
+	  bc.r_col,
+	  
+	  cc.cell_range,
+	  cc.row, 
+	  cc.col, 
+	  cc.CommentText AS CellCommentText
 	FROM (
-        SELECT
-          ws.name,
-          CASE
-            WHEN b.chart_id IS NULL THEN
-			  CASE
-                WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1)
-                ELSE BlockCellRange
-              END
-            ELSE b.relative_formula
-          END AS Address,
-          c.CommentText
-		FROM WorkSheets AS ws
-        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-        JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
-        JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
-        WHERE ws.StudentAnswerID = ?
-	  UNION
-        SELECT
-          ws.name,
-		  cell.cell_range,
-          c.CommentText
-        FROM WorkSheets AS ws
-        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-        JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
-        JOIN Comments AS c ON c.CommentID = cell.CommentID
-        WHERE ws.StudentAnswerID = ?) AS r
-	) AS s 
-	ORDER BY name, LENGTH(Col), Col, Row`
-	fmt.Println(sql)
-	rows, err := Db.Raw(sql, answerID, answerID).Rows()
+	` + bcSQL + `) AS bc
+	LEFT JOIN (
+	` + ccSQL + `) AS cc ON cc.worksheet_id = bc.worksheet_id 
+            AND cc.row >= bc.t_row AND cc.row <= bc.b_row
+            AND cc.col >= bc.l_col AND cc.col <= bc.r_col
+	UNION
+	SELECT 
+	  bc.name,
+	  bc.BlockCellRange,
+	  bc.CommentText AS CommentText,
+	  bc.t_row, 
+	  bc.l_col, 
+	  bc.b_row,
+	  bc.r_col,
+	  
+	  cc.cell_range,
+	  cc.row, 
+	  cc.col, 
+	  cc.CommentText AS CellCommentText
+	FROM (
+	` + bcSQL + `) AS bc
+	LEFT JOIN (
+	` + ccSQL + `) AS cc ON cc.worksheet_id = bc.worksheet_id 
+            AND cc.row >= bc.t_row AND cc.row <= bc.b_row
+            AND cc.col >= bc.l_col AND cc.col <= bc.r_col
+	ORDER BY col, row`
+
+	// sql := "SELECT name, Address, CommentText FROM (SELECT *, "
+	// if Db.Dialect().GetName() == "sqlite3" {
+	// 	sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
+	// 		RTRIM(Address, '0123456789') AS Col`
+	// } else {
+	// 	sql += `CAST(CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
+	// 				WHEN 1 THEN right(Address, length(Address)-2)
+	// 				ELSE right(Address, length(Address)-1)
+	// 			END AS UNSIGNED INTEGER) AS Row,
+	// 		CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
+	// 		  WHEN 1 THEN left(Address, 2)
+	// 		  ELSE left(Address, 1)
+	// 		END AS Col`
+	// }
+	// sql += `
+	// FROM (
+	// SELECT
+	// ws.name,
+	// CASE
+	// WHEN b.chart_id IS NULL THEN
+	// 		  CASE
+	// WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1)
+	// ELSE BlockCellRange
+	// END
+	// ELSE b.relative_formula
+	// END AS Address,
+	// c.CommentText
+	// 	FROM WorkSheets AS ws
+	// JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+	// JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+	// JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+	// WHERE ws.StudentAnswerID = ?
+	//   UNION
+	// SELECT
+	// ws.name,
+	// 	  cell.cell_range,
+	// c.CommentText
+	// FROM WorkSheets AS ws
+	// JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+	// JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
+	// JOIN Comments AS c ON c.CommentID = cell.CommentID
+	// WHERE ws.StudentAnswerID = ?) AS r
+	// ) AS s
+	// ORDER BY name, LENGTH(Col), Col, Row`
+	fmt.Println(sqlStmt)
+	rows, err := Db.Raw(sqlStmt, answerID, answerID, answerID, answerID).Rows()
 	if err != nil {
-		log.Errorf("SQL:\n%s", sql)
+		log.Errorf("SQL:\n%s", sqlStmt)
 		return err
 	}
 	defer rows.Close()
@@ -314,14 +377,30 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	}
 
 	for rows.Next() {
-		err = rows.Scan(&sheetName, &address, &commentText)
+		err = rows.Scan(
+			&sheetName, &blockCellRange, &blockCommentText,
+			&tRow, &lCol, &bRow, &rCol,
+			&address, &row, &col, &cellCommentText)
 		if err != nil {
 			log.Error(err)
 		}
+		if address == "" {
+			continue
+		}
+		if blockCommentText != "" {
+			commentText = blockCommentText
+		}
+		if cellCommentText != "" {
+			if commentText != "" {
+				commentText += "\n"
+			}
+			commentText += cellCommentText
+		}
+
 		if debugLevel > 1 {
 			log.Debugf("COMMENT: %q, %q, %q", sheetName, address, commentText)
 		}
-		col, row, _ = xlsx.GetCoordsFromCellIDString(address)
+		// col, row, _ = xlsx.GetCoordsFromCellIDString(address)
 
 		if currentSheetName != sheetName || currentCol != col {
 			if currentSheetName != sheetName && currentSheetName != "" {
