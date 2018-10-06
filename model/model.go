@@ -697,20 +697,22 @@ func (b *Block) save() {
 			Db.Delete(b)
 		} else {
 			if b.IsReference {
-				b.Range = b.address()
+				b.Range = b.Address()
 			} else {
-				b.Range = b.innerAddress()
+				b.Range = b.InnerAddress()
 			}
 			Db.Save(b)
 		}
 	}
 }
 
-func (b *Block) address() string {
+// Address - the block range
+func (b *Block) Address() string {
 	return cellAddress(b.TRow, b.LCol) + ":" + cellAddress(b.BRow, b.RCol)
 }
 
-func (b *Block) innerAddress() string {
+// InnerAddress - the block "inner" range excluding empty cells
+func (b *Block) InnerAddress() string {
 	return cellAddress(b.i.sr, b.i.sc) + ":" + cellAddress(b.i.er, b.i.ec)
 }
 
@@ -776,11 +778,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					relFormula := RelativeFormula(i, j, cell.Formula())
 					if relFormula == b.RelativeFormula {
 						cellID := cellAddress(i, j)
-						commentText := ""
-						comment, ok := sheet.Comment[cellID]
-						if ok {
-							commentText = comment.Text
-						}
 						if value := cellValue(cell); value != "" {
 							c := Cell{
 								BlockID:     b.ID,
@@ -788,7 +785,6 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 								Formula:     cell.Formula(),
 								Value:       value,
 								Range:       cellID,
-								Comment:     commentText,
 							}
 							if DebugLevel > 1 {
 								log.Debugf("Inserting %#v", c)
@@ -878,7 +874,10 @@ type Cell struct {
 	Range       string `gorm:"column:cell_range"`
 	Formula     string
 	Value       string `gorm:"size:2000"`
-	Comment     string
+	Comment     Comment
+	CommentID   sql.NullInt64 `gorm:"column:CommentID;type:int"`
+	Row         int           `gorm:"index"`
+	Col         int           `gorm:"index"`
 }
 
 // TableName overrides default table name for the model
@@ -1141,47 +1140,67 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 	return false
 }
 
-// FindBlocksInside - find answer blocks within the reference block and store them
-func (rb *Block) FindBlocksInside(sheet *xlsx.Sheet, ws *Worksheet) (err error) {
+// FindBlocksInside - find answer blocks within the reference block (rb) and store them
+func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 	var (
-		b    Block
-		cell *xlsx.Cell
+		b          Block
+		cell       *xlsx.Cell
+		relFormula string
 	)
-	rangeAddr := strings.Split(rb.Range, ":")
-	if len(rangeAddr) < 2 {
-		return fmt.Errorf("Incorrect block range: %v", rb)
-	}
+	r := rb.TRow
 	cell = sheet.Cell(rb.TRow, rb.LCol)
-	b = Block{
-		WorksheetID:     ws.ID,
-		Formula:         cell.Formula(),
-		RelativeFormula: RelativeFormula(rb.TRow, rb.LCol, cell.Formula()),
-		Range:           rb.Range,
-		TRow:            rb.TRow,
-		LCol:            rb.LCol,
-	}
-	err = Db.Create(&b).Error
-	if err != nil {
-		log.Error(err.Error())
-	}
-	for r := rb.TRow; r <= rb.BRow; r++ {
-		for c := rb.LCol; c <= rb.RCol; c++ {
-			cell := sheet.Cell(r, c)
-			if value := cellValue(cell); value != "" {
-				c := Cell{
-					BlockID:     b.ID,
-					WorksheetID: ws.ID,
-					Formula:     cell.Formula(),
-					Value:       value,
-					Range:       cellAddress(r, c),
+	for r <= rb.BRow {
+		relFormula = RelativeFormula(r, rb.LCol, cell.Formula())
+		b = Block{
+			WorksheetID:     ws.ID,
+			Formula:         cell.Formula(),
+			RelativeFormula: relFormula,
+			Range:           rb.Range,
+			TRow:            r,
+			LCol:            rb.LCol,
+			BRow:            rb.BRow,
+			RCol:            rb.RCol,
+		}
+		b.Range = b.Address()
+		err = Db.Create(&b).Error
+		if err != nil {
+			return
+		}
+		for {
+			for c := rb.LCol; c <= rb.RCol; c++ {
+				cell := sheet.Cell(r, c)
+				if value := cellValue(cell); value != "" {
+					c := Cell{
+						BlockID:     b.ID,
+						WorksheetID: ws.ID,
+						Formula:     cell.Formula(),
+						Value:       value,
+						Range:       cellAddress(r, c),
+						Row:         r,
+						Col:         c,
+					}
+					if DebugLevel > 1 {
+						log.Debugf("Inserting %#v", c)
+					}
+					Db.Create(&c)
+					if Db.Error != nil {
+						return Db.Error
+					}
 				}
-				if DebugLevel > 1 {
-					log.Debugf("Inserting %#v", c)
+			}
+			r++
+			if r > rb.BRow {
+				return
+			}
+
+			cell = sheet.Cell(r, rb.LCol)
+			if relFormula != RelativeFormula(r, rb.LCol, cell.Formula()) {
+				if r != b.BRow {
+					b.BRow = r - 1
+					b.Range = b.Address()
+					Db.Save(&b)
 				}
-				Db.Create(&c)
-				if Db.Error != nil {
-					return Db.Error
-				}
+				break
 			}
 		}
 	}
@@ -1283,7 +1302,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
-				err = rb.FindBlocksInside(sheet, &ws)
+				err = ws.FindBlocksInside(sheet, rb)
 				if err != nil {
 					log.Errorln(err)
 				}

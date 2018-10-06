@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinzhu/now"
+	"github.com/nad2000/xlsx"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -462,6 +463,7 @@ func TestProcessing(t *testing.T) {
 	db = createTestDB()
 	defer db.Close()
 
+	t.Run("FindBlocksInside", testFindBlocksInside)
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
 	t.Run("ImportFile", testImportFile)
 	t.Run("RowsToProcess", testRowsToProcess)
@@ -473,6 +475,53 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleQuestions", testHandleQuestions)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
 }
+
+func testFindBlocksInside(t *testing.T) {
+	/* Expected Block and Formula:
+	1. D8:D8 - B8*C8
+	2. D9:D9 - PRODUCT(B9,C9)
+	3. D10:D10 - PRODUCT(B10:C10)
+	4. D11:D20 - C11*B11
+	5. G9:G9 - SUM(B8,B9,B10,B11,B12,B13,B14,B15,B16,B17,B18,B19,B20)
+	6. G10:G10 - SUM(D8:D20)
+	7. G11:G11 - G10/G9
+	*/
+	ws := model.Worksheet{}
+	db.Create(&ws)
+	file, _ := xlsx.OpenFile("Q1 Solution different color stud4.xlsx")
+	sheet := file.Sheets[0]
+	ws.FindBlocksInside(sheet, model.Block{
+		Range: "D8:D20",
+		TRow:  7,
+		BRow:  19,
+		LCol:  3,
+		RCol:  3,
+	})
+	var blocks []model.Block
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 4, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", expected, got)
+	}
+	// t.Log(ws)
+	ws.FindBlocksInside(sheet, model.Block{
+		Range: "G9:G11",
+		TRow:  8,
+		BRow:  10,
+		LCol:  6,
+		RCol:  6,
+	})
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 7, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", expected, got)
+	}
+}
+
 func testHandleQuestions(t *testing.T) {
 
 	var fileID int
