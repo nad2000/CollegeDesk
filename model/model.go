@@ -1142,7 +1142,50 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 }
 
 // FindBlocksInside - find answer blocks within the reference block and store them
-func (rb *Block) FindBlocksInside() {
+func (rb *Block) FindBlocksInside(sheet *xlsx.Sheet, ws *Worksheet) (err error) {
+	var (
+		b    Block
+		cell *xlsx.Cell
+	)
+	rangeAddr := strings.Split(rb.Range, ":")
+	if len(rangeAddr) < 2 {
+		return fmt.Errorf("Incorrect block range: %v", rb)
+	}
+	cell = sheet.Cell(rb.TRow, rb.LCol)
+	b = Block{
+		WorksheetID:     ws.ID,
+		Formula:         cell.Formula(),
+		RelativeFormula: RelativeFormula(rb.TRow, rb.LCol, cell.Formula()),
+		Range:           rb.Range,
+		TRow:            rb.TRow,
+		LCol:            rb.LCol,
+	}
+	err = Db.Create(&b).Error
+	if err != nil {
+		log.Error(err.Error())
+	}
+	for r := rb.TRow; r <= rb.BRow; r++ {
+		for c := rb.LCol; c <= rb.RCol; c++ {
+			cell := sheet.Cell(r, c)
+			if value := cellValue(cell); value != "" {
+				c := Cell{
+					BlockID:     b.ID,
+					WorksheetID: ws.ID,
+					Formula:     cell.Formula(),
+					Value:       value,
+					Range:       cellAddress(r, c),
+				}
+				if DebugLevel > 1 {
+					log.Debugf("Inserting %#v", c)
+				}
+				Db.Create(&c)
+				if Db.Error != nil {
+					return Db.Error
+				}
+			}
+		}
+	}
+	return
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
@@ -1236,63 +1279,13 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				Find(&references)
 			if result.Error != nil {
 				log.Error(result.Error)
+				continue
 			}
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
-				var (
-					b              Block
-					cell           *xlsx.Cell
-					sc, sr, ec, er int
-					err            error
-				)
-				rangeAddr := strings.Split(rb.Range, ":")
-				if len(rangeAddr) < 2 {
-					log.Errorln("Incorrect block range: ", rb)
-					continue
-				}
-				sc, sr, err = xlsx.GetCoordsFromCellIDString(rangeAddr[0])
+				err = rb.FindBlocksInside(sheet, &ws)
 				if err != nil {
-					log.Error(err)
-					continue
-				}
-				ec, er, err = xlsx.GetCoordsFromCellIDString(rangeAddr[1])
-				if err != nil {
-					log.Error(err)
-					continue
-				}
-				cell = sheet.Cell(sr, sc)
-				b = Block{
-					WorksheetID:     ws.ID,
-					Formula:         cell.Formula(),
-					RelativeFormula: RelativeFormula(sr, sc, cell.Formula()),
-					Range:           rb.Range,
-					TRow:            sr,
-					LCol:            sc,
-				}
-				err = Db.Create(&b).Error
-				if err != nil {
-					log.Error(err.Error())
-				}
-				for r := sr; r <= er; r++ {
-					for c := sc; c <= ec; c++ {
-						cell := sheet.Cell(sc, sr)
-						if value := cellValue(cell); value != "" {
-							c := Cell{
-								BlockID:     b.ID,
-								WorksheetID: ws.ID,
-								Formula:     cell.Formula(),
-								Value:       value,
-								Range:       cellAddress(r, c),
-							}
-							if DebugLevel > 1 {
-								log.Debugf("Inserting %#v", c)
-							}
-							Db.Create(&c)
-							if Db.Error != nil {
-								log.Error("Error occured: ", Db.Error.Error())
-							}
-						}
-					}
+					log.Errorln(err)
 				}
 			}
 		} else {
