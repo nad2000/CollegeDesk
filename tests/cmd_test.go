@@ -452,7 +452,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
 	if countBefore <= countAfter {
 		t.Errorf(
-			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d after.",
 			countBefore, countAfter)
 	}
 }
