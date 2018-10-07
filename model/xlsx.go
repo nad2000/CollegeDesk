@@ -237,7 +237,7 @@ func unmarshalRelationships(fileContent []byte) (content xlsxRelationships) {
 	return
 }
 
-func UnmarshalChart(fileContent []byte) (content xlsxBareChart) {
+func unmarshalChart(fileContent []byte) (content xlsxBareChart) {
 	xml.Unmarshal(fileContent, &content)
 	return
 }

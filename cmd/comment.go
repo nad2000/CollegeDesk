@@ -89,8 +89,16 @@ func AddComments(fileNames ...string) {
 
 	var book model.Workbook
 	base := filepath.Base(fileName)
-	Db.Order("ID DESC").First(&book, "file_name LIKE ?", "%"+base)
-	if err := AddCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
+	res := Db.Order("ID DESC").First(&book, "StudentAnswerID IS NOT NULL AND file_name LIKE ?", "%"+base)
+	if res.RecordNotFound() {
+		log.Errorf("The workbook record not found for %q.", fileName)
+		return
+	}
+	if res.Error != nil {
+		log.Errorln(res.Error)
+		return
+	}
+	if err := addCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }

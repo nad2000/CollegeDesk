@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinzhu/now"
+	"github.com/nad2000/xlsx"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -106,10 +107,9 @@ func TestRelativeFormulas(t *testing.T) {
 func TestDemoFile(t *testing.T) {
 	deleteData()
 	var wb model.Workbook
+	var fileName = "demo.xlsx"
 
 	db, _ := model.OpenDb(url)
-	db.Close()
-
 	q := model.Question{
 		QuestionType:      "ShortAnswer",
 		QuestionSequence:  0,
@@ -118,22 +118,24 @@ func TestDemoFile(t *testing.T) {
 		MaxScore:          999.99,
 	}
 	db.FirstOrCreate(&q, &q)
-	db.Close()
+	a := model.Answer{
+		ShortAnswer:    fileName,
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+		QuestionID:     model.NewNullInt64(q.ID),
+	}
+	db.FirstOrCreate(&a, &a)
 
-	cmd.RootCmd.SetArgs([]string{
-		"run", "-U", url, "-t", "-f", "demo.xlsx"})
-	cmd.Execute()
+	t.Log("+++ Start extration")
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 
-	db, _ = model.OpenDb(url)
-
-	result := db.First(&wb, "file_name = ?", "demo.xlsx")
+	result := db.First(&wb, "file_name = ?", fileName)
 	if result.Error != nil {
 		t.Error(result.Error)
 		t.Fail()
 	}
 
 	if wb.FileName != "demo.xlsx" {
-		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
+		t.Logf("Missing workbook: expected %q, got: %q", fileName, wb.FileName)
 		t.Fail()
 	}
 	var count int
@@ -164,6 +166,14 @@ func TestDemoFile(t *testing.T) {
 	db.Model(&model.BlockCommentMapping{}).Count(&count)
 	if expected := 6; count != expected {
 		t.Errorf("Expected %d block -> comment mapping entries, got: %d", expected, count)
+	}
+	db.Model(&model.Block{}).Count(&count)
+	if expected := 32; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+	db.Model(&model.Cell{}).Count(&count)
+	if expected := 84; count != expected {
+		t.Errorf("Expected %d cells, got: %d", expected, count)
 	}
 }
 
@@ -307,6 +317,112 @@ func testQuestionsToProcess(t *testing.T) {
 
 }
 
+func testImportFile(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 123,
+		QuestionText:     "Test Import Question...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+
+	var count int
+	db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	if expected := 8; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+
+}
+
+func testHandleNotcolored(t *testing.T) {
+
+	var (
+		q          model.Question
+		assignment model.Assignment
+		f          model.Source
+		a          model.Answer
+	)
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{"answer.xlsx", "answer.nocolor.xlsx"} {
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		a := model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-14 14:42"),
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)
+	}
+
+	// var count int
+	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	// if expected := 8; count != expected {
+	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
+	// }
+
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes #2...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes #2...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	f = model.Source{
+		FileName:     "Q1 Solution different color stud4.xlsx",
+		S3BucketName: "studentanswers",
+	}
+	db.Create(&f)
+	a = model.Answer{
+		SourceID:       f.ID,
+		AssignmentID:   assignment.ID,
+		QuestionID:     model.NewNullInt64(q.ID),
+		SubmissionTime: *parseTime("2018-09-30 12:42"),
+	}
+	db.Create(&a)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+
+}
+
 func testRowsToProcess(t *testing.T) {
 
 	rows, _ := model.RowsToProcess()
@@ -341,7 +457,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
 	if countBefore <= countAfter {
 		t.Errorf(
-			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d after.",
 			countBefore, countAfter)
 	}
 }
@@ -351,14 +467,65 @@ func TestProcessing(t *testing.T) {
 	db = createTestDB()
 	defer db.Close()
 
+	t.Run("FindBlocksInside", testFindBlocksInside)
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
+	t.Run("ImportFile", testImportFile)
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("HandleAnswers", testHandleAnswers)
+	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 	t.Run("HandleQuestions", testHandleQuestions)
+	t.Run("ImportQuestionFile", testImportQuestionFile)
 }
+
+func testFindBlocksInside(t *testing.T) {
+	/* Expected Block and Formula:
+	1. D8:D8 - B8*C8
+	2. D9:D9 - PRODUCT(B9,C9)
+	3. D10:D10 - PRODUCT(B10:C10)
+	4. D11:D20 - C11*B11
+	5. G9:G9 - SUM(B8,B9,B10,B11,B12,B13,B14,B15,B16,B17,B18,B19,B20)
+	6. G10:G10 - SUM(D8:D20)
+	7. G11:G11 - G10/G9
+	*/
+	ws := model.Worksheet{}
+	db.Create(&ws)
+	file, _ := xlsx.OpenFile("Q1 Solution different color stud4.xlsx")
+	sheet := file.Sheets[0]
+	ws.FindBlocksInside(sheet, model.Block{
+		Range: "D8:D20",
+		TRow:  7,
+		BRow:  19,
+		LCol:  3,
+		RCol:  3,
+	})
+	var blocks []model.Block
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 4, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", expected, got)
+	}
+	// t.Log(ws)
+	ws.FindBlocksInside(sheet, model.Block{
+		Range: "G9:G11",
+		TRow:  8,
+		BRow:  10,
+		LCol:  6,
+		RCol:  6,
+	})
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 7, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", expected, got)
+	}
+}
+
 func testHandleQuestions(t *testing.T) {
 
 	var fileID int
@@ -387,6 +554,36 @@ func testHandleQuestions(t *testing.T) {
 
 	tm := testManager{}
 	cmd.HandleQuestions(&tm)
+}
+
+func testImportQuestionFile(t *testing.T) {
+
+	var fileID int
+	fileName := "Q1 Question different color.xlsx"
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS LastFileID FROM FileSources").Scan(&fileID)
+	f := model.Source{
+		ID:           fileID,
+		FileName:     fileName,
+		S3BucketName: "studentanswers",
+		S3Key:        fileName,
+	}
+	result := db.Create(&f)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q := model.Question{
+		Source:       f,
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: fileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+	result = db.Create(&q)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q.ImportFile(fileName, "FFFFFF00", true)
 }
 
 func testQuestions(t *testing.T) {
