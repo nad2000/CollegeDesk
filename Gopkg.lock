@@ -10,7 +10,7 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:dfdd74209f45c2c23ce95e584870260d823afa7595db694552cae9870a923f53"
+  digest = "1:6033dc6c0a8778600a04330cefc9fc30f862d6fb69365f0718e762f2089f4713"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -30,6 +30,7 @@
     "aws/request",
     "aws/session",
     "aws/signer/v4",
+    "internal/s3err",
     "internal/sdkio",
     "internal/sdkrand",
     "internal/sdkuri",
@@ -48,8 +49,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "cfcda8304585604aabf1f7f8f7ce67b55029d0ca"
-  version = "v1.15.47"
+  revision = "59124d90523f4c0491f997f9a36aef265fe3502c"
+  version = "v1.15.49"
 
 [[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
@@ -137,12 +138,12 @@
   revision = "0b12d6b5"
 
 [[projects]]
-  branch = "master"
-  digest = "1:f44d34fda864bed6d6c71514cd40b2ee097e6e67f745d5d014113e1faa5af8b7"
+  digest = "1:0a69a1c0db3591fcefb47f115b224592c8dfa4368b7ba9fae509d5e16cdc95c8"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
   pruneopts = "UT"
-  revision = "b729f2633dfe35f4d1d8a32385f6685610ce1cb5"
+  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
+  version = "v1.0.1"
 
 [[projects]]
   digest = "1:c568d7727aa262c32bdf8a3f7db83614f7af0ed661474b24588de635c20024c7"
@@ -169,12 +170,12 @@
   revision = "ae18d6b8b3205b561c79e8e5f69bff09736185f4"
 
 [[projects]]
-  digest = "1:e32dfc6abff6a3633ef4d9a1022fd707c8ef26f1e1e8f855dc58dc415ce7c8f3"
+  digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
   pruneopts = "UT"
-  revision = "fe40af7a9c397fa3ddba203c38a5042c5d0475ad"
-  version = "v1.1.1"
+  revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
+  version = "v1.1.2"
 
 [[projects]]
   branch = "master"
@@ -269,14 +270,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6f82ed211591ecb407897ca46ff6149d618223088aecad72675804f106033629"
+  digest = "1:850d28ab022512e2cd3cf511a77f363c29e22689b4031f2050871f5de47ae4a0"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "e4b3c5e9061176387e7cea65e4dc5853801f3fb7"
+  revision = "4497e2df6f9e69048a54498c7affbbec3294ad47"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
