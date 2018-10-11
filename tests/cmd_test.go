@@ -853,14 +853,14 @@ func TestCommenting(t *testing.T) {
 	var blockUpdate, cellUpdate string
 	if db.Dialect().GetName() == "sqlite3" {
 		blockUpdate = `WITH b AS (
-				SELECT  
+				SELECT
 				b.ExcelBlockID AS id,
-				SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s, 
+				SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s,
 				SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
-				FROM ExcelBlocks AS b                                           
+				FROM ExcelBlocks AS b
 				WHERE INSTR(b.BlockCellRange, ':') > 0),
 			u AS (
-				SELECT 
+				SELECT
 				b.id,
 				CAST(LTRIM(s, RTRIM(s, '0123456789')) AS INTEGER)-1 AS tr,
 				unicode(RTRIM(s, '0123456789'))-unicode('A') AS lc,
@@ -868,40 +868,42 @@ func TestCommenting(t *testing.T) {
 				unicode(RTRIM(e, '0123456789'))-unicode('A') AS rc
 				FROM b)
 			UPDATE ExcelBlocks
-			SET 
+			SET
 				t_row = (SELECT tr FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
 				l_col = (SELECT lc FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
-				b_row = (SELECT br FROM u WHERE u.id = ExcelBlocks.ExcelBlockID), 
+				b_row = (SELECT br FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
 				r_col = (SELECT rc
 			FROM u WHERE u.id = ExcelBlocks.ExcelBlockID)
 			WHERE b_row IS NULL OR b_row <= 0`
 		cellUpdate = `UPDATE Cells
-			SET
-			"row"=CAST(LTRIM(cell_range, RTRIM(cell_range, '0123456789')) AS INTEGER)-1,
-			col=unicode(RTRIM(cell_range, '0123456789'))-unicode('A') 
+			SET row=CAST(LTRIM(cell_range, RTRIM(cell_range, '0123456789')) AS INTEGER)-1,
+			col=unicode(RTRIM(cell_range, '0123456789'))-unicode('A')
 			WHERE col IS NULL or row IS NULL OR (col <= 0  AND row <= 0)`
 	} else {
+		if err := db.Exec("SET sql_mode = ?", "ANSI").Error; err != nil {
+			t.Error(err)
+		}
 		blockUpdate = `UPDATE ExcelBlocks, (
 			SELECT  b.*,
 			CAST(
-			CASE s REGEXP '[A-Za-z]{2}[0-9]+'       
-			WHEN 1 THEN right(s, length(s)-2)  
-			ELSE right(s, length(s)-1)         
-			END AS UNSIGNED INTEGER)-1 AS tr,                   
-			ascii(CASE s REGEXP '[A-Za-z]{2}[0-9]+'                
-			WHEN 1 THEN left(s, 2)                         
+			CASE s REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN right(s, length(s)-2)
+			ELSE right(s, length(s)-1)
+			END AS UNSIGNED INTEGER)-1 AS tr,
+			ascii(CASE s REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(s, 2)
 			ELSE left(s, 1) END)-ascii('A') AS lc,
 			CAST(
-			CASE e REGEXP '[A-Za-z]{2}[0-9]+'       
-			WHEN 1 THEN right(e, length(e)-2)  
-			ELSE right(e, length(e)-1)         
-			END AS UNSIGNED INTEGER)-1 AS br,                   
-			ascii(CASE e REGEXP '[A-Za-z]{2}[0-9]+'                
-			WHEN 1 THEN left(e, 2)                         
+			CASE e REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN right(e, length(e)-2)
+			ELSE right(e, length(e)-1)
+			END AS UNSIGNED INTEGER)-1 AS br,
+			ascii(CASE e REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(e, 2)
 			ELSE left(e, 1) END)-ascii('A') AS rc
 			FROM (
 			SELECT
-			b.ExcelBlockID, 
+			b.ExcelBlockID,
 			SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s,
 			SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
 			FROM ExcelBlocks AS b
@@ -912,33 +914,56 @@ func TestCommenting(t *testing.T) {
 			AND (b_row IS NULL OR b_row <= 0)`
 		cellUpdate = `
 			UPDATE Cells, (
-			SELECT
-			id,
-			cell_range,
+			SELECT id, cell_range,
 			CAST(
-			CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'       
-			WHEN 1 THEN right(cell_range, length(cell_range)-2)  
-			ELSE right(cell_range, length(cell_range)-1)         
-			END AS UNSIGNED INTEGER)-1 AS r,                   
-			ascii(CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'                
-			WHEN 1 THEN left(cell_range, 2)                         
+			  CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'
+			    WHEN 1 THEN right(cell_range, length(cell_range)-2)
+			    ELSE right(cell_range, length(cell_range)-1)
+			  END AS UNSIGNED INTEGER)-1 AS r,
+			ascii(CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(cell_range, 2)
 			ELSE left(cell_range, 1) END)-ascii('A') AS c
 			FROM Cells
-			WHERE col IS NULL or row IS NULL OR (col <= 0  AND row <= 0)
+			WHERE "col" IS NULL or "row" IS NULL OR ("col" <= 0  AND "row" <= 0)
 			) AS u
-			SET Cells.row=r, col=c
+			SET Cells."row"=u.r, Cells.col=u.c
 			WHERE Cells.id = u.id`
 	}
 	if err := db.Exec(blockUpdate).Error; err != nil {
+		t.Log("*** SQL:\n", blockUpdate)
 		t.Error(err)
 	}
 	if err := db.Exec(cellUpdate).Error; err != nil {
+		t.Log("*** SQL:\n", cellUpdate)
 		t.Error(err)
 	}
 	t.Run("Queries", testQueries)
+	t.Run("GetCommentRows", testGetCommentRows)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
 	t.Run("CellComments", testCellComments)
+}
+
+func testGetCommentRows(t *testing.T) {
+	var ws model.Worksheet
+	db.Where("workbook_file_name = ?", "commenting.test.xlsx").First(&ws)
+	t.Log(ws)
+	rows, err := ws.GetBlockComments()
+	if err != nil {
+		t.Error(err)
+	} else {
+		for i, r := range rows {
+			t.Log(i, ": ", r)
+		}
+	}
+	comments, err := ws.GetCellComments()
+	if err != nil {
+		t.Error(err)
+	} else {
+		for i, r := range comments {
+			t.Log(i, ": ", r)
+		}
+	}
 }
 
 func testQueries(t *testing.T) {
@@ -1072,7 +1097,8 @@ func testCellComments(t *testing.T) {
 	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
-	if err := cmd.AddCommentsToFile(book.AnswerID, fileName, outputName, true); err != nil {
+	if err := cmd.AddCommentsToFile(
+		int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }

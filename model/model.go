@@ -626,7 +626,78 @@ func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
 
-// Block - the uniformly filled with specific color block
+type BlockCommentRow struct {
+	Range                  string
+	CommentText            string
+	TRow, LCol, BRow, RCol int
+}
+
+// GetBlockComments retrieves all block comments in a form of a map
+func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err error) {
+	// var (
+	// 	blockRange             string
+	// 	commentText            string
+	// 	tRow, lCol, bRow, rCol int
+	// )
+
+	rows, err := Db.Raw(`SELECT 
+	  b.BlockCellRange,
+	  c.CommentText,
+	  b.t_row, b.l_col, b.b_row, b.r_col
+    FROM ExcelBlocks AS b
+      JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+      JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+    WHERE b.worksheet_id = ?
+	ORDER BY b.l_col, b.t_row`, ws.ID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res = make(map[int][]BlockCommentRow)
+	col := -1
+	for rows.Next() {
+		r := BlockCommentRow{}
+		rows.Scan(&r.Range, &r.CommentText, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		if r.LCol != col {
+			col = r.LCol
+			res[col] = make([]BlockCommentRow, 1)
+			res[col][0] = r
+		} else {
+			res[col] = append(res[col], r)
+		}
+	}
+
+	return
+}
+
+type CellCommentRow struct {
+	Range       string
+	CommentText string
+	Row, Col    int
+}
+
+// GetCellComments retrieves all block comments in a form of a map
+func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
+	rows, err := Db.Raw(`SELECT cell.cell_range, c.CommentText, cell.row, cell.col
+    FROM Cells AS cell JOIN Comments AS c ON c.CommentID = cell.CommentID
+    WHERE  cell.worksheet_id = ?
+	ORDER BY cell.col, cell."row"`, ws.ID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res = make([]CellCommentRow, 0)
+	for rows.Next() {
+		r := CellCommentRow{}
+		rows.Scan(&r.Range, &r.CommentText, &r.Row, &r.Col)
+		res = append(res, r)
+	}
+	return
+
+}
+
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	Color           string

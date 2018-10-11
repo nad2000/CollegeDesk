@@ -98,7 +98,7 @@ func AddComments(fileNames ...string) {
 		log.Errorln(res.Error)
 		return
 	}
-	if err := addCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
+	if err := AddCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }
@@ -287,10 +287,10 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
     JOIN Comments AS c ON c.CommentID = cell.CommentID
     WHERE ws.StudentAnswerID = ?`
 
-	sqlStmt := `SELECT 
+	sqlStmt := `SELECT * FROM(SELECT 
 	  bc.name,
 	  bc.BlockCellRange,
-	  bc.CommentText AS CommentText,
+	  coalesce(bc.CommentText, '') AS CommentText,
 	  bc.t_row, 
 	  bc.l_col, 
 	  bc.b_row,
@@ -299,7 +299,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	  cc.cell_range,
 	  cc.row, 
 	  cc.col, 
-	  cc.CommentText AS CellCommentText
+	  coalesce(cc.CommentText, '') AS CellCommentText
 	FROM (
 	` + bcSQL + `) AS bc
 	LEFT JOIN (
@@ -326,7 +326,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	` + ccSQL + `) AS cc ON cc.worksheet_id = bc.worksheet_id 
             AND cc.row >= bc.t_row AND cc.row <= bc.b_row
             AND cc.col >= bc.l_col AND cc.col <= bc.r_col
-	ORDER BY col, row`
+	) AS res ORDER BY res.col, res.row`
 
 	// sql := "SELECT name, Address, CommentText FROM (SELECT *, "
 	// if Db.Dialect().GetName() == "sqlite3" {
@@ -390,7 +390,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 			&tRow, &lCol, &bRow, &rCol,
 			&address, &row, &col, &cellCommentText)
 		if err != nil {
-			log.Error(err)
+			log.Error("Failed to read a comment entry: ", err)
 		}
 		if address == "" {
 			continue
