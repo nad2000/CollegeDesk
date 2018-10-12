@@ -34,7 +34,8 @@ var DryRun bool
 
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
-func cellAddress(rowIndex, colIndex int) string {
+// CellAddress maps a cell coordiantes (row, column) to its address
+func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
 }
 
@@ -154,7 +155,7 @@ func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 
 				var commentText string
 
-				cellRange := cellAddress(i, j)
+				cellRange := CellAddress(i, j)
 				commen, ok := sheet.Comment[cellRange]
 				if ok {
 					commentText = commen.Text
@@ -576,7 +577,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								WorksheetID: ws.ID,
 								Range:       p.Name,
 								Formula:     p.Value,
-								RelativeFormula: cellAddress(
+								RelativeFormula: CellAddress(
 									drawing.FromRow+propCount, drawing.ToCol+2),
 								ChartID: chartID,
 							}
@@ -626,6 +627,7 @@ func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
 
+// BlockCommentRow - a block comment row
 type BlockCommentRow struct {
 	Range                  string
 	CommentText            string
@@ -645,8 +647,8 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	  c.CommentText,
 	  b.t_row, b.l_col, b.b_row, b.r_col
     FROM ExcelBlocks AS b
-      JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
-      JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+      LEFT JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+      LEFT JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
     WHERE b.worksheet_id = ?
 	ORDER BY b.l_col, b.t_row`, ws.ID).Rows()
 	if err != nil {
@@ -671,6 +673,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	return
 }
 
+// CellCommentRow - a cell comment row
 type CellCommentRow struct {
 	Range       string
 	CommentText string
@@ -698,6 +701,7 @@ func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
 
 }
 
+// Block - Excel block
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	Color           string
@@ -741,7 +745,7 @@ func (b *Block) save() {
 		if !b.IsReference && b.Color != "" {
 			for i := b.LCol; i <= b.RCol; i++ {
 				for j := b.TRow; j <= b.BRow; j++ {
-					address := cellAddress(j, i)
+					address := CellAddress(j, i)
 					address += ":" + address
 					if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
 						empty := Block{
@@ -776,12 +780,12 @@ func (b *Block) save() {
 
 // Address - the block range
 func (b *Block) Address() string {
-	return cellAddress(b.TRow, b.LCol) + ":" + cellAddress(b.BRow, b.RCol)
+	return CellAddress(b.TRow, b.LCol) + ":" + CellAddress(b.BRow, b.RCol)
 }
 
 // InnerAddress - the block "inner" range excluding empty cells
 func (b *Block) InnerAddress() string {
-	return cellAddress(b.i.sr, b.i.sc) + ":" + cellAddress(b.i.er, b.i.ec)
+	return CellAddress(b.i.sr, b.i.sc) + ":" + CellAddress(b.i.er, b.i.ec)
 }
 
 //  getCellComment returns cell comment text value
@@ -845,7 +849,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 				if !b.IsReference {
 					relFormula := RelativeFormula(i, j, cell.Formula())
 					if relFormula == b.RelativeFormula {
-						cellID := cellAddress(i, j)
+						cellID := CellAddress(i, j)
 						if value := cellValue(cell); value != "" {
 							c := Cell{
 								BlockID:     b.ID,
@@ -1246,7 +1250,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 						WorksheetID: ws.ID,
 						Formula:     cell.Formula(),
 						Value:       value,
-						Range:       cellAddress(r, c),
+						Range:       CellAddress(r, c),
 						Row:         r,
 						Col:         c,
 					}

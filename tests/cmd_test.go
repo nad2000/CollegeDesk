@@ -1074,7 +1074,7 @@ func testCellComments(t *testing.T) {
 		TRow:      7,
 		LCol:      3,
 		BRow:      19,
-		RCol:      7,
+		RCol:      3,
 	}
 	db.Create(&block)
 	comments := []model.Comment{
@@ -1088,17 +1088,43 @@ func testCellComments(t *testing.T) {
 	}
 	cells := []model.Cell{
 		{Range: "D8", Row: 7, Col: 3, Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
-		{Range: "D9", Row: 7, Col: 3, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+		{Range: "D9", Row: 8, Col: 3, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
 	}
 	for i := range cells {
 		db.Create(&cells[i])
 	}
 	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
+	block = model.Block{
+		Worksheet: sheet,
+		Range:     "A2:B5",
+		Formula:   "B8*C8",
+		TRow:      1,
+		LCol:      0,
+		BRow:      4,
+		RCol:      1,
+	}
+	db.Create(&block)
+	comments = []model.Comment{
+		{Text: "CELL COMMENT #1"},
+		{Text: "CELL COMMENT #2"},
+		{Text: "BLOCK COMMENT"},
+	}
+	for i := range comments {
+		db.Create(&comments[i])
+		db.Create(&model.AnswerComment{Answer: answer, Comment: comments[i]})
+	}
+	for _, c := range []model.Cell{
+		{Range: "A2", Row: 1, Col: 0, Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
+		{Range: "B3", Row: 2, Col: 1, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+	} {
+		db.Create(&c)
+	}
+	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
 	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
-	if err := cmd.AddCommentsToFile(
-		int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
+	log.SetLevel(log.DebugLevel)
+	if err := cmd.AddCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
 }

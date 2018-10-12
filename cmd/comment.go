@@ -1,4 +1,4 @@
-// Copyright © 2017 Radomirs Cirskis
+// Copyright © 2017,2018 Radomirs Cirskis
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -178,9 +179,19 @@ type commentEntry struct {
 }
 
 // addCommentsToWorksheet
-func addCommentsToWorksheet(file *excelize.File, sheetName string, columns [][]commentEntry, boxCols []int) {
-	for i := len(boxCols) - 1; i >= 0; i-- {
-		addCommentsToColumn(file, sheetName, columns[i], boxCols[i])
+func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[int][]commentEntry) {
+	cols := make([]int, 0)
+	for c, column := range comments {
+		if column != nil && len(column) != 0 {
+			cols = append(cols, c)
+		}
+	}
+	sort.IntSlice(cols).Sort()
+
+	for i := len(cols) - 1; i >= 0; i-- {
+		col := cols[i]
+		log.Debug("+++ COL: ", col, " WITH BOX AT ", i*2)
+		addCommentsToColumn(file, sheetName, comments[col], i*2)
 	}
 }
 
@@ -190,13 +201,14 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 	if column == nil || len(column) == 0 {
 		return
 	}
-	if boxCol < 1 {
+	if boxCol < 0 {
 		boxCol = column[0].col + 1
 	}
 	address := column[0].address
 	col, _, err := xlsx.GetCoordsFromCellIDString(address)
 	if err != nil {
 		log.Errorf("Error occured while adding commment to column starting with %q: %s", address, err)
+		col = column[0].col
 	}
 
 	nextBoxRow := 1
@@ -204,13 +216,8 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 		cell := &column[i]
 		hight := file.CommmentCalloutBoxHightAt(
 			sheetName, fmt.Sprintf(`{"author":"Grader: ", "text":%q}`, cell.commentText), col, 0)
-
-		if nextBoxRow <= cell.row {
-			cell.boxRow = cell.row + 1
-		} else {
-			cell.boxRow = nextBoxRow
-		}
-		nextBoxRow = cell.boxRow + int(hight+0.5)
+		log.Debug("-- ROW: ", nextBoxRow, ", HIGHT: ", hight)
+		cell.boxRow, nextBoxRow = nextBoxRow, nextBoxRow+int(hight+0.5)
 	}
 	for _, cell := range column {
 		if debug {
@@ -220,6 +227,7 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 				// Save the file w/o comments and reopen it:
 				xlsx.GetCellIDStringFromCoords(boxCol, cell.boxRow))
 		}
+		log.Debugf("*** Adding a comment at (%d, %d): %v", cell.boxRow, boxCol, cell.commentText)
 		file.AddCommentAt(
 			sheetName,
 			cell.address,
@@ -257,195 +265,65 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	}
 
 	var (
-		row, col, boxCol                                  int
-		sheetName, address, commentText, currentSheetName string
-		column                                            []commentEntry
-		currentCol                                        = -1
-		boxCols                                           []int
-		columns                                           [][]commentEntry
-		blockCommentText, blockCellRange, cellCommentText string
-		tRow, lCol, bRow, rCol                            int
+		address, commentText string
+		answer               model.Answer
 	)
 
-	bcSQL := `SELECT 
-	  ws.name,
-	  b.worksheet_id,
-	  b.BlockCellRange,
-	  c.CommentText,
-	  b.t_row, b.l_col, b.b_row, b.r_col
-    FROM WorkSheets AS ws
-    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-    JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
-    JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
-    WHERE ws.StudentAnswerID = ?`
+	Db.Preload("Worksheets").First(&answer, answerID)
+	log.Debug("*** Answer: ", answer)
 
-	ccSQL := `SELECT
-	  b.worksheet_id, cell.cell_range, cell.row, cell.col, c.CommentText
-    FROM WorkSheets AS ws
-    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-    JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
-    JOIN Comments AS c ON c.CommentID = cell.CommentID
-    WHERE ws.StudentAnswerID = ?`
-
-	sqlStmt := `SELECT * FROM(SELECT 
-	  bc.name,
-	  bc.BlockCellRange,
-	  coalesce(bc.CommentText, '') AS CommentText,
-	  bc.t_row, 
-	  bc.l_col, 
-	  bc.b_row,
-	  bc.r_col,
-	  
-	  cc.cell_range,
-	  cc.row, 
-	  cc.col, 
-	  coalesce(cc.CommentText, '') AS CellCommentText
-	FROM (
-	` + bcSQL + `) AS bc
-	LEFT JOIN (
-	` + ccSQL + `) AS cc ON cc.worksheet_id = bc.worksheet_id 
-            AND cc.row >= bc.t_row AND cc.row <= bc.b_row
-            AND cc.col >= bc.l_col AND cc.col <= bc.r_col
-	UNION
-	SELECT 
-	  bc.name,
-	  bc.BlockCellRange,
-	  bc.CommentText AS CommentText,
-	  bc.t_row, 
-	  bc.l_col, 
-	  bc.b_row,
-	  bc.r_col,
-	  
-	  cc.cell_range,
-	  cc.row, 
-	  cc.col, 
-	  cc.CommentText AS CellCommentText
-	FROM (
-	` + bcSQL + `) AS bc
-	LEFT JOIN (
-	` + ccSQL + `) AS cc ON cc.worksheet_id = bc.worksheet_id 
-            AND cc.row >= bc.t_row AND cc.row <= bc.b_row
-            AND cc.col >= bc.l_col AND cc.col <= bc.r_col
-	) AS res ORDER BY res.col, res.row`
-
-	// sql := "SELECT name, Address, CommentText FROM (SELECT *, "
-	// if Db.Dialect().GetName() == "sqlite3" {
-	// 	sql += `CAST(LTRIM(Address, RTRIM(Address, '0123456789')) AS INTEGER) AS Row,
-	// 		RTRIM(Address, '0123456789') AS Col`
-	// } else {
-	// 	sql += `CAST(CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
-	// 				WHEN 1 THEN right(Address, length(Address)-2)
-	// 				ELSE right(Address, length(Address)-1)
-	// 			END AS UNSIGNED INTEGER) AS Row,
-	// 		CASE Address REGEXP '[A-Za-z]{2}[0-9]+'
-	// 		  WHEN 1 THEN left(Address, 2)
-	// 		  ELSE left(Address, 1)
-	// 		END AS Col`
-	// }
-	// sql += `
-	// FROM (
-	// SELECT
-	// ws.name,
-	// CASE
-	// WHEN b.chart_id IS NULL THEN
-	// 		  CASE
-	// WHEN INSTR(b.BlockCellRange, ':') > 0 THEN  SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1)
-	// ELSE BlockCellRange
-	// END
-	// ELSE b.relative_formula
-	// END AS Address,
-	// c.CommentText
-	// 	FROM WorkSheets AS ws
-	// JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-	// JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
-	// JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
-	// WHERE ws.StudentAnswerID = ?
-	//   UNION
-	// SELECT
-	// ws.name,
-	// 	  cell.cell_range,
-	// c.CommentText
-	// FROM WorkSheets AS ws
-	// JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-	// JOIN Cells AS cell ON cell.block_id = b.ExcelBlockID
-	// JOIN Comments AS c ON c.CommentID = cell.CommentID
-	// WHERE ws.StudentAnswerID = ?) AS r
-	// ) AS s
-	// ORDER BY name, LENGTH(Col), Col, Row`
-	fmt.Println(sqlStmt)
-	rows, err := Db.Raw(sqlStmt, answerID, answerID, answerID, answerID).Rows()
-	if err != nil {
-		log.Errorf("SQL:\n%s", sqlStmt)
-		return err
-	}
-	defer rows.Close()
-
-	if err := addChartProperties(file, answerID); err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		err = rows.Scan(
-			&sheetName, &blockCellRange, &blockCommentText,
-			&tRow, &lCol, &bRow, &rCol,
-			&address, &row, &col, &cellCommentText)
+	for _, sheet := range answer.Worksheets {
+		log.Debug("*** Worksheet: ", sheet)
+		blockComments, err := sheet.GetBlockComments()
 		if err != nil {
-			log.Error("Failed to read a comment entry: ", err)
-		}
-		if address == "" {
+			log.Error("Failed to retrieve the block comments: ", err)
 			continue
 		}
-		if blockCommentText != "" {
-			commentText = blockCommentText
+		cellComments, err := sheet.GetCellComments()
+		if err != nil {
+			log.Error("Failed to retrieve the comment comments: ", err)
+			continue
 		}
-		if cellCommentText != "" {
-			if commentText != "" {
-				commentText += "\n"
-			}
-			commentText += cellCommentText
+		cellCommentMap := make(map[string]model.CellCommentRow, len(cellComments))
+		for _, cc := range cellComments {
+			log.Debug("*** Cell Comment: ", cc)
+			cellCommentMap[cc.Range] = cc
 		}
 
-		if debugLevel > 1 {
-			log.Debugf("COMMENT: %q, %q, %q", sheetName, address, commentText)
-		}
-		// col, row, _ = xlsx.GetCoordsFromCellIDString(address)
+		comments := make(map[int][]commentEntry)
 
-		if currentSheetName != sheetName || currentCol != col {
-			if currentSheetName != sheetName && currentSheetName != "" {
-				addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
+		for bcCol, bcInCol := range blockComments {
 
-				boxCol = 0
-			}
-			if (currentSheetName != "" || currentCol != -1) && len(column) > 0 {
+			log.Debug("+++ Column: ", bcCol)
 
-				if len(column) > 0 {
-					columns = append(columns, column)
-					boxCols = append(boxCols, boxCol)
+			for _, bc := range bcInCol {
+				log.Debug("*** Block: ", bc)
+
+				for col := bc.LCol; col <= bc.RCol; col++ {
+					for row := bc.TRow; row <= bc.BRow; row++ {
+						if comments[bcCol] == nil {
+							comments[bcCol] = make([]commentEntry, 0)
+						}
+						address = model.CellAddress(row, col)
+						commentText = bc.CommentText
+						if cc, ok := cellCommentMap[address]; ok {
+							if commentText != "" {
+								commentText += "\n"
+							}
+							commentText += cc.CommentText
+						}
+
+						log.Debugf("COMMENT: %q, %q, %q", sheet.Name, address, commentText)
+						if commentText != "" {
+							comments[bcCol] = append(comments[bcCol],
+								commentEntry{address, row, col, commentText, -1})
+						}
+					}
 				}
-				if currentCol == col-1 {
-					boxCol += 2
-				} else if boxCol == 0 || boxCol < col {
-					boxCol = col + 1
-				} else {
-					boxCol++
-				}
 			}
-			currentSheetName = sheetName
-			currentCol = col
-			column = make([]commentEntry, 0, 1)
 		}
-
-		column = append(column, commentEntry{
-			address:     address,
-			row:         row,
-			col:         col,
-			commentText: commentText,
-		})
-	}
-	// Add the last column of the workbook
-	if column != nil && len(column) > 0 {
-		addCommentsToColumn(file, currentSheetName, column, boxCol)
-		addCommentsToWorksheet(file, currentSheetName, columns, boxCols)
+		log.Debug("*** Collected comments:", comments)
+		addCommentsToWorksheet(file, sheet.Name, comments)
 	}
 
 	if fileName == outputName || outputName == "" {
