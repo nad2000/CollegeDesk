@@ -496,10 +496,10 @@ func testFindBlocksInside(t *testing.T) {
 	sheet := file.Sheets[0]
 	ws.FindBlocksInside(sheet, model.Block{
 		Range: "D8:D20",
-		TRow:  7,
-		BRow:  19,
 		LCol:  3,
+		TRow:  7,
 		RCol:  3,
+		BRow:  19,
 	})
 	var blocks []model.Block
 	db.Model(&ws).Related(&blocks)
@@ -510,13 +510,15 @@ func testFindBlocksInside(t *testing.T) {
 		t.Errorf("Got %d blocks, expected: %d", expected, got)
 	}
 	// t.Log(ws)
-	ws.FindBlocksInside(sheet, model.Block{
+	block := model.Block{
 		Range: "G9:G11",
-		TRow:  8,
-		BRow:  10,
 		LCol:  6,
+		TRow:  8,
 		RCol:  6,
-	})
+		BRow:  10,
+	}
+	db.Create(&block)
+	ws.FindBlocksInside(sheet, block)
 	db.Model(&ws).Related(&blocks)
 	if expected, got := 7, len(blocks); expected != got {
 		for _, b := range blocks {
@@ -1123,7 +1125,7 @@ func testCellComments(t *testing.T) {
 	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
-	log.SetLevel(log.DebugLevel)
+	// log.SetLevel(log.DebugLevel)
 	if err := cmd.AddCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
