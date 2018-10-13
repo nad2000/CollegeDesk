@@ -467,10 +467,10 @@ func TestProcessing(t *testing.T) {
 	db = createTestDB()
 	defer db.Close()
 
-	t.Run("FindBlocksInside", testFindBlocksInside)
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
-	t.Run("ImportFile", testImportFile)
 	t.Run("RowsToProcess", testRowsToProcess)
+	t.Run("FindBlocksInside", testFindBlocksInside)
+	t.Run("ImportFile", testImportFile)
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("S3Downloading", testS3Downloading)
@@ -490,7 +490,18 @@ func testFindBlocksInside(t *testing.T) {
 	6. G10:G10 - SUM(D8:D20)
 	7. G11:G11 - G10/G9
 	*/
-	ws := model.Worksheet{}
+	source := model.Source{S3Key: "KEY", FileName: "test.xlsx"}
+	ws := model.Worksheet{
+		Workbook: model.Workbook{
+			FileName: "find_blocks_inside_a_block.xlsx",
+			Answer: model.Answer{
+				Assignment: model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
+				Marks:      98.7654,
+				Source:     source,
+				Question:   model.Question{QuestionType: "FileUpload", Source: source, MaxScore: 98.76453},
+			},
+		},
+	}
 	db.Create(&ws)
 	file, _ := xlsx.OpenFile("Q1 Solution different color stud4.xlsx")
 	sheet := file.Sheets[0]
@@ -511,20 +522,21 @@ func testFindBlocksInside(t *testing.T) {
 	}
 	// t.Log(ws)
 	block := model.Block{
-		Range: "G9:G11",
-		LCol:  6,
-		TRow:  8,
-		RCol:  6,
-		BRow:  10,
+		Worksheet: ws,
+		Range:     "G9:G11",
+		LCol:      6,
+		TRow:      8,
+		RCol:      6,
+		BRow:      10,
 	}
 	db.Create(&block)
 	ws.FindBlocksInside(sheet, block)
 	db.Model(&ws).Related(&blocks)
-	if expected, got := 7, len(blocks); expected != got {
+	if expected, got := 8, len(blocks); expected != got {
 		for _, b := range blocks {
 			t.Log(b)
 		}
-		t.Errorf("Got %d blocks, expected: %d", expected, got)
+		t.Errorf("Got %d blocks, expected: %d", got, expected)
 	}
 }
 
@@ -989,7 +1001,7 @@ func testQueries(t *testing.T) {
 
 func testComments(t *testing.T) {
 
-	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	outputName := utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
 	cmd.AddComments("commenting.test.xlsx", outputName)
@@ -1007,7 +1019,7 @@ func testComments(t *testing.T) {
 	// 	t.Errorf("Expected %q, got: %q", expect, comment.Text)
 	// }
 
-	outputName = path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	outputName = utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
 	cmd.RootCmd.SetArgs([]string{"comment", "-U", url, "commenting.test.xlsx", outputName})
 	cmd.Execute()
@@ -1122,7 +1134,7 @@ func testCellComments(t *testing.T) {
 		db.Create(&c)
 	}
 	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
-	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	outputName := utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
 	// log.SetLevel(log.DebugLevel)

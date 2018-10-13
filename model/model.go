@@ -360,7 +360,7 @@ type Answer struct {
 	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
 	Marks               float64       `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
+	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            int           `gorm:"column:FileID"`
@@ -978,6 +978,9 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 	db, err = gorm.Open(parts[0], parts[1])
 	if parts[0] == "mysql" {
 		db.Set("gorm:table_options", "collation_connection=utf8_bin")
+		if err := db.Exec("SET @@sql_mode='ANSI'").Error; err != nil {
+			log.Error(err)
+		}
 	}
 	if err != nil {
 		log.Error(err)

@@ -9,14 +9,18 @@ import (
 	log "github.com/Sirupsen/logrus"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/nad2000/excelize"
+	"github.com/nad2000/xlsx"
 )
 
 func TestModel(t *testing.T) {
-	testDbFileName := "/tmp/test_model.db"
-	if _, err := os.Stat(testDbFileName); !os.IsNotExist(err) {
-		os.RemoveAll(testDbFileName)
+	url, ok := os.LookupEnv("DATABASE_URL")
+	if !ok {
+		testDbFileName := "/tmp/test_model.db"
+		if _, err := os.Stat(testDbFileName); !os.IsNotExist(err) {
+			os.RemoveAll(testDbFileName)
+		}
+		url = "sqlite://" + testDbFileName
 	}
-	url := "sqlite://" + testDbFileName
 	t.Log("TEST DB URL: ", url)
 	_, err := OpenDb(url)
 	if err != nil {
@@ -25,14 +29,34 @@ func TestModel(t *testing.T) {
 	}
 	defer Db.Close()
 	t.Log("DIALECT: ", Db.Dialect().GetName(), Db.Dialect().CurrentDatabase())
-
+	if Db.Dialect().GetName() == "mysql" {
+		Db.Exec("TRUNCATE TABLE Cells")
+		Db.Exec("TRUNCATE TABLE BlockCommentMapping")
+		Db.Exec("TRUNCATE TABLE StudentAnswerCommentMapping")
+		Db.Exec("TRUNCATE TABLE QuestionAssignmentMapping")
+		Db.Exec("TRUNCATE TABLE CourseAssignments")
+		Db.Exec("TRUNCATE TABLE QuestionExcelData")
+		Db.Exec("DELETE FROM Questions")
+		Db.Exec("DELETE FROM ExcelBlocks")
+		Db.Exec("DELETE FROM FileSources")
+		Db.Exec("DELETE FROM WorkSheets")
+		Db.Exec("DELETE FROM WorkBooks")
+		Db.Exec("TRUNCATE TABLE Comments")
+	}
+	Db.LogMode(true)
 	source := Source{S3Key: "KEY", FileName: "test.xlsx"}
+	Db.Create(&source)
 	answer := Answer{
 		Assignment: Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
 		Marks:      98.7654,
 		Source:     source,
-		Question:   Question{QuestionType: "TYPE", Source: source, MaxScore: 98.76453},
+		Question: Question{
+			QuestionType: "FileUpload",
+			Source:       source,
+			MaxScore:     98.76453,
+		},
 	}
+	Db.Create(&answer)
 	block := Block{
 		Color: "FF00AA0000",
 		Range: "A1:C3",
@@ -47,13 +71,15 @@ func TestModel(t *testing.T) {
 	}
 	Db.Create(&block)
 	for _, r := range []string{"A1", "B2", "C3"} {
-		Db.Create(&Cell{
+		cell := Cell{
 			Range:     r,
 			Block:     block,
 			Worksheet: block.Worksheet,
 			Value:     "1234.567",
 			Comment:   Comment{Text: fmt.Sprintf("JUST A COMMENT FOR %q", r)},
-		})
+		}
+		cell.Row, cell.Col, err = xlsx.GetCoordsFromCellIDString(r)
+		Db.Create(&cell)
 	}
 	Db.Create(&BlockCommentMapping{
 		Block:   block,
@@ -68,6 +94,7 @@ func TestModel(t *testing.T) {
 	if expected := 1; count != expected {
 		t.Errorf("Expected to select %d worksheets linked to all cells, got: %d", expected, count)
 	}
+	Db.LogMode(false)
 }
 
 func TestNormalizeFloatRepr(t *testing.T) {

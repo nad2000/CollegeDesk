@@ -247,8 +247,8 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	if deleteComments {
 		if model.DeleteAllComments(file) {
 			// Save the file w/o comments and reopen it:
-			basename, extension := filepath.Base(fileName), filepath.Ext(fileName)
-			fileName := path.Join(dest, strings.TrimSuffix(basename, extension)+"_CLEANED"+extension)
+			fileName := utils.TempFileName("", filepath.Ext(fileName))
+			log.Infof("Inermediate file saved to %q", fileName)
 			err = file.SaveAs(fileName)
 			if err != nil {
 				return fmt.Errorf("Failed to remove comments from file %q: %s", fileName, err.Error())
