@@ -191,7 +191,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 	Db.Model(&q).Related(&source, "Source")
 	fileName := source.FileName
 	result := Db.First(&wb, Workbook{FileName: fileName, IsReference: true})
-	if !result.RecordNotFound() {
+	if q.ReferenceID.Valid {
 		log.Warnf("File %q was already processed.", fileName)
 		if !DryRun {
 			wb.Reset()

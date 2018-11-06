@@ -554,16 +554,18 @@ func testHandleQuestions(t *testing.T) {
 	if result.Error != nil {
 		t.Error(result.Error)
 	}
-	result = db.Create(&model.Question{
-		SourceID:     model.NewNullInt64(fileID),
-		QuestionType: model.QuestionType("FileUpload"),
-		QuestionText: "Question wiht merged cells",
-		MaxScore:     8888.88,
-		AuthorUserID: 123456789,
-		WasCompared:  true,
-	})
-	if result.Error != nil {
-		t.Error(result.Error)
+	for _, qt := range []string{"Question wiht merged cells", "Question with merged cells #2 (duplicate file name)"} {
+		result = db.Create(&model.Question{
+			SourceID:     model.NewNullInt64(fileID),
+			QuestionType: model.QuestionType("FileUpload"),
+			QuestionText: qt,
+			MaxScore:     8888.88,
+			AuthorUserID: 123456789,
+			WasCompared:  true,
+		})
+		if result.Error != nil {
+			t.Error(result.Error)
+		}
 	}
 
 	tm := testManager{}
