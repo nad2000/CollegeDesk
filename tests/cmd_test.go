@@ -417,6 +417,41 @@ func testHandleNotcolored(t *testing.T) {
 	db.Create(&a)
 	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
 
+	// #3
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes #3...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes #3...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{
+		"Answer stud 1 Q3 Compounding1.xlsx",
+		"Answer stud 2 Q3 Compounding1.xlsx",
+	} {
+		f = model.Source{FileName: fn, S3BucketName: "studentanswers"}
+		db.Create(&f)
+		a = model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-30 12:42"),
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+	}
 }
 
 func testRowsToProcess(t *testing.T) {
