@@ -554,7 +554,11 @@ func testHandleQuestions(t *testing.T) {
 	if result.Error != nil {
 		t.Error(result.Error)
 	}
-	for _, qt := range []string{"Question wiht merged cells", "Question with merged cells #2 (duplicate file name)"} {
+	for _, qt := range []string{
+		"Question with merged cells #1",
+		"Question with merged cells #2 (duplicate file name)",
+		"Question with merged cells #3 (duplicate file name)",
+	} {
 		result = db.Create(&model.Question{
 			SourceID:     model.NewNullInt64(fileID),
 			QuestionType: model.QuestionType("FileUpload"),
@@ -570,6 +574,39 @@ func testHandleQuestions(t *testing.T) {
 
 	tm := testManager{}
 	cmd.HandleQuestions(&tm)
+
+	var count int
+	if err := db.Where("file_name = ?", "merged.xlsx").Model(&model.Workbook{}).Count(&count).Error; err != nil {
+		t.Error(err)
+	}
+	if expected := 3; count != expected {
+		t.Errorf("Expected %d question reference workbooks, got: %d", expected, count)
+	}
+
+	if err := db.DB().QueryRow(`
+		SELECT COUNT(DISTINCT reference_id) AS ReferenceCount
+		FROM Questions
+		WHERE QuestionText LIKE 'Question with merged cells #%'`).Scan(&count); err != nil {
+		t.Error(err)
+	}
+	if expected := 3; count != expected {
+		t.Errorf("Expected %d questions, got: %d", expected, count)
+	}
+
+	var blockCount int
+	if err := db.DB().QueryRow(`
+		SELECT count(*) AS RowCount, count(distinct b.BlockCellRange) AS BlockCount
+		FROM Questions AS q JOIN WorkSheets AS s ON s.workbook_id = q.reference_id
+		JOIN ExcelBlocks AS b ON b.worksheet_id = s.id
+		WHERE QuestionText LIKE 'Question with merged cells #%'`).Scan(&count, &blockCount); err != nil {
+		t.Error(err)
+	}
+	if expected := 24; count != expected {
+		t.Errorf("Expected %d rows, got: %d", expected, count)
+	}
+	if expected := 8; blockCount != expected {
+		t.Errorf("Expected %d different blocks, got: %d", expected, blockCount)
+	}
 }
 
 func testImportQuestionFile(t *testing.T) {

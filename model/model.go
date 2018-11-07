@@ -190,16 +190,9 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 	var source Source
 	Db.Model(&q).Related(&source, "Source")
 	fileName := source.FileName
-	result := Db.First(&wb, Workbook{FileName: fileName, IsReference: true})
-	if q.ReferenceID.Valid {
-		log.Warnf("File %q was already processed.", fileName)
-		if !DryRun {
-			wb.Reset()
-		}
-	} else if !DryRun {
-
+	if !DryRun {
 		wb = Workbook{FileName: fileName, IsReference: true}
-		result = Db.Create(&wb)
+		result := Db.Create(&wb)
 		if result.Error != nil {
 			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
 		}
@@ -296,8 +289,10 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 		}
 	}
 
-	q.ReferenceID = NewNullInt64(wb.ID)
-	Db.Save(&q)
+	if !DryRun {
+		q.ReferenceID = NewNullInt64(wb.ID)
+		Db.Save(&q)
+	}
 
 	return
 }
