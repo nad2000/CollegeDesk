@@ -373,7 +373,7 @@ func testHandleNotcolored(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
@@ -413,7 +413,7 @@ func testHandleNotcolored(t *testing.T) {
 	}
 	db.Create(&f)
 	a = model.Answer{
-		SourceID:       f.ID,
+		SourceID:       model.NewNullInt64(f.ID),
 		AssignmentID:   assignment.ID,
 		QuestionID:     model.NewNullInt64(q.ID),
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
@@ -448,7 +448,7 @@ func testHandleNotcolored(t *testing.T) {
 		f = model.Source{FileName: fn, S3BucketName: "studentanswers"}
 		db.Create(&f)
 		a = model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-30 12:42"),
@@ -576,7 +576,6 @@ func testFindBlocksInside(t *testing.T) {
 	}
 }
 
->>>>>>> origin/master
 func testHandleQuestions(t *testing.T) {
 
 	var fileID int
@@ -1199,7 +1198,7 @@ func testCellComments(t *testing.T) {
 	db.Create(&question)
 	answer := model.Answer{
 		AssignmentID:   assignment.ID,
-		SourceID:       f.ID,
+		SourceID:       model.NewNullInt64(f.ID),
 		QuestionID:     model.NewNullInt64(question.ID),
 		SubmissionTime: *parseTime("2017-01-01 14:42"),
 	}

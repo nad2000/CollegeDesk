@@ -30,7 +30,7 @@ func dumpStruct(t *testing.T, v interface{}) {
 }
 
 func TestChartUnmarshaling(t *testing.T) {
-	chart := unmarshalChart([]byte(barChart))
+	chart := UnmarshalChart([]byte(barChart))
 	// dumpStruct(t, chart)
 
 	if expected := "Students in sections"; chart.Title.Value() != expected {
@@ -74,7 +74,7 @@ func TestChartUnmarshaling(t *testing.T) {
 }
 
 func TestColumnChartUnmarshaling(t *testing.T) {
-	chart := unmarshalChart([]byte(columnChart))
+	chart := UnmarshalChart([]byte(columnChart))
 	// dumpStruct(t, chart)
 
 	if expected := "Students in sections"; chart.Title.Value() != expected {
@@ -118,7 +118,7 @@ func TestColumnChartUnmarshaling(t *testing.T) {
 }
 
 func TestLineChartUnmarshaling(t *testing.T) {
-	chart := unmarshalChart([]byte(lineChart))
+	chart := UnmarshalChart([]byte(lineChart))
 	// dumpStruct(t, chart)
 
 	if expected, got := "Petrol Price in Bangalore", chart.Title.Value(); got != expected {
@@ -154,7 +154,7 @@ func TestLineChartUnmarshaling(t *testing.T) {
 }
 
 func TestScatterChartUnmarshaling(t *testing.T) {
-	chart := unmarshalChart([]byte(scatterChart))
+	chart := UnmarshalChart([]byte(scatterChart))
 
 	if expected, got := "TCS vs Infy Returns Scatter Plot", chart.Title.Value(); got != expected {
 		t.Errorf("Wrong title: %q, expected: %q", got, expected)

@@ -1304,7 +1304,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt: %s",
 			fileName, answerID, err.Error())
 		res := Db.Model(&answer).Updates(map[string]interface{}{
-			"was_xl_processed": 1,
+			"was_xl_processed": 0,
 			"FileID":           gorm.Expr("NULL"),
 		})
 		if res.Error != nil {
