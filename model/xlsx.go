@@ -36,15 +36,17 @@ func deleteAllRelationshipsToName(file *excelize.File, name string) {
 }
 
 // DeleteAllComments deletes all the comments in the workbook
-func DeleteAllComments(file *excelize.File) {
+func DeleteAllComments(file *excelize.File) (wasRemoved bool) {
 	for name := range file.XLSX {
 		if strings.HasPrefix(name, "xl/comment") {
 			delete(file.XLSX, name)
 			id := strings.TrimPrefix(strings.TrimSuffix(name, ".xml"), "xl/comment")
 			vmlName := "xl/drawings/vmlDrawing" + id + ".vml"
 			deleteAllRelationshipsToName(file, vmlName)
+			wasRemoved = true
 		}
 	}
+	return
 }
 
 // XmlxWorkbookRels contains xmlxWorkbookRelations which maps sheet id and sheet XML.

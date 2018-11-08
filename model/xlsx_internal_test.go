@@ -1,8 +1,7 @@
-package tests
+package model
 
 import (
 	"encoding/json"
-	"extract-blocks/model"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -31,7 +30,7 @@ func dumpStruct(t *testing.T, v interface{}) {
 }
 
 func TestChartUnmarshaling(t *testing.T) {
-	chart := model.UnmarshalChart([]byte(barChart))
+	chart := unmarshalChart([]byte(barChart))
 	// dumpStruct(t, chart)
 
 	if expected := "Students in sections"; chart.Title.Value() != expected {
@@ -75,7 +74,7 @@ func TestChartUnmarshaling(t *testing.T) {
 }
 
 func TestColumnChartUnmarshaling(t *testing.T) {
-	chart := model.UnmarshalChart([]byte(columnChart))
+	chart := unmarshalChart([]byte(columnChart))
 	// dumpStruct(t, chart)
 
 	if expected := "Students in sections"; chart.Title.Value() != expected {
@@ -119,7 +118,7 @@ func TestColumnChartUnmarshaling(t *testing.T) {
 }
 
 func TestLineChartUnmarshaling(t *testing.T) {
-	chart := model.UnmarshalChart([]byte(lineChart))
+	chart := unmarshalChart([]byte(lineChart))
 	// dumpStruct(t, chart)
 
 	if expected, got := "Petrol Price in Bangalore", chart.Title.Value(); got != expected {
@@ -155,7 +154,7 @@ func TestLineChartUnmarshaling(t *testing.T) {
 }
 
 func TestScatterChartUnmarshaling(t *testing.T) {
-	chart := model.UnmarshalChart([]byte(scatterChart))
+	chart := unmarshalChart([]byte(scatterChart))
 
 	if expected, got := "TCS vs Infy Returns Scatter Plot", chart.Title.Value(); got != expected {
 		t.Errorf("Wrong title: %q, expected: %q", got, expected)

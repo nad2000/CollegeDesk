@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinzhu/now"
+	"github.com/nad2000/xlsx"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -104,12 +105,11 @@ func TestRelativeFormulas(t *testing.T) {
 }
 
 func TestDemoFile(t *testing.T) {
-	deletData()
+	deleteData()
 	var wb model.Workbook
+	var fileName = "demo.xlsx"
 
 	db, _ := model.OpenDb(url)
-	db.Close()
-
 	q := model.Question{
 		QuestionType:      "ShortAnswer",
 		QuestionSequence:  0,
@@ -118,22 +118,24 @@ func TestDemoFile(t *testing.T) {
 		MaxScore:          999.99,
 	}
 	db.FirstOrCreate(&q, &q)
-	db.Close()
+	a := model.Answer{
+		ShortAnswer:    fileName,
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+		QuestionID:     model.NewNullInt64(q.ID),
+	}
+	db.FirstOrCreate(&a, &a)
 
-	cmd.RootCmd.SetArgs([]string{
-		"run", "-U", url, "-t", "-f", "demo.xlsx"})
-	cmd.Execute()
+	t.Log("+++ Start extration")
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 
-	db, _ = model.OpenDb(url)
-
-	result := db.First(&wb, "file_name = ?", "demo.xlsx")
+	result := db.First(&wb, "file_name = ?", fileName)
 	if result.Error != nil {
 		t.Error(result.Error)
 		t.Fail()
 	}
 
 	if wb.FileName != "demo.xlsx" {
-		t.Logf("Missing workbook 'demo.xlsx'. Expected 'demo.xlsx', got: %q", wb.FileName)
+		t.Logf("Missing workbook: expected %q, got: %q", fileName, wb.FileName)
 		t.Fail()
 	}
 	var count int
@@ -165,29 +167,41 @@ func TestDemoFile(t *testing.T) {
 	if expected := 6; count != expected {
 		t.Errorf("Expected %d block -> comment mapping entries, got: %d", expected, count)
 	}
+	db.Model(&model.Block{}).Count(&count)
+	if expected := 32; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+	db.Model(&model.Cell{}).Count(&count)
+	if expected := 84; count != expected {
+		t.Errorf("Expected %d cells, got: %d", expected, count)
+	}
 }
 
-func deletData() {
+func deleteData() {
 
 	if db == nil || db.DB() == nil {
 		db, _ = model.OpenDb(url)
 		defer db.Close()
 	}
 	for _, m := range []interface{}{
-		&model.AnswerComment{},
-		&model.BlockCommentMapping{},
-		&model.QuestionAssignment{},
-		&model.Comment{},
 		&model.Cell{},
 		&model.Block{},
 		&model.Chart{},
+		&model.BlockCommentMapping{},
+		&model.AnswerComment{},
+		&model.QuestionExcelData{},
+		&model.QuestionAssignment{},
 		&model.Worksheet{},
 		&model.Workbook{},
-		&model.QuestionExcelData{},
 		&model.Question{},
 		&model.Answer{},
-		&model.Source{}} {
-		db.Delete(m)
+		&model.Source{},
+		&model.Comment{},
+	} {
+		err := db.Delete(m).Error
+		if err != nil {
+			fmt.Println("ERROR: ", err)
+		}
 	}
 }
 
@@ -207,7 +221,7 @@ func createTestDB() *gorm.DB {
 	db, _ = model.OpenDb(url)
 	cmd.Db = db
 
-	deletData()
+	deleteData()
 	//db.LogMode(true)
 
 	for _, fn := range testFileNames {
@@ -303,6 +317,147 @@ func testQuestionsToProcess(t *testing.T) {
 
 }
 
+func testImportFile(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 123,
+		QuestionText:     "Test Import Question...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+
+	var count int
+	db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	if expected := 8; count != expected {
+		t.Errorf("Expected %d blocks, got: %d", expected, count)
+	}
+
+}
+
+func testHandleNotcolored(t *testing.T) {
+
+	var (
+		q          model.Question
+		assignment model.Assignment
+		f          model.Source
+		a          model.Answer
+	)
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{"answer.xlsx", "answer.nocolor.xlsx"} {
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		a := model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-14 14:42"),
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)
+	}
+
+	// var count int
+	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	// if expected := 8; count != expected {
+	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
+	// }
+
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes #2...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes #2...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	f = model.Source{
+		FileName:     "Q1 Solution different color stud4.xlsx",
+		S3BucketName: "studentanswers",
+	}
+	db.Create(&f)
+	a = model.Answer{
+		SourceID:       f.ID,
+		AssignmentID:   assignment.ID,
+		QuestionID:     model.NewNullInt64(q.ID),
+		SubmissionTime: *parseTime("2018-09-30 12:42"),
+	}
+	db.Create(&a)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+
+	// #3
+	q = model.Question{
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 99,
+		QuestionText:     "Test handle answers without the colorcodes #3...",
+		MaxScore:         9999.99,
+		AuthorUserID:     123456789,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
+	assignment = model.Assignment{
+		Title: "Test handle answers without the colorcodes #3...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{
+		"Answer stud 1 Q3 Compounding1.xlsx",
+		"Answer stud 2 Q3 Compounding1.xlsx",
+	} {
+		f = model.Source{FileName: fn, S3BucketName: "studentanswers"}
+		db.Create(&f)
+		a = model.Answer{
+			SourceID:       f.ID,
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-30 12:42"),
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+	}
+}
+
 func testRowsToProcess(t *testing.T) {
 
 	rows, _ := model.RowsToProcess()
@@ -337,7 +492,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
 	if countBefore <= countAfter {
 		t.Errorf(
-			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d after.",
 			countBefore, countAfter)
 	}
 }
@@ -349,14 +504,79 @@ func TestProcessing(t *testing.T) {
 
 	t.Run("QuestionsToProcess", testQuestionsToProcess)
 	t.Run("RowsToProcess", testRowsToProcess)
+	t.Run("FindBlocksInside", testFindBlocksInside)
+	t.Run("ImportFile", testImportFile)
 	t.Run("HandleAnswers", testHandleAnswers)
+	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 	t.Run("HandleQuestions", testHandleQuestions)
 	t.Run("CurruptedFiles", testCorruptedFiles)
+	t.Run("ImportQuestionFile", testImportQuestionFile)
 }
 
+func testFindBlocksInside(t *testing.T) {
+	/* Expected Block and Formula:
+	1. D8:D8 - B8*C8
+	2. D9:D9 - PRODUCT(B9,C9)
+	3. D10:D10 - PRODUCT(B10:C10)
+	4. D11:D20 - C11*B11
+	5. G9:G9 - SUM(B8,B9,B10,B11,B12,B13,B14,B15,B16,B17,B18,B19,B20)
+	6. G10:G10 - SUM(D8:D20)
+	7. G11:G11 - G10/G9
+	*/
+	source := model.Source{S3Key: "KEY", FileName: "test.xlsx"}
+	ws := model.Worksheet{
+		Workbook: model.Workbook{
+			FileName: "find_blocks_inside_a_block.xlsx",
+			Answer: model.Answer{
+				Assignment: model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
+				Marks:      98.7654,
+				Source:     source,
+				Question:   model.Question{QuestionType: "FileUpload", Source: source, MaxScore: 98.76453},
+			},
+		},
+	}
+	db.Create(&ws)
+	file, _ := xlsx.OpenFile("Q1 Solution different color stud4.xlsx")
+	sheet := file.Sheets[0]
+	ws.FindBlocksInside(sheet, model.Block{
+		Range: "D8:D20",
+		LCol:  3,
+		TRow:  7,
+		RCol:  3,
+		BRow:  19,
+	})
+	var blocks []model.Block
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 4, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", expected, got)
+	}
+	// t.Log(ws)
+	block := model.Block{
+		Worksheet: ws,
+		Range:     "G9:G11",
+		LCol:      6,
+		TRow:      8,
+		RCol:      6,
+		BRow:      10,
+	}
+	db.Create(&block)
+	ws.FindBlocksInside(sheet, block)
+	db.Model(&ws).Related(&blocks)
+	if expected, got := 8, len(blocks); expected != got {
+		for _, b := range blocks {
+			t.Log(b)
+		}
+		t.Errorf("Got %d blocks, expected: %d", got, expected)
+	}
+}
+
+>>>>>>> origin/master
 func testHandleQuestions(t *testing.T) {
 
 	var fileID int
@@ -371,20 +591,89 @@ func testHandleQuestions(t *testing.T) {
 	if result.Error != nil {
 		t.Error(result.Error)
 	}
-	result = db.Create(&model.Question{
-		SourceID:     model.NewNullInt64(fileID),
-		QuestionType: model.QuestionType("FileUpload"),
-		QuestionText: "Question wiht merged cells",
-		MaxScore:     8888.88,
-		AuthorUserID: 123456789,
-		WasCompared:  true,
-	})
-	if result.Error != nil {
-		t.Error(result.Error)
+	for _, qt := range []string{
+		"Question with merged cells #1",
+		"Question with merged cells #2 (duplicate file name)",
+		"Question with merged cells #3 (duplicate file name)",
+	} {
+		result = db.Create(&model.Question{
+			SourceID:     model.NewNullInt64(fileID),
+			QuestionType: model.QuestionType("FileUpload"),
+			QuestionText: qt,
+			MaxScore:     8888.88,
+			AuthorUserID: 123456789,
+			WasCompared:  true,
+		})
+		if result.Error != nil {
+			t.Error(result.Error)
+		}
 	}
 
 	tm := testManager{}
 	cmd.HandleQuestions(&tm)
+
+	var count int
+	if err := db.Where("file_name = ?", "merged.xlsx").Model(&model.Workbook{}).Count(&count).Error; err != nil {
+		t.Error(err)
+	}
+	if expected := 3; count != expected {
+		t.Errorf("Expected %d question reference workbooks, got: %d", expected, count)
+	}
+
+	if err := db.DB().QueryRow(`
+		SELECT COUNT(DISTINCT reference_id) AS ReferenceCount
+		FROM Questions
+		WHERE QuestionText LIKE 'Question with merged cells #%'`).Scan(&count); err != nil {
+		t.Error(err)
+	}
+	if expected := 3; count != expected {
+		t.Errorf("Expected %d questions, got: %d", expected, count)
+	}
+
+	var blockCount int
+	if err := db.DB().QueryRow(`
+		SELECT count(*) AS RowCount, count(distinct b.BlockCellRange) AS BlockCount
+		FROM Questions AS q JOIN WorkSheets AS s ON s.workbook_id = q.reference_id
+		JOIN ExcelBlocks AS b ON b.worksheet_id = s.id
+		WHERE QuestionText LIKE 'Question with merged cells #%'`).Scan(&count, &blockCount); err != nil {
+		t.Error(err)
+	}
+	if expected := 24; count != expected {
+		t.Errorf("Expected %d rows, got: %d", expected, count)
+	}
+	if expected := 8; blockCount != expected {
+		t.Errorf("Expected %d different blocks, got: %d", expected, blockCount)
+	}
+}
+
+func testImportQuestionFile(t *testing.T) {
+
+	var fileID int
+	fileName := "Q1 Question different color.xlsx"
+	db.DB().QueryRow("SELECT MAX(FileID)+1 AS LastFileID FROM FileSources").Scan(&fileID)
+	f := model.Source{
+		ID:           fileID,
+		FileName:     fileName,
+		S3BucketName: "studentanswers",
+		S3Key:        fileName,
+	}
+	result := db.Create(&f)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q := model.Question{
+		Source:       f,
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: fileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+	result = db.Create(&q)
+	if result.Error != nil {
+		t.Error(result.Error)
+	}
+	q.ImportFile(fileName, "FFFFFF00", true)
 }
 
 func testCorruptedFiles(t *testing.T) {
@@ -557,20 +846,19 @@ func TestCommenting(t *testing.T) {
 			UNION SELECT 'Sheet2'
 		) AS wsn`)
 	db.Exec(`
-		INSERT INTO ExcelBlocks (worksheet_id, BlockCellRange)
+		INSERT INTO ExcelBlocks(worksheet_id, BlockCellRange)
 		SELECT id, r.v
 		FROM WorkSheets AS s LEFT JOIN ExcelBlocks AS b
 		ON b.worksheet_id = s.id,
 		(
 			SELECT 'A1' AS v
 			UNION SELECT 'C3'
-			UNION SELECT 'D2:F1'
-			UNION SELECT 'C2:F1'
+			UNION SELECT 'D1:F2'
+			UNION SELECT 'C1:F2'
 			UNION SELECT 'C12:E21'
 			UNION SELECT 'C13:D16'
 		) AS r
 		WHERE b.ExcelBlockID IS NULL`)
-
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #1", State: "GRADED"})
 	db.Create(&model.Assignment{Title: "ASSIGNMENT #2"})
 	db.Exec(`
@@ -659,6 +947,53 @@ func TestCommenting(t *testing.T) {
 			}
 		}
 	}
+	err := db.Exec(`INSERT INTO Cells(block_id, worksheet_id, cell_range, value)
+		SELECT b.ExcelBlockID, b.worksheet_id, r.range, 'CELL VALUE'
+		FROM ExcelBlocks AS b JOIN
+		(
+			SELECT 'A1' AS v, 'A1' AS "range"
+			UNION SELECT 'C3', 'C3'
+			UNION SELECT 'D1:F2', 'D1'
+			UNION SELECT 'D1:F2', 'E1'
+			UNION SELECT 'D1:F2', 'F1'
+			UNION SELECT 'D1:F2', 'D2'
+			UNION SELECT 'D1:F2', 'E2'
+			UNION SELECT 'D1:F2', 'F2'
+			UNION SELECT 'C4:F5', 'C4'
+			UNION SELECT 'C4:F5', 'D4'
+			UNION SELECT 'C4:F5', 'E4'
+			UNION SELECT 'C4:F5', 'F4'
+			UNION SELECT 'C4:F5', 'C5'
+			UNION SELECT 'C4:F5', 'D5'
+			UNION SELECT 'C4:F5', 'E5'
+			UNION SELECT 'C4:F5', 'F5'
+			UNION SELECT 'D2:F13', 'F3'
+			UNION SELECT 'D2:F13', 'F4'
+			UNION SELECT 'D2:F13', 'F5'
+			UNION SELECT 'D2:F13', 'F6'
+			UNION SELECT 'D2:F13', 'F7'
+			UNION SELECT 'D2:F13', 'F8'
+			UNION SELECT 'D2:F13', 'F9'
+			UNION SELECT 'D2:F13', 'F10'
+			UNION SELECT 'D2:F13', 'F11'
+			UNION SELECT 'D2:F13', 'F12'
+			UNION SELECT 'D2:F13', 'F13'
+	) AS r ON r.v = b.BlockCellRange
+	LEFT JOIN Cells AS ce ON ce.block_id = b.ExcelBlockID AND r.range = ce.cell_range
+	WHERE ce.id IS NULL`).Error
+	if err != nil {
+		t.Error(err)
+	}
+	var cells []model.Cell
+	res := db.Where("CommentID IS NULL AND id %  2 = 1").Find(&cells)
+	if res.Error != nil {
+		t.Error(res.Error)
+	}
+	for no, c := range cells {
+		c.Comment = model.Comment{Text: fmt.Sprintf("VALUE COMMENT FOR %q // %d", c.Range, no)}
+		c.Value = fmt.Sprintf("CELL %q VALUE: %d", c.Range, no)
+		db.Save(&c)
+	}
 	if err := db.Exec(`
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT DISTINCT wb.StudentAnswerID, bc.ExcelCommentID
@@ -670,9 +1005,120 @@ func TestCommenting(t *testing.T) {
 		t.Error(err)
 	}
 
+	var blockUpdate, cellUpdate string
+	if db.Dialect().GetName() == "sqlite3" {
+		blockUpdate = `WITH b AS (
+				SELECT
+				b.ExcelBlockID AS id,
+				SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s,
+				SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
+				FROM ExcelBlocks AS b
+				WHERE INSTR(b.BlockCellRange, ':') > 0),
+			u AS (
+				SELECT
+				b.id,
+				CAST(LTRIM(s, RTRIM(s, '0123456789')) AS INTEGER)-1 AS tr,
+				unicode(RTRIM(s, '0123456789'))-unicode('A') AS lc,
+				CAST(LTRIM(e, RTRIM(e, '0123456789')) AS INTEGER)-1 AS br,
+				unicode(RTRIM(e, '0123456789'))-unicode('A') AS rc
+				FROM b)
+			UPDATE ExcelBlocks
+			SET
+				t_row = (SELECT tr FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
+				l_col = (SELECT lc FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
+				b_row = (SELECT br FROM u WHERE u.id = ExcelBlocks.ExcelBlockID),
+				r_col = (SELECT rc
+			FROM u WHERE u.id = ExcelBlocks.ExcelBlockID)
+			WHERE b_row IS NULL OR b_row <= 0`
+		cellUpdate = `UPDATE Cells
+			SET row=CAST(LTRIM(cell_range, RTRIM(cell_range, '0123456789')) AS INTEGER)-1,
+			col=unicode(RTRIM(cell_range, '0123456789'))-unicode('A')
+			WHERE col IS NULL or row IS NULL OR (col <= 0  AND row <= 0)`
+	} else {
+		if err := db.Exec("SET sql_mode = ?", "ANSI").Error; err != nil {
+			t.Error(err)
+		}
+		blockUpdate = `UPDATE ExcelBlocks, (
+			SELECT  b.*,
+			CAST(
+			CASE s REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN right(s, length(s)-2)
+			ELSE right(s, length(s)-1)
+			END AS UNSIGNED INTEGER)-1 AS tr,
+			ascii(CASE s REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(s, 2)
+			ELSE left(s, 1) END)-ascii('A') AS lc,
+			CAST(
+			CASE e REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN right(e, length(e)-2)
+			ELSE right(e, length(e)-1)
+			END AS UNSIGNED INTEGER)-1 AS br,
+			ascii(CASE e REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(e, 2)
+			ELSE left(e, 1) END)-ascii('A') AS rc
+			FROM (
+			SELECT
+			b.ExcelBlockID,
+			SUBSTR(b.BlockCellRange, 1, INSTR(b.BlockCellRange,':')-1) AS s,
+			SUBSTR(b.BlockCellRange, INSTR(b.BlockCellRange,':')+1) AS e
+			FROM ExcelBlocks AS b
+			WHERE INSTR(b.BlockCellRange, ':') > 0) AS b
+			) AS u
+			SET t_row = tr, l_col = lc, b_row = br, r_col = rc
+			WHERE u.ExcelBlockID = ExcelBlocks.ExcelBlockID
+			AND (b_row IS NULL OR b_row <= 0)`
+		cellUpdate = `
+			UPDATE Cells, (
+			SELECT id, cell_range,
+			CAST(
+			  CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'
+			    WHEN 1 THEN right(cell_range, length(cell_range)-2)
+			    ELSE right(cell_range, length(cell_range)-1)
+			  END AS UNSIGNED INTEGER)-1 AS r,
+			ascii(CASE cell_range REGEXP '[A-Za-z]{2}[0-9]+'
+			WHEN 1 THEN left(cell_range, 2)
+			ELSE left(cell_range, 1) END)-ascii('A') AS c
+			FROM Cells
+			WHERE "col" IS NULL or "row" IS NULL OR ("col" <= 0  AND "row" <= 0)
+			) AS u
+			SET Cells."row"=u.r, Cells.col=u.c
+			WHERE Cells.id = u.id`
+	}
+	if err := db.Exec(blockUpdate).Error; err != nil {
+		t.Log("*** SQL:\n", blockUpdate)
+		t.Error(err)
+	}
+	if err := db.Exec(cellUpdate).Error; err != nil {
+		t.Log("*** SQL:\n", cellUpdate)
+		t.Error(err)
+	}
 	t.Run("Queries", testQueries)
+	t.Run("GetCommentRows", testGetCommentRows)
 	t.Run("RowsToComment", testRowsToComment)
 	t.Run("Comments", testComments)
+	t.Run("CellComments", testCellComments)
+}
+
+func testGetCommentRows(t *testing.T) {
+	var ws model.Worksheet
+	db.Where("workbook_file_name = ?", "commenting.test.xlsx").First(&ws)
+	t.Log(ws)
+	rows, err := ws.GetBlockComments()
+	if err != nil {
+		t.Error(err)
+	} else {
+		for i, r := range rows {
+			t.Log(i, ": ", r)
+		}
+	}
+	comments, err := ws.GetCellComments()
+	if err != nil {
+		t.Error(err)
+	} else {
+		for i, r := range comments {
+			t.Log(i, ": ", r)
+		}
+	}
 }
 
 func testQueries(t *testing.T) {
@@ -696,7 +1142,7 @@ func testQueries(t *testing.T) {
 
 func testComments(t *testing.T) {
 
-	outputName := path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	outputName := utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
 	// db.LogMode(true)
 	cmd.AddComments("commenting.test.xlsx", outputName)
@@ -714,7 +1160,7 @@ func testComments(t *testing.T) {
 	// 	t.Errorf("Expected %q, got: %q", expect, comment.Text)
 	// }
 
-	outputName = path.Join(os.TempDir(), nextRandomName()+".xlsx")
+	outputName = utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
 	cmd.RootCmd.SetArgs([]string{"comment", "-U", url, "commenting.test.xlsx", outputName})
 	cmd.Execute()
@@ -730,6 +1176,112 @@ func testComments(t *testing.T) {
 	// if comment.Text != expect {
 	// 	t.Errorf("Expected %q, got: %q", expect, comment.Text)
 	// }
+}
+
+func testCellComments(t *testing.T) {
+	fileName := "cell_commenting.xlsx"
+	f := model.Source{
+		FileName:     fileName,
+		S3BucketName: "studentanswers",
+		S3Key:        fileName,
+	}
+	db.Create(&f)
+	assignment := model.Assignment{Title: "ASSIGNMENT 'Test Cell Comments'"}
+	db.Create(&assignment)
+	question := model.Question{
+		SourceID:     model.NewNullInt64(f.ID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: "Question wiht merged cells",
+		MaxScore:     8888.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+	db.Create(&question)
+	answer := model.Answer{
+		AssignmentID:   assignment.ID,
+		SourceID:       f.ID,
+		QuestionID:     model.NewNullInt64(question.ID),
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+	}
+	db.Create(&answer)
+	book := model.Workbook{FileName: fileName, Answer: answer}
+	db.Create(&book)
+
+	sheet := model.Worksheet{
+		Name:             "Sheet1",
+		Workbook:         book,
+		WorkbookFileName: book.FileName,
+		Answer:           answer}
+	db.Create(&sheet)
+	chart := model.Chart{Worksheet: sheet}
+	db.Create(&chart)
+	block := model.Block{
+		Worksheet:       sheet,
+		Range:           "ChartTitle",
+		Formula:         "TEST",
+		RelativeFormula: "E15",
+		Chart:           chart}
+	db.Create(&block)
+	block = model.Block{
+		Worksheet: sheet,
+		Range:     "D8:D20",
+		Formula:   "B8*C8",
+		TRow:      7,
+		LCol:      3,
+		BRow:      19,
+		RCol:      3,
+	}
+	db.Create(&block)
+	comments := []model.Comment{
+		{Text: "cell comment 40 1742"},
+		{Text: "cell comment 40 1743"},
+		{Text: "block comment 1101"},
+	}
+	for i := range comments {
+		db.Create(&comments[i])
+		db.Create(&model.AnswerComment{Answer: answer, Comment: comments[i]})
+	}
+	cells := []model.Cell{
+		{Range: "D8", Row: 7, Col: 3, Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
+		{Range: "D9", Row: 8, Col: 3, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+	}
+	for i := range cells {
+		db.Create(&cells[i])
+	}
+	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
+	block = model.Block{
+		Worksheet: sheet,
+		Range:     "A2:B5",
+		Formula:   "B8*C8",
+		TRow:      1,
+		LCol:      0,
+		BRow:      4,
+		RCol:      1,
+	}
+	db.Create(&block)
+	comments = []model.Comment{
+		{Text: "CELL COMMENT #1"},
+		{Text: "CELL COMMENT #2"},
+		{Text: "BLOCK COMMENT"},
+	}
+	for i := range comments {
+		db.Create(&comments[i])
+		db.Create(&model.AnswerComment{Answer: answer, Comment: comments[i]})
+	}
+	for _, c := range []model.Cell{
+		{Range: "A2", Row: 1, Col: 0, Block: block, Formula: "B8*C8", Value: "80", Comment: comments[0], Worksheet: sheet},
+		{Range: "B3", Row: 2, Col: 1, Block: block, Formula: "B9*C9", Value: "48", Comment: comments[1], Worksheet: sheet},
+	} {
+		db.Create(&c)
+	}
+	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
+	outputName := utils.TempFileName("", ".xlsx")
+	t.Log("OUTPUT:", outputName)
+	// db.LogMode(true)
+	// log.SetLevel(log.DebugLevel)
+	if err := cmd.AddCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
+		log.Errorln(err)
+	}
 }
 
 func testRowsToComment(t *testing.T) {

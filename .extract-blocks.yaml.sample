@@ -5,7 +5,7 @@
 # For MySQL (NB! it's important to add '?parseTime=true' for MySQL due to a bug with date parsing in MySQL!!!):
 #url: mysql://root:p455w0rd@tcp(172.17.0.3:3306)/mysql?parseTime=true
 # OR (without specifying the driver) falls back to "mysql":
-#url: root:p455w0rd@tcp(172.17.0.3:3306)/mysql?parseTime=true
+#url: root:p455w0rd@tcp(172.17.0.3:3306)/blocks?parseTime=true
 # For sqlite3:
 url: sqlite://blocks.db
 #url: sqlite3:blocks.db

@@ -34,7 +34,8 @@ var DryRun bool
 
 var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 
-func cellAddress(rowIndex, colIndex int) string {
+// CellAddress maps a cell coordiantes (row, column) to its address
+func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
 }
 
@@ -113,6 +114,7 @@ type Question struct {
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 }
 
 // TableName overrides default table name for the model
@@ -120,9 +122,15 @@ func (Question) TableName() string {
 	return "Questions"
 }
 
+func (q Question) String() string {
+	return fmt.Sprintf("Question{ID: %d, Type: %s, Text: %q}",
+		q.ID, q.QuestionType, q.QuestionText)
+}
+
 // ImportFile imports form Excel file QuestionExcleData
-func (q *Question) ImportFile(fileName string) error {
+func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 	file, err := xlsx.OpenFile(fileName)
+
 	if err != nil {
 		return err
 	}
@@ -147,7 +155,7 @@ func (q *Question) ImportFile(fileName string) error {
 
 				var commentText string
 
-				cellRange := cellAddress(i, j)
+				cellRange := CellAddress(i, j)
 				commen, ok := sheet.Comment[cellRange]
 				if ok {
 					commentText = commen.Text
@@ -169,8 +177,124 @@ func (q *Question) ImportFile(fileName string) error {
 				}
 			}
 		}
+
 	}
+	q.ImportBlocks(file, color, verbose)
+
 	return nil
+}
+
+// ImportBlocks extracts blocks from the given question file and stores in the DB for referencing
+func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb Workbook) {
+
+	var source Source
+	Db.Model(&q).Related(&source, "Source")
+	fileName := source.FileName
+	if !DryRun {
+		wb = Workbook{FileName: fileName, IsReference: true}
+		result := Db.Create(&wb)
+		if result.Error != nil {
+			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
+		}
+		if DebugLevel > 1 {
+			log.Debugf("Ceated workbook entry %#v", wb)
+		}
+	}
+
+	if verbose {
+		log.Infof("*** Processing workbook: %s", fileName)
+	}
+
+	for orderNum, sheet := range file.Sheets {
+
+		if sheet.Hidden {
+			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+			continue
+		}
+
+		if verbose {
+			log.Infof("Processing worksheet %q", sheet.Name)
+		}
+
+		var ws Worksheet
+		if !DryRun {
+			Db.FirstOrCreate(&ws, Worksheet{
+				Name:             sheet.Name,
+				WorkbookID:       wb.ID,
+				WorkbookFileName: fileName,
+				IsReference:      true,
+				OrderNum:         orderNum,
+			})
+		}
+		if Db.Error != nil {
+			log.Fatalf("*** Failed to create worksheet entry: %s", Db.Error.Error())
+		}
+
+		blocks := blockList{}
+		sheetFillColors := []string{}
+
+		for i, row := range sheet.Rows {
+			for j, cell := range row.Cells {
+
+				if blocks.alreadyFound(i, j) {
+					continue
+				}
+				style := cell.GetStyle()
+				fgColor := style.Fill.FgColor
+				if fgColor != "" {
+					for _, c := range sheetFillColors {
+						if c == fgColor {
+							goto MATCH
+						}
+					}
+					sheetFillColors = append(sheetFillColors, fgColor)
+				}
+			MATCH:
+
+				if fgColor == color {
+
+					b := Block{
+						WorksheetID:     ws.ID,
+						Color:           color,
+						Formula:         cell.Formula(),
+						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+						IsReference:     true,
+						TRow:            i,
+						LCol:            j,
+					}
+
+					if !DryRun {
+						Db.Create(&b)
+					}
+
+					if DebugLevel > 1 {
+						log.Debugf("Created %#v", b)
+					}
+
+					b.findWhole(sheet, color)
+					b.save()
+					blocks = append(blocks, b)
+					if verbose && b.Range != "" {
+						log.Infof("Found: %s", b)
+					}
+
+				}
+			}
+		}
+		if len(blocks) == 0 {
+			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+			if len(sheetFillColors) > 0 {
+				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+			}
+		}
+	}
+
+	if !DryRun {
+		q.ReferenceID = NewNullInt64(wb.ID)
+		Db.Save(&q)
+	}
+
+	return
 }
 
 // QuestionExcelData - extracted celles from question Workbooks
@@ -225,12 +349,13 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 
 // Answer - student submitted answers
 type Answer struct {
-	ID                  int           `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
+	Assignment          Assignment
 	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
 	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
 	Marks               float64       `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime"`
+	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
@@ -257,7 +382,7 @@ type Assignment struct {
 	// IsHidden           int8      `gorm:"type:tinyint(4)"`
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
-	// CourseID           uint      `gorm:"column:CourseID;type:int(10) unsigned"`
+	// CourseID           int      `gorm:"column:CourseID"`
 	State        string `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
 	WasProcessed int8   `gorm:"type:tinyint(1)"`
 }
@@ -269,12 +394,13 @@ func (Assignment) TableName() string {
 
 // Workbook - Excel file / workbook
 type Workbook struct {
-	ID         int `gorm:"primary_key:true"`
-	FileName   string
-	CreatedAt  time.Time
-	AnswerID   int         `gorm:"column:StudentAnswerID;index;type:int"`
-	Answer     Answer      `gorm:"ForeignKey:AnswerID"`
-	Worksheets []Worksheet `gorm:"ForeignKey:WorkbookID"`
+	ID          int `gorm:"primary_key:true"`
+	FileName    string
+	CreatedAt   time.Time
+	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
+	Answer      Answer        `gorm:"ForeignKey:AnswerID"`
+	Worksheets  []Worksheet   `gorm:"ForeignKey:WorkbookID"`
+	IsReference bool          // the workbook is used for referencing the expected bloks
 }
 
 // TableName overrides default table name for the model
@@ -446,7 +572,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 								WorksheetID: ws.ID,
 								Range:       p.Name,
 								Formula:     p.Value,
-								RelativeFormula: cellAddress(
+								RelativeFormula: CellAddress(
 									drawing.FromRow+propCount, drawing.ToCol+2),
 								ChartID: chartID,
 							}
@@ -482,11 +608,13 @@ type Worksheet struct {
 	ID               int
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block  `gorm:"ForeignKey:WorksheetID"`
-	Answer           Answer   `gorm:"ForeignKey:AnswerID"`
-	AnswerID         int      `gorm:"column:StudentAnswerID;index;type:int"`
-	Workbook         Workbook `gorm:"ForeignKey:WorkbookId"`
-	WorkbookID       int      `gorm:"index"`
+	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
+	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
+	AnswerID         sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
+	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
+	WorkbookID       int           `gorm:"index"`
+	IsReference      bool
+	OrderNum         int
 }
 
 // TableName overrides default table name for the model
@@ -494,29 +622,100 @@ func (Worksheet) TableName() string {
 	return "WorkSheets"
 }
 
-// Block - the univormly filled with specific color block
+// BlockCommentRow - a block comment row
+type BlockCommentRow struct {
+	Range                  string
+	CommentText            string
+	TRow, LCol, BRow, RCol int
+}
+
+// GetBlockComments retrieves all block comments in a form of a map
+func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err error) {
+	// var (
+	// 	blockRange             string
+	// 	commentText            string
+	// 	tRow, lCol, bRow, rCol int
+	// )
+
+	rows, err := Db.Raw(`SELECT 
+	  b.BlockCellRange,
+	  c.CommentText,
+	  b.t_row, b.l_col, b.b_row, b.r_col
+    FROM ExcelBlocks AS b
+      LEFT JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
+      LEFT JOIN Comments AS c ON c.CommentID = bc.ExcelCommentID
+    WHERE b.worksheet_id = ?
+	ORDER BY b.l_col, b.t_row`, ws.ID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res = make(map[int][]BlockCommentRow)
+	col := -1
+	for rows.Next() {
+		r := BlockCommentRow{}
+		rows.Scan(&r.Range, &r.CommentText, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		if r.LCol != col {
+			col = r.LCol
+			res[col] = make([]BlockCommentRow, 1)
+			res[col][0] = r
+		} else {
+			res[col] = append(res[col], r)
+		}
+	}
+
+	return
+}
+
+// CellCommentRow - a cell comment row
+type CellCommentRow struct {
+	Range       string
+	CommentText string
+	Row, Col    int
+}
+
+// GetCellComments retrieves all block comments in a form of a map
+func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
+	rows, err := Db.Raw(`SELECT cell.cell_range, c.CommentText, cell.row, cell.col
+    FROM Cells AS cell JOIN Comments AS c ON c.CommentID = cell.CommentID
+    WHERE  cell.worksheet_id = ?
+	ORDER BY cell.col, cell."row"`, ws.ID).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res = make([]CellCommentRow, 0)
+	for rows.Next() {
+		r := CellCommentRow{}
+		rows.Scan(&r.Range, &r.CommentText, &r.Row, &r.Col)
+		res = append(res, r)
+	}
+	return
+
+}
+
+// Block - Excel block
 type Block struct {
 	ID              int `gorm:"column:ExcelBlockID;primary_key:true;AUTO_INCREMENT"`
 	Color           string
-	Range           string                `gorm:"column:BlockCellRange"`
-	Formula         string                `gorm:"column:BlockFormula"` // first block cell formula
-	RelativeFormula string                // first block cell relative formula formula
-	Cells           []Cell                `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet             `gorm:"ForeignKey:WorksheetID"`
-	WorksheetID     int                   `gorm:"index"`
-	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelBlockID"`
-	Chart           Chart                 `gorm:"ForeignKey:ChartId"`
-	ChartID         sql.NullInt64         `grom:"type:int"`
-
-	s       struct{ r, c int }           `gorm:"-"` // Top-left cell
-	e       struct{ r, c int }           `gorm:"-"` // Bottom-right cell
-	i       struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
-	isEmpty bool                         `gorm:"-"` // All block cells are empty
-}
-
-func (b Block) String() string {
-	return fmt.Sprintf("Block {Range: %q, Color: %q, Formula: %q, Relative Formula: %q}",
-		b.Range, b.Color, b.Formula, b.RelativeFormula)
+	Range           string                       `gorm:"column:BlockCellRange"`
+	Formula         string                       `gorm:"column:BlockFormula"` // first block cell formula
+	RelativeFormula string                       // first block cell relative formula formula
+	Cells           []Cell                       `gorm:"ForeignKey:BlockID"`
+	Worksheet       Worksheet                    `gorm:"ForeignKey:WorksheetID"`
+	WorksheetID     int                          `gorm:"index"`
+	CommentMappings []BlockCommentMapping        `gorm:"ForeignKey:ExcelBlockID"`
+	Chart           Chart                        `gorm:"ForeignKey:ChartId"`
+	ChartID         sql.NullInt64                `grom:"type:int;index"`
+	IsReference     bool                         // the block is used for referencing the expected bloks
+	TRow            int                          `gorm:"index"` // Top row
+	LCol            int                          `gorm:"index"` // Left column
+	BRow            int                          `gorm:"index"` // Bottom row
+	RCol            int                          `gorm:"index"` // Right column
+	i               struct{ sr, sc, er, ec int } `gorm:"-"`     // "Inner" block - the block containing values
+	isEmpty         bool                         `gorm:"-"`     // All block cells are empty
 }
 
 // TableName overrides default table name for the model
@@ -524,38 +723,64 @@ func (b Block) TableName() string {
 	return "ExcelBlocks"
 }
 
+func (b Block) String() string {
+	var output string
+	if b.IsReference {
+		output = "Reference"
+	} else {
+		output = "Block"
+	}
+	return fmt.Sprintf(
+		"%s {ID: %d, Range: %q, Color: %q, Formula: %q, Relative Formula: %q, WorksheetID: %d}",
+		output, b.ID, b.Range, b.Color, b.Formula, b.RelativeFormula, b.WorksheetID)
+}
+
 func (b *Block) save() {
 	if !DryRun {
-		for i := b.s.c; i <= b.e.c; i++ {
-			for j := b.s.r; j <= b.e.r; j++ {
-				address := cellAddress(j, i)
-				address += ":" + address
-				if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
-					empty := Block{WorksheetID: b.WorksheetID, Range: address, Color: b.Color}
-					r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
-						First(&empty)
-					if r.RecordNotFound() {
-						Db.Create(&empty)
+		if !b.IsReference && b.Color != "" {
+			for i := b.LCol; i <= b.RCol; i++ {
+				for j := b.TRow; j <= b.BRow; j++ {
+					address := CellAddress(j, i)
+					address += ":" + address
+					if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
+						empty := Block{
+							WorksheetID: b.WorksheetID,
+							Range:       address,
+							Color:       b.Color,
+							TRow:        j,
+							LCol:        i,
+						}
+						r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
+							First(&empty)
+						if r.RecordNotFound() {
+							Db.Create(&empty)
+						}
 					}
 				}
 			}
 		}
-		if b.isEmpty {
+		if b.isEmpty && !b.IsReference {
 			Db.Delete(&Cell{}, "block_id = ?", b.ID)
 			Db.Delete(b)
 		} else {
-			b.Range = b.innerAddress()
+			if b.IsReference {
+				b.Range = b.Address()
+			} else {
+				b.Range = b.InnerAddress()
+			}
 			Db.Save(b)
 		}
 	}
 }
 
-func (b *Block) address() string {
-	return cellAddress(b.s.r, b.s.c) + ":" + cellAddress(b.e.r, b.e.c)
+// Address - the block range
+func (b *Block) Address() string {
+	return CellAddress(b.TRow, b.LCol) + ":" + CellAddress(b.BRow, b.RCol)
 }
 
-func (b *Block) innerAddress() string {
-	return cellAddress(b.i.sr, b.i.sc) + ":" + cellAddress(b.i.er, b.i.ec)
+// InnerAddress - the block "inner" range excluding empty cells
+func (b *Block) InnerAddress() string {
+	return CellAddress(b.i.sr, b.i.sc) + ":" + CellAddress(b.i.er, b.i.ec)
 }
 
 //  getCellComment returns cell comment text value
@@ -588,71 +813,72 @@ func cellValue(cell *xlsx.Cell) (value string) {
 // and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
-	b.e = b.s
+	b.BRow, b.RCol = b.TRow, b.LCol
 	for i, row := range sheet.Rows {
 
 		// skip all rows until the first block row
-		if i < b.s.r {
+		if i < b.TRow {
 			continue
 		}
 
 		log.Debugf("Total cells: %d at %d", len(row.Cells), i)
 		// Range is discontinued or of a differnt color
-		if len(row.Cells) <= b.e.c ||
-			row.Cells[b.e.c].GetStyle().Fill.FgColor != color ||
-			RelativeFormula(i, b.e.c, row.Cells[b.e.c].Formula()) != b.RelativeFormula {
+		if len(row.Cells) <= b.RCol ||
+			row.Cells[b.RCol].GetStyle().Fill.FgColor != color ||
+			RelativeFormula(i, b.RCol, row.Cells[b.RCol].Formula()) != b.RelativeFormula {
 			log.Debugf("Reached the edge row of the block at row %d", i)
-			b.e.r = i - 1
+			b.BRow = i - 1
 			break
 		} else {
-			b.e.r = i
+			b.BRow = i
 		}
 
 		for j, cell := range row.Cells {
 			// skip columns until the start:
-			if j < b.s.c {
+			if j < b.LCol {
 				continue
 			}
 
-			fgColor := cell.GetStyle().Fill.FgColor
-			relFormula := RelativeFormula(i, j, cell.Formula())
 			// Reached the top-right corner:
-			if fgColor == color && relFormula == b.RelativeFormula {
-				cellID := cellAddress(i, j)
-				commentText := ""
-				comment, ok := sheet.Comment[cellID]
-				if ok {
-					commentText = comment.Text
+			if fgColor := cell.GetStyle().Fill.FgColor; fgColor == color {
+				if !b.IsReference {
+					relFormula := RelativeFormula(i, j, cell.Formula())
+					if relFormula == b.RelativeFormula {
+						cellID := CellAddress(i, j)
+						if value := cellValue(cell); value != "" {
+							c := Cell{
+								BlockID:     b.ID,
+								WorksheetID: b.WorksheetID,
+								Formula:     cell.Formula(),
+								Value:       value,
+								Range:       cellID,
+							}
+							if DebugLevel > 1 {
+								log.Debugf("Inserting %#v", c)
+							}
+							Db.Create(&c)
+							if Db.Error != nil {
+								log.Error("Error occured: ", Db.Error.Error())
+							}
+						}
+					}
 				}
-				if value := cellValue(cell); value != "" {
-					c := Cell{
-						BlockID:     b.ID,
-						WorksheetID: b.WorksheetID,
-						Formula:     cell.Formula(),
-						Value:       value,
-						Range:       cellID,
-						Comment:     commentText,
-					}
-					if DebugLevel > 1 {
-						log.Debugf("Inserting %#v", c)
-					}
-					Db.Create(&c)
-					if Db.Error != nil {
-						log.Error("Error occured: ", Db.Error.Error())
-					}
-				}
-				b.e.c = j
+				b.RCol = j
 			} else {
 				log.Debugf("Reached the edge column  of the block at column %d", j)
-				if j > b.e.c {
-					b.e.c = j - 1
+				if j > b.RCol {
+					b.RCol = j - 1
 				}
 				break
 			}
 		}
 	}
 
-	sr, sc, er, ec := b.s.r, b.s.c, b.e.r, b.e.c
+	if b.IsReference {
+		return
+	}
+	// Find the part containing values
+	sr, sc, er, ec := b.TRow, b.LCol, b.BRow, b.RCol
 	for sc <= ec {
 		for r := sr; r <= er; r++ {
 			if value := cellValue(sheet.Cell(r, sc)); value != "" {
@@ -699,10 +925,10 @@ FOUND:
 
 // IsInside tests if the cell with given coordinates is inside the coordinates
 func (b *Block) IsInside(r, c int) bool {
-	return (b.s.r <= r &&
-		r <= b.e.r &&
-		b.s.c <= c &&
-		c <= b.e.c)
+	return (b.TRow <= r &&
+		r <= b.BRow &&
+		b.LCol <= c &&
+		c <= b.RCol)
 }
 
 // Cell - a sigle cell of the block
@@ -715,7 +941,10 @@ type Cell struct {
 	Range       string `gorm:"column:cell_range"`
 	Formula     string
 	Value       string `gorm:"size:2000"`
-	Comment     string
+	Comment     Comment
+	CommentID   sql.NullInt64 `gorm:"column:CommentID;type:int"`
+	Row         int           `gorm:"index"`
+	Col         int           `gorm:"index"`
 }
 
 // TableName overrides default table name for the model
@@ -742,6 +971,12 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
 	}
 	db, err = gorm.Open(parts[0], parts[1])
+	if parts[0] == "mysql" {
+		db.Set("gorm:table_options", "collation_connection=utf8_bin")
+		if err := db.Exec("SET @@sql_mode='ANSI'").Error; err != nil {
+			log.Error(err)
+		}
+	}
 	if err != nil {
 		log.Error(err)
 		log.Fatalf("failed to connect database %q", url)
@@ -769,6 +1004,7 @@ type MySQLQuestion struct {
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 }
 
 // TableName overrides default table name for the model
@@ -806,7 +1042,7 @@ func (BlockCommentMapping) TableName() string {
 // AnswerComment - answer-comment mapping:
 type AnswerComment struct {
 	Answer    Answer
-	AnswerID  int `gorm:"column:StudentAnswerID;index;type:int unsigned"`
+	AnswerID  int `gorm:"column:StudentAnswerID;index"`
 	Comment   Comment
 	CommentID int `gorm:"column:CommentID"`
 }
@@ -977,15 +1213,84 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 	return false
 }
 
+// FindBlocksInside - find answer blocks within the reference block (rb) and store them
+func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
+	var (
+		b          Block
+		cell       *xlsx.Cell
+		relFormula string
+	)
+	r := rb.TRow
+	cell = sheet.Cell(rb.TRow, rb.LCol)
+	for r <= rb.BRow {
+		relFormula = RelativeFormula(r, rb.LCol, cell.Formula())
+		b = Block{
+			WorksheetID:     ws.ID,
+			Formula:         cell.Formula(),
+			RelativeFormula: relFormula,
+			Range:           rb.Range,
+			TRow:            r,
+			LCol:            rb.LCol,
+			BRow:            rb.BRow,
+			RCol:            rb.RCol,
+		}
+		b.Range = b.Address()
+		err = Db.Create(&b).Error
+		if err != nil {
+			return
+		}
+		for {
+			for c := rb.LCol; c <= rb.RCol; c++ {
+				cell := sheet.Cell(r, c)
+				if value := cellValue(cell); value != "" {
+					c := Cell{
+						BlockID:     b.ID,
+						WorksheetID: ws.ID,
+						Formula:     cell.Formula(),
+						Value:       value,
+						Range:       CellAddress(r, c),
+						Row:         r,
+						Col:         c,
+					}
+					if DebugLevel > 1 {
+						log.Debugf("Inserting %#v", c)
+					}
+					Db.Create(&c)
+					if Db.Error != nil {
+						return Db.Error
+					}
+				}
+			}
+			r++
+			if r > rb.BRow {
+				return
+			}
+
+			cell = sheet.Cell(r, rb.LCol)
+			if relFormula != RelativeFormula(r, rb.LCol, cell.Formula()) {
+				if r != b.BRow {
+					b.BRow = r - 1
+					b.Range = b.Address()
+					Db.Save(&b)
+				}
+				break
+			}
+		}
+	}
+	return
+}
+
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
 func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook, err error) {
-
 	var (
 		answerID int
 		answer   Answer
 	)
 	if len(answerIDs) > 0 {
-		answerID = int(answerIDs[0])
+		answerID = answerIDs[0]
+	} else {
+		log.Errorln("Missing AnswerID.")
+		return
 	}
 	res := Db.First(&answer, answerID)
 	if res.RecordNotFound() {
@@ -998,21 +1303,18 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	if err != nil {
 		log.Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt: %s",
 			fileName, answerID, err.Error())
-		Db.LogMode(true)
 		res := Db.Model(&answer).Updates(map[string]interface{}{
-			"was_xl_processed": 0,
+			"was_xl_processed": 1,
 			"FileID":           gorm.Expr("NULL"),
 		})
-		Db.LogMode(false)
-		// res := Db.Model(&answer).UpdateColumns(
-		// 	Answer{SourceID: sql.NullInt64{}, WasXLProcessed: 0})
 		if res.Error != nil {
 			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
 		}
 		return
 	}
 
-	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: answerID})
+	var result *gorm.DB
+	result = Db.First(&wb, Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)})
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -1024,7 +1326,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	} else if !DryRun {
 
-		wb = Workbook{FileName: fileName, AnswerID: answerID}
+		wb = Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)}
 		result = Db.Create(&wb)
 		if result.Error != nil {
 			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
@@ -1037,8 +1339,21 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
+	var q Question
+	result = Db.
+		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
+		Where("StudentAnswers.StudentAnswerID = ?", answerID).
+		Order("Questions.reference_id DESC").
+		First(&q)
+	if result.Error != nil {
+		log.Error(result.Error)
+		return
+	}
+	if verbose {
+		log.Infof("*** Processing the answer ID:%d for the queestion %s", answerID, q)
+	}
 
-	for _, sheet := range file.Sheets {
+	for orderNum, sheet := range file.Sheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -1050,74 +1365,108 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 
 		var ws Worksheet
+		var references []Block
 		if !DryRun {
 			Db.FirstOrCreate(&ws, Worksheet{
 				Name:             sheet.Name,
 				WorkbookID:       wb.ID,
 				WorkbookFileName: wb.FileName,
-				AnswerID:         answerID,
+				AnswerID:         NewNullInt64(answerID),
+				OrderNum:         orderNum,
 			})
 		}
 		if Db.Error != nil {
-			log.Fatalf("Failed to create worksheet entry: %s", Db.Error.Error())
+			log.Fatalf("*** Failed to create worksheet entry: %s", Db.Error.Error())
 		}
-		blocks := blockList{}
-		sheetFillColors := []string{}
 
-		for i, row := range sheet.Rows {
-			for j, cell := range row.Cells {
-
-				if blocks.alreadyFound(i, j) {
-					continue
-				}
-				style := cell.GetStyle()
-				fgColor := style.Fill.FgColor
-				if fgColor != "" {
-					for _, c := range sheetFillColors {
-						if c == fgColor {
-							goto MATCH
-						}
-					}
-					sheetFillColors = append(sheetFillColors, fgColor)
-				}
-			MATCH:
-
-				if fgColor == color {
-
-					b := Block{
-						WorksheetID:     ws.ID,
-						Color:           color,
-						Formula:         cell.Formula(),
-						RelativeFormula: RelativeFormula(i, j, cell.Formula()),
-					}
-					b.s.r, b.s.c = i, j
-
-					if !DryRun {
-						Db.Create(&b)
-					}
-
-					if DebugLevel > 1 {
-						log.Debugf("Created %#v", b)
-					}
-
-					b.findWhole(sheet, color)
-					b.save()
-					blocks = append(blocks, b)
-					if verbose {
-						log.Infof("Found: %s", b)
-					}
-
+		if q.ReferenceID.Valid {
+			// Attempt to use reference blocks for the answer:
+			result = Db.
+				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
+				Where("ExcelBlocks.is_reference").
+				Where("WorkSheets.workbook_id = ?", q.ReferenceID).
+				Where("WorkSheets.order_num = ?", orderNum).
+				Find(&references)
+			if result.Error != nil {
+				log.Error(result.Error)
+				continue
+			}
+			// Attempt to use reference blocks for the answer:
+			for _, rb := range references {
+				err = ws.FindBlocksInside(sheet, rb)
+				if err != nil {
+					log.Errorln(err)
 				}
 			}
-		}
-		if len(blocks) == 0 {
-			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
-			if len(sheetFillColors) > 0 {
-				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+		} else {
+			// Keep looking for color-coded blocks
+			blocks := blockList{}
+			sheetFillColors := []string{}
+
+			for i, row := range sheet.Rows {
+				for j, cell := range row.Cells {
+
+					if blocks.alreadyFound(i, j) {
+						continue
+					}
+					style := cell.GetStyle()
+					fgColor := style.Fill.FgColor
+					if fgColor != "" {
+						for _, c := range sheetFillColors {
+							if c == fgColor {
+								goto MATCH
+							}
+						}
+						sheetFillColors = append(sheetFillColors, fgColor)
+					}
+				MATCH:
+
+					if fgColor == color {
+
+						b := Block{
+							WorksheetID:     ws.ID,
+							Color:           color,
+							Formula:         cell.Formula(),
+							RelativeFormula: RelativeFormula(i, j, cell.Formula()),
+							TRow:            i,
+							LCol:            j,
+						}
+
+						if !DryRun {
+							Db.Create(&b)
+						}
+
+						if DebugLevel > 1 {
+							log.Debugf("Created %#v", b)
+						}
+
+						b.findWhole(sheet, color)
+						b.save()
+						blocks = append(blocks, b)
+						if verbose && b.Range != "" {
+							log.Infof("Found: %s", b)
+						}
+
+					}
+				}
+			}
+			if len(blocks) == 0 {
+				log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+				if len(sheetFillColors) > 0 {
+					log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
+				}
 			}
 		}
 	}
+
 	wb.ImportCharts(fileName)
+	if _, err := Db.DB().
+		Exec(`
+			UPDATE StudentAnswers
+			SET was_xl_processed = 1
+			WHERE StudentAnswerID = ?`, answerID); err != nil {
+		log.Errorf("Failed to update the answer entry: %s", err.Error())
+	}
 
 	// Comments that should be linked with the file:
 	const commentsToMapSQL = `

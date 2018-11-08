@@ -2,9 +2,18 @@ package utils
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
+	rnd "math/rand"
+	"os"
+	"path/filepath"
+	"time"
 )
+
+func init() {
+	rnd.Seed(time.Now().UnixNano())
+}
 
 // NewUUID generates a random UUID according to RFC 4122
 func NewUUID() (string, error) {
@@ -18,4 +27,11 @@ func NewUUID() (string, error) {
 	// version 4 (pseudo-random); see section 4.1.3
 	uuid[6] = uuid[6]&^0xf0 | 0x40
 	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
+}
+
+// TempFileName generates a temporary filename for use in testing or whatever
+func TempFileName(prefix, suffix string) string {
+	randBytes := make([]byte, 8)
+	rnd.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+suffix)
 }
