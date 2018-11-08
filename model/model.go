@@ -358,7 +358,7 @@ type Answer struct {
 	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
 	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
-	SourceID            int           `gorm:"column:FileID"`
+	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64   `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8           `gorm:"type:tinyint;default:0"`
@@ -514,7 +514,7 @@ func (wb *Workbook) ImportCharts(fileName string) {
 				for _, dr := range drawingRels.Relationships {
 					if strings.Contains(dr.Target, "charts/chart") {
 						chartName := "xl/charts/" + filepath.Base(dr.Target)
-						chart := unmarshalChart(file.XLSX[chartName])
+						chart := UnmarshalChart(file.XLSX[chartName])
 						chartTitle := chart.Title.Value()
 						log.Debugf("*** %s: %#v", chartName, chart)
 						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
@@ -997,7 +997,7 @@ type MySQLQuestion struct {
 	QuestionText       string              `gorm:"column:QuestionText;type:text;not null"`
 	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
-	FileID             sql.NullInt64       `gorm:"column:FileID;type:int"`
+	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
 	WasCompared        bool                `gorm:"type:tinyint(1);default:0"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
@@ -1029,9 +1029,9 @@ func (Comment) TableName() string {
 // BlockCommentMapping - block-comment mapping
 type BlockCommentMapping struct {
 	Block     Block
-	BlockID   int `gorm:"column:ExcelBlockID"`
+	BlockID   int `gorm:"column:ExcelBlockID;type:int unsigned"`
 	Comment   Comment
-	CommentID int `gorm:"column:ExcelCommentID"`
+	CommentID int `gorm:"column:ExcelCommentID;type:int unsigned"`
 }
 
 // TableName overrides default table name for the model
@@ -1055,9 +1055,9 @@ func (AnswerComment) TableName() string {
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
-	AssignmentID int `gorm:"column:AssignmentID"`
+	AssignmentID int `gorm:"column:AssignmentID;type:int unsigned"`
 	Question     Question
-	QuestionID   int `gorm:"column:QuestionID"`
+	QuestionID   int `gorm:"column:QuestionID;type:int unsigned"`
 }
 
 // TableName overrides default table name for the model
@@ -1281,17 +1281,35 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook) {
-	file, err := xlsx.OpenFile(fileName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var answerID int
+func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook, err error) {
+	var (
+		answerID int
+		answer   Answer
+	)
 	if len(answerIDs) > 0 {
 		answerID = answerIDs[0]
 	} else {
 		log.Errorln("Missing AnswerID.")
+		return
+	}
+	res := Db.First(&answer, answerID)
+	if res.RecordNotFound() {
+		err = fmt.Errorf("Answer (ID: %d) not found", answerID)
+		log.Error(err.Error())
+		return
+	}
+
+	file, err := xlsx.OpenFile(fileName)
+	if err != nil {
+		log.Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt: %s",
+			fileName, answerID, err.Error())
+		res := Db.Model(&answer).Updates(map[string]interface{}{
+			"was_xl_processed": 0,
+			"FileID":           gorm.Expr("NULL"),
+		})
+		if res.Error != nil {
+			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+		}
 		return
 	}
 
@@ -1500,6 +1518,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
 	}
 
+	res = Db.Model(&answer).UpdateColumn("was_xl_processed", 1)
+	if res.Error != nil {
+		log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+	}
 	return
 }
 

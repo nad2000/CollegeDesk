@@ -243,7 +243,7 @@ func createTestDB() *gorm.DB {
 		}
 		db.Create(&q)
 		db.Create(&model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
@@ -251,7 +251,7 @@ func createTestDB() *gorm.DB {
 
 	ignore := model.Source{FileName: "ignore.abc"}
 	db.Create(&ignore)
-	db.Create(&model.Answer{SourceID: ignore.ID, SubmissionTime: *parseTime("2017-01-01 14:42")})
+	db.Create(&model.Answer{SourceID: model.NewNullInt64(ignore.ID), SubmissionTime: *parseTime("2017-01-01 14:42")})
 
 	//db.LogMode(true)
 	var fileID int
@@ -373,7 +373,7 @@ func testHandleNotcolored(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
@@ -413,7 +413,7 @@ func testHandleNotcolored(t *testing.T) {
 	}
 	db.Create(&f)
 	a = model.Answer{
-		SourceID:       f.ID,
+		SourceID:       model.NewNullInt64(f.ID),
 		AssignmentID:   assignment.ID,
 		QuestionID:     model.NewNullInt64(q.ID),
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
@@ -448,7 +448,7 @@ func testHandleNotcolored(t *testing.T) {
 		f = model.Source{FileName: fn, S3BucketName: "studentanswers"}
 		db.Create(&f)
 		a = model.Answer{
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-30 12:42"),
@@ -512,6 +512,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)
 	t.Run("HandleQuestions", testHandleQuestions)
+	t.Run("CurruptedFiles", testCorruptedFiles)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
 }
 
@@ -674,6 +675,71 @@ func testImportQuestionFile(t *testing.T) {
 	q.ImportFile(fileName, "FFFFFF00", true)
 }
 
+func testCorruptedFiles(t *testing.T) {
+	q := model.Question{
+		SourceID:         sql.NullInt64{},
+		QuestionType:     model.QuestionType("FileUpload"),
+		QuestionSequence: 77,
+		QuestionText:     "Test handle answers without the colorcodes...",
+		MaxScore:         7777.77,
+		AuthorUserID:     987654321,
+		WasCompared:      true,
+	}
+	db.Create(&q)
+	assignment := model.Assignment{
+		Title: "Test handle answers without the colorcodes...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	db.Create(&model.QuestionAssignment{
+		QuestionID:   q.ID,
+		AssignmentID: assignment.ID,
+	})
+	for _, fn := range []string{"corrupt1.xlsx", "corrupt2.xlsx", "demo.xlsx"} {
+		f := model.Source{
+			FileName:     fn,
+			S3BucketName: "studentanswers",
+			S3Key:        fn,
+		}
+		db.Create(&f)
+		a := model.Answer{
+			SourceID:       model.NewNullInt64(f.ID),
+			AssignmentID:   assignment.ID,
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-14 14:42"),
+		}
+		db.Create(&a)
+	}
+	// model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, false, a.ID)
+
+	// var count int
+	// db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	// if expected := 8; count != expected {
+	// 	t.Errorf("Expected %d blocks, got: %d", expected, count)
+	// }
+	var countBefore, countAfter int
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countBefore)
+	tm := testManager{}
+	cmd.HandleAnswers(&tm)
+	db.Table("StudentAnswers").Where("was_xl_processed = ?", 0).Count(&countAfter)
+	if countBefore <= countAfter {
+		t.Errorf(
+			"Expeced that the number of answers to be processed dorps, got %d before, and %d afater.",
+			countBefore, countAfter)
+	}
+	var answerCount int
+	if err := db.DB().QueryRow(`
+			SELECT COUNT(*) FROM StudentAnswers AS a
+			WHERE a.FileID IS NULL
+			  AND a.was_xl_processed = 0`).Scan(&answerCount); err != nil {
+		t.Error(err)
+	}
+	if answerCount != 2 {
+		t.Errorf("Expecte 2 answers rejected: %d", answerCount)
+	}
+
+}
+
 func testQuestions(t *testing.T) {
 
 	if testing.Short() {
@@ -834,7 +900,7 @@ func TestCommenting(t *testing.T) {
 		db.Create(&f)
 		answer := model.Answer{
 			AssignmentID:   assignment.ID,
-			SourceID:       f.ID,
+			SourceID:       model.NewNullInt64(f.ID),
 			QuestionID:     model.NewNullInt64(question.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		}
@@ -1132,7 +1198,7 @@ func testCellComments(t *testing.T) {
 	db.Create(&question)
 	answer := model.Answer{
 		AssignmentID:   assignment.ID,
-		SourceID:       f.ID,
+		SourceID:       model.NewNullInt64(f.ID),
 		QuestionID:     model.NewNullInt64(question.ID),
 		SubmissionTime: *parseTime("2017-01-01 14:42"),
 	}
