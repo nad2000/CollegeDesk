@@ -878,6 +878,11 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 		return
 	}
 	// Find the part containing values
+	b.findInner(sheet)
+}
+
+// findInner finds the part containing values
+func (b *Block) findInner(sheet *xlsx.Sheet) {
 	sr, sc, er, ec := b.TRow, b.LCol, b.BRow, b.RCol
 	for sc <= ec {
 		for r := sr; r <= er; r++ {
@@ -1220,62 +1225,61 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 		cell       *xlsx.Cell
 		relFormula string
 	)
-	r := rb.TRow
-	cell = sheet.Cell(rb.TRow, rb.LCol)
-	for r <= rb.BRow {
-		relFormula = RelativeFormula(r, rb.LCol, cell.Formula())
-		b = Block{
-			WorksheetID:     ws.ID,
-			Formula:         cell.Formula(),
-			RelativeFormula: relFormula,
-			Range:           rb.Range,
-			TRow:            r,
-			LCol:            rb.LCol,
-			BRow:            rb.BRow,
-			RCol:            rb.RCol,
-		}
-		b.Range = b.Address()
-		err = Db.Create(&b).Error
-		if err != nil {
-			return
-		}
-		for {
-			for c := rb.LCol; c <= rb.RCol; c++ {
-				cell := sheet.Cell(r, c)
-				if value := cellValue(cell); value != "" {
-					c := Cell{
-						BlockID:     b.ID,
-						WorksheetID: ws.ID,
-						Formula:     cell.Formula(),
-						Value:       value,
-						Range:       CellAddress(r, c),
-						Row:         r,
-						Col:         c,
-					}
-					if DebugLevel > 1 {
-						log.Debugf("Inserting %#v", c)
-					}
-					Db.Create(&c)
-					if Db.Error != nil {
-						return Db.Error
-					}
+	for r := rb.TRow; r <= rb.BRow; r++ {
+		for c := rb.LCol; c <= rb.RCol; c++ {
+			cell = sheet.Cell(r, c)
+			formula := cell.Formula()
+			relFormula = RelativeFormula(r, c, formula)
+
+			if value := cellValue(cell); value != "" && formula != "" {
+				b = Block{
+					WorksheetID:     ws.ID,
+					Range:           rb.Range,
+					TRow:            rb.TRow,
+					LCol:            rb.LCol,
+					BRow:            rb.BRow,
+					RCol:            rb.RCol,
+					Formula:         formula,
+					RelativeFormula: relFormula,
 				}
-			}
-			r++
-			if r > rb.BRow {
-				return
+				err = Db.Create(&b).Error
+				if err != nil {
+					return
+				}
+
+				for j := r; j <= rb.BRow; j++ {
+					for i := c; i <= rb.RCol; i++ {
+						cell = sheet.Cell(j, i)
+						if relFormula != RelativeFormula(j, i, cell.Formula()) {
+							goto FINISH
+						}
+						c := Cell{
+							BlockID:     b.ID,
+							WorksheetID: ws.ID,
+							Formula:     cell.Formula(),
+							Value:       cellValue(cell),
+							Range:       CellAddress(j, i),
+							Row:         j,
+							Col:         i,
+						}
+						if DebugLevel > 1 {
+							log.Debugf("Inserting %#v", c)
+						}
+						Db.Create(&c)
+						if Db.Error != nil {
+							return Db.Error
+						}
+					}
+
+				}
 			}
 
-			cell = sheet.Cell(r, rb.LCol)
-			if relFormula != RelativeFormula(r, rb.LCol, cell.Formula()) {
-				if r != b.BRow {
-					b.BRow = r - 1
-					b.Range = b.Address()
-					Db.Save(&b)
-				}
-				break
-			}
 		}
+	}
+FINISH:
+	if b.ID != 0 {
+		b.findInner(sheet)
+		b.save()
 	}
 	return
 }
