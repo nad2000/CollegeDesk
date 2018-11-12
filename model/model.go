@@ -130,7 +130,6 @@ func (q Question) String() string {
 // ImportFile imports form Excel file QuestionExcleData
 func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 	file, err := xlsx.OpenFile(fileName)
-
 	if err != nil {
 		return err
 	}
@@ -398,8 +397,8 @@ type Workbook struct {
 	FileName    string
 	CreatedAt   time.Time
 	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
-	Answer      Answer        `gorm:"ForeignKey:AnswerID"`
-	Worksheets  []Worksheet   `gorm:"ForeignKey:WorkbookID"`
+	Answer      Answer        `gorm:"foreignkey:AnswerID"`
+	Worksheets  []Worksheet   // `gorm:"foreignkey:WorkbookID"`
 	IsReference bool          // the workbook is used for referencing the expected bloks
 }
 
@@ -737,18 +736,23 @@ func (b Block) String() string {
 
 func (b *Block) save() {
 	if !DryRun {
-		if !b.IsReference && b.Color != "" {
+		if !b.IsReference {
 			for i := b.LCol; i <= b.RCol; i++ {
 				for j := b.TRow; j <= b.BRow; j++ {
-					address := CellAddress(j, i)
-					address += ":" + address
 					if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
+						address := CellAddress(j, i)
+						address += ":" + address
 						empty := Block{
 							WorksheetID: b.WorksheetID,
 							Range:       address,
 							Color:       b.Color,
 							TRow:        j,
 							LCol:        i,
+							BRow:        j,
+							RCol:        i,
+						}
+						if VerboseLevel > 0 {
+							log.Infof("*** Created an empty cell/block: %#v", empty)
 						}
 						r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
 							First(&empty)
@@ -1218,6 +1222,20 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 	return false
 }
 
+// createEmptyCellBlock - create a block consisting of a single cell
+func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
+	address := CellAddress(r, c)
+	address += ":" + address
+	return Db.Create(&Block{
+		WorksheetID: ws.ID,
+		Range:       address,
+		TRow:        r,
+		LCol:        c,
+		BRow:        r,
+		RCol:        c,
+	}).Error
+}
+
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
 func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 	var (
@@ -1225,34 +1243,44 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 		cell       *xlsx.Cell
 		relFormula string
 	)
-	for r := rb.TRow; r <= rb.BRow; r++ {
-		for c := rb.LCol; c <= rb.RCol; c++ {
-			cell = sheet.Cell(r, c)
-			formula := cell.Formula()
-			relFormula = RelativeFormula(r, c, formula)
+	r := rb.TRow
+	for r <= rb.BRow {
 
-			if value := cellValue(cell); value != "" && formula != "" {
-				b = Block{
-					WorksheetID:     ws.ID,
-					Range:           rb.Range,
-					TRow:            rb.TRow,
-					LCol:            rb.LCol,
-					BRow:            rb.BRow,
-					RCol:            rb.RCol,
-					Formula:         formula,
-					RelativeFormula: relFormula,
-				}
-				err = Db.Create(&b).Error
-				if err != nil {
-					return
-				}
+		cell = sheet.Cell(r, rb.LCol)
+		formula := cell.Formula()
+		relFormula = RelativeFormula(r, rb.LCol, formula)
 
-				for j := r; j <= rb.BRow; j++ {
-					for i := c; i <= rb.RCol; i++ {
-						cell = sheet.Cell(j, i)
-						if relFormula != RelativeFormula(j, i, cell.Formula()) {
-							goto FINISH
-						}
+		if value := cellValue(cell); value != "" && formula != "" {
+			b = Block{
+				WorksheetID:     ws.ID,
+				Range:           rb.Range,
+				TRow:            r,
+				LCol:            rb.LCol,
+				BRow:            rb.BRow,
+				RCol:            rb.RCol,
+				Formula:         formula,
+				RelativeFormula: relFormula,
+			}
+			for {
+				r++
+				if r > rb.BRow {
+					break
+				}
+				cell = sheet.Cell(r, rb.LCol)
+				if relFormula != RelativeFormula(r, rb.LCol, cell.Formula()) {
+					break
+				}
+				b.BRow = r
+			}
+			err = Db.Create(&b).Error
+			if err != nil {
+				return
+			}
+
+			for j := b.TRow; j <= b.BRow; j++ {
+				for i := b.LCol; i <= b.RCol; i++ {
+					cell = sheet.Cell(j, i)
+					if cellValue(cell) != "" {
 						c := Cell{
 							BlockID:     b.ID,
 							WorksheetID: ws.ID,
@@ -1270,16 +1298,18 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 							return Db.Error
 						}
 					}
-
 				}
 			}
-
+			b.findInner(sheet)
+			b.save()
+			// Db.Save(&b)
+			continue
+		} else {
+			for c := rb.LCol; c <= rb.RCol; c++ {
+				ws.createEmptyCellBlock(r, c)
+			}
 		}
-	}
-FINISH:
-	if b.ID != 0 {
-		b.findInner(sheet)
-		b.save()
+		r++
 	}
 	return
 }

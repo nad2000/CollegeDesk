@@ -319,19 +319,23 @@ func testQuestionsToProcess(t *testing.T) {
 
 func testImportFile(t *testing.T) {
 	q := model.Question{
-		SourceID:         sql.NullInt64{},
 		QuestionType:     model.QuestionType("FileUpload"),
 		QuestionSequence: 123,
 		QuestionText:     "Test Import Question...",
 		MaxScore:         9999.99,
 		AuthorUserID:     123456789,
 		WasCompared:      true,
+		Source:           model.Source{FileName: "question.xlsx"},
 	}
 	db.Create(&q)
 	q.ImportFile("question.xlsx", "FFFFFF00", true)
 
-	var count int
-	db.Model(&model.Block{}).Where("is_reference = ?", true).Count(&count)
+	var (
+		count int
+		ws    model.Worksheet
+	)
+	db.First(&ws, "workbook_id = ?", q.ReferenceID)
+	db.Model(&model.Block{}).Where("is_reference = ? AND worksheet_id = ?", true, ws.ID).Count(&count)
 	if expected := 8; count != expected {
 		t.Errorf("Expected %d blocks, got: %d", expected, count)
 	}
@@ -514,6 +518,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleQuestions", testHandleQuestions)
 	t.Run("CurruptedFiles", testCorruptedFiles)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
+	t.Run("CWA175", testCWA175)
 }
 
 func testFindBlocksInside(t *testing.T) {
@@ -539,14 +544,16 @@ func testFindBlocksInside(t *testing.T) {
 		},
 	}
 	db.Create(&ws)
+
 	file, _ := xlsx.OpenFile("Q1 Solution different color stud4.xlsx")
 	sheet := file.Sheets[0]
 	ws.FindBlocksInside(sheet, model.Block{
-		Range: "D8:D20",
-		LCol:  3,
-		TRow:  7,
-		RCol:  3,
-		BRow:  19,
+		Range:       "D8:D20",
+		LCol:        3,
+		TRow:        7,
+		RCol:        3,
+		BRow:        19,
+		IsReference: true,
 	})
 	var blocks []model.Block
 	db.Model(&ws).Related(&blocks)
@@ -554,16 +561,17 @@ func testFindBlocksInside(t *testing.T) {
 		for _, b := range blocks {
 			t.Log(b)
 		}
-		t.Errorf("Got %d blocks, expected: %d", expected, got)
+		t.Errorf("Expected %d blocks, got: %d", expected, got)
 	}
 	// t.Log(ws)
 	block := model.Block{
-		Worksheet: ws,
-		Range:     "G9:G11",
-		LCol:      6,
-		TRow:      8,
-		RCol:      6,
-		BRow:      10,
+		Worksheet:   ws,
+		Range:       "G9:G11",
+		LCol:        6,
+		TRow:        8,
+		RCol:        6,
+		BRow:        10,
+		IsReference: true,
 	}
 	db.Create(&block)
 	ws.FindBlocksInside(sheet, block)
@@ -573,6 +581,78 @@ func testFindBlocksInside(t *testing.T) {
 			t.Log(b)
 		}
 		t.Errorf("Got %d blocks, expected: %d", got, expected)
+	}
+}
+
+func testCWA175(t *testing.T) {
+	assignment := model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888}
+	db.Create(&assignment)
+	wb := model.Workbook{
+		IsReference: true,
+		FileName:    "reference-workbook.xlsx",
+	}
+	db.Create(&wb)
+	ws := model.Worksheet{
+		IsReference: true,
+		Workbook:    wb,
+		OrderNum:    0,
+	}
+	db.Create(&ws)
+	q := model.Question{
+		ReferenceID: model.NewNullInt64(wb.ID),
+	}
+	db.Create(&q)
+	rb := model.Block{
+		Range:       "C2:C8",
+		TRow:        1,
+		LCol:        2,
+		BRow:        7,
+		RCol:        2,
+		IsReference: true,
+		Worksheet:   ws,
+	}
+	db.Create(&rb)
+	for _, r := range []struct {
+		fn       string
+		expected int
+	}{
+		{"CWA175-student1.xlsx", 1},
+		{"CWA175-student2.xlsx", 3},
+		{"CWA175-student3.xlsx", 7},
+	} {
+		// db.LogMode(false)
+		answer := model.Answer{
+			SubmissionTime: *parseTime("2017-01-01 14:42"),
+			Assignment:     assignment,
+			QuestionID:     model.NewNullInt64(q.ID),
+			Marks:          98.7654,
+			Source: model.Source{
+				FileName:     r.fn,
+				S3BucketName: "studentanswers",
+				S3Key:        r.fn,
+			},
+		}
+		db.Create(&answer)
+		model.ExtractBlocksFromFile(r.fn, "", true, true, answer.ID)
+
+		var wb model.Workbook
+
+		// db.LogMode(true)
+		if err := db.Preload("Worksheets").Preload("Worksheets.Blocks").First(&wb, "StudentAnswerID = ?", answer.ID).Error; err != nil {
+			t.Error(err)
+		}
+		if wb.Worksheets == nil || len(wb.Worksheets) < 1 {
+			t.Error("Missing worksheets in the workbook", wb)
+			continue
+		}
+		blocks := wb.Worksheets[0].Blocks
+		if blocks == nil {
+			t.Error("Missing blocks in the workbook", wb)
+			continue
+		}
+		if count := len(wb.Worksheets[0].Blocks); count != r.expected {
+			t.Errorf("Expected %d blocks, got: %d", r.expected, count)
+		}
 	}
 }
 
