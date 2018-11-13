@@ -424,8 +424,14 @@ func testHandleNotcolored(t *testing.T) {
 	}
 	db.Create(&a)
 	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+}
 
-	// #3
+func testHandleNotcoloredQ3(t *testing.T) {
+	var (
+		q          model.Question
+		assignment model.Assignment
+		a          model.Answer
+	)
 	q = model.Question{
 		QuestionType:     model.QuestionType("FileUpload"),
 		QuestionSequence: 99,
@@ -433,6 +439,7 @@ func testHandleNotcolored(t *testing.T) {
 		MaxScore:         9999.99,
 		AuthorUserID:     123456789,
 		WasCompared:      true,
+		Source:           model.Source{FileName: "Q3 Compounding1.xlsx"},
 	}
 	db.Create(&q)
 	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
@@ -445,20 +452,35 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
-	for _, fn := range []string{
-		"Answer stud 1 Q3 Compounding1.xlsx",
-		"Answer stud 2 Q3 Compounding1.xlsx",
+	for _, r := range []struct {
+		fn                     string
+		blockCount, emptyCount int
+	}{
+		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 99},
+		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 98},
 	} {
-		f = model.Source{FileName: fn, S3BucketName: "studentanswers"}
-		db.Create(&f)
 		a = model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
+			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
 			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-30 12:42"),
 		}
 		db.Create(&a)
-		model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, a.ID)
+		if err != nil {
+			t.Error(err)
+		}
+		var ws model.Worksheet
+		db.First(&ws, "workbook_id = ?", wb.ID)
+		var count int
+		db.Model(&model.Block{}).Where("worksheet_id = ? AND BlockFormula = ''", ws.ID).Count(&count)
+		if expected := r.emptyCount; count != expected {
+			t.Errorf("Empty block count: %d, expected: %d", count, expected)
+		}
+		db.Model(&model.Block{}).Where("worksheet_id = ? AND BlockFormula != ''", ws.ID).Count(&count)
+		if expected := r.blockCount; count != expected {
+			t.Errorf("Block count: %d, expected: %d", count, expected)
+		}
 	}
 }
 
@@ -512,6 +534,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("ImportFile", testImportFile)
 	t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("HandleNotcolored", testHandleNotcolored)
+	t.Run("HandleNotcoloredQ3", testHandleNotcoloredQ3)
 	t.Run("S3Downloading", testS3Downloading)
 	t.Run("S3Uploading", testS3Uploading)
 	t.Run("Questions", testQuestions)

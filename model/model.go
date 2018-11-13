@@ -730,8 +730,8 @@ func (b Block) String() string {
 		output = "Block"
 	}
 	return fmt.Sprintf(
-		"%s {ID: %d, Range: %q, Color: %q, Formula: %q, Relative Formula: %q, WorksheetID: %d}",
-		output, b.ID, b.Range, b.Color, b.Formula, b.RelativeFormula, b.WorksheetID)
+		"%s {ID: %d, Range: %q [%d, %d, %d, %d], Color: %q, Formula: %q, Relative Formula: %q, WorksheetID: %d}",
+		output, b.ID, b.Range, b.TRow, b.LCol, b.BRow, b.RCol, b.Color, b.Formula, b.RelativeFormula, b.WorksheetID)
 }
 
 func (b *Block) save() {
@@ -771,6 +771,9 @@ func (b *Block) save() {
 				b.Range = b.Address()
 			} else {
 				b.Range = b.InnerAddress()
+				if b.LCol <= b.i.sc && b.i.ec <= b.RCol && b.TRow <= b.i.sr && b.i.er <= b.BRow {
+					b.LCol, b.TRow, b.RCol, b.BRow = b.i.sc, b.i.sr, b.i.ec, b.i.er
+				}
 			}
 			Db.Save(b)
 		}
@@ -1253,10 +1256,9 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 		if value := cellValue(cell); value != "" && formula != "" {
 			b = Block{
 				WorksheetID:     ws.ID,
-				Range:           rb.Range,
 				TRow:            r,
 				LCol:            rb.LCol,
-				BRow:            rb.BRow,
+				BRow:            r,
 				RCol:            rb.RCol,
 				Formula:         formula,
 				RelativeFormula: relFormula,
@@ -1302,7 +1304,6 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 			}
 			b.findInner(sheet)
 			b.save()
-			// Db.Save(&b)
 			continue
 		} else {
 			for c := rb.LCol; c <= rb.RCol; c++ {
