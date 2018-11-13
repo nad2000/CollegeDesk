@@ -458,6 +458,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 	}{
 		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 99},
 		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 98},
+		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 97},
 	} {
 		a = model.Answer{
 			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
