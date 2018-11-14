@@ -18,6 +18,101 @@ var (
 
 	scatterChart = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="c14" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart"><c14:style val="102"/></mc:Choice><mc:Fallback><c:style val="2"/></mc:Fallback></mc:AlternateContent><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1200"/></a:pPr><a:r><a:rPr lang="en-US" sz="1200"/><a:t>TCS vs Infy Returns Scatter Plot</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="1"/></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Returns</c:v></c:tx><c:spPr><a:ln w="28575"><a:noFill/></a:ln></c:spPr><c:xVal><c:numRef><c:f>scatter!$A$2:$A$7</c:f><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="6"/><c:pt idx="0"><c:v>0.02</c:v></c:pt><c:pt idx="1"><c:v>0.05</c:v></c:pt><c:pt idx="2"><c:v>0.03</c:v></c:pt><c:pt idx="3"><c:v>0.09</c:v></c:pt><c:pt idx="4"><c:v>0.05</c:v></c:pt><c:pt idx="5"><c:v>-0.01</c:v></c:pt></c:numCache></c:numRef></c:xVal><c:yVal><c:numRef><c:f>scatter!$B$2:$B$7</c:f><c:numCache><c:formatCode>0%</c:formatCode><c:ptCount val="6"/><c:pt idx="0"><c:v>0.01</c:v></c:pt><c:pt idx="1"><c:v>-0.02</c:v></c:pt><c:pt idx="2"><c:v>-0.05</c:v></c:pt><c:pt idx="3"><c:v>0.1</c:v></c:pt><c:pt idx="4"><c:v>0.08</c:v></c:pt><c:pt idx="5"><c:v>0.03</c:v></c:pt></c:numCache></c:numRef></c:yVal><c:smooth val="0"/></c:ser><c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls><c:axId val="99862784"/><c:axId val="99872768"/></c:scatterChart><c:valAx><c:axId val="99862784"/><c:scaling><c:orientation val="minMax"/><c:max val="0.16000000000000003"/><c:min val="-4.0000000000000008E-2"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US"/><a:t>TCS Returns</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="0%" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="99872768"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/></c:valAx><c:valAx><c:axId val="99872768"/><c:scaling><c:orientation val="minMax"/><c:max val="0.2"/><c:min val="-8.0000000000000016E-2"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:title><c:tx><c:rich><a:bodyPr rot="0" vert="horz"/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US"/><a:t>Infy Returns</a:t></a:r></a:p></c:rich></c:tx><c:layout/><c:overlay val="0"/></c:title><c:numFmt formatCode="0%" sourceLinked="1"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="99862784"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/></c:valAx></c:plotArea><c:legend><c:legendPos val="r"/><c:layout/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart><c:printSettings><c:headerFooter/><c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/><c:pageSetup/></c:printSettings></c:chartSpace>`
+
+	worksheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x14ac" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac">
+<autoFilter ref="A1:M98">
+	<filterColumn colId="0">
+		<filters>
+			<dateGroupItem year="2010" dateTimeGrouping="year"/>
+			<dateGroupItem year="2009" month="1" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="2" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="3" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="4" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="5" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="6" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="7" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="8" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="9" dateTimeGrouping="month"/>
+			<dateGroupItem year="2009" month="10" dateTimeGrouping="month"/>
+		</filters>
+	</filterColumn>
+	<filterColumn colId="1">
+		<filters>
+			<filter val="Bishnu"/>
+			<filter val="Debasmitha"/>
+			<filter val="Devasis"/>
+			<filter val="Rachana"/>
+			<filter val="Shradha"/>
+			<filter val="Shravan"/>
+			<filter val="Shwetha"/>
+			<filter val="Varun"/>
+			<filter val="Vipul"/>
+		</filters>
+	</filterColumn>
+	<filterColumn colId="2">
+		<filters>
+			<filter val="Assam"/>
+			<filter val="Chhatisgarh"/>
+			<filter val="Gujarat"/>
+			<filter val="Karnataka"/>
+			<filter val="Kashmir"/>
+			<filter val="Kerela"/>
+			<filter val="Punjab"/>
+			<filter val="Tamilnadu"/>
+		</filters>
+	</filterColumn>
+	<filterColumn colId="3">
+		<filters>
+			<filter val="CAT"/>
+			<filter val="COMEDK"/>
+			<filter val="CPMT"/>
+			<filter val="GMAT"/>
+			<filter val="GRE"/>
+			<filter val="IIT JEE"/>
+			<filter val="TOEFL"/>
+		</filters>
+	</filterColumn>
+	<filterColumn colId="4">
+		<customFilters and="1">
+			<customFilter operator="greaterThanOrEqual" val="2"/>
+			<customFilter operator="lessThanOrEqual" val="40"/>
+		</customFilters>
+	</filterColumn>
+	<filterColumn colId="5">
+		<customFilters>
+			<customFilter operator="greaterThan" val="100"/>
+		</customFilters>
+	</filterColumn>
+	<filterColumn colId="6">
+		<customFilters>
+			<customFilter operator="lessThan" val="1400"/>
+		</customFilters>
+	</filterColumn>
+	<filterColumn colId="7">
+		<top10 val="100" filterVal="1"/>
+	</filterColumn>
+	<filterColumn colId="8">
+		<top10 top="0" val="100" filterVal="199"/>
+	</filterColumn>
+	<filterColumn colId="9">
+		<dynamicFilter type="aboveAverage" val="50.24742268041237"/>
+	</filterColumn>
+	<filterColumn colId="10">
+		<dynamicFilter type="belowAverage" val="2.5051546391752577"/>
+	</filterColumn>
+	<filterColumn colId="11">
+		<customFilters>
+			<customFilter operator="lessThanOrEqual" val="1000"/>
+		</customFilters>
+	</filterColumn>
+	<filterColumn colId="12">
+		<customFilters>
+			<customFilter operator="greaterThanOrEqual" val="1"/>
+		</customFilters>
+	</filterColumn>
+</autoFilter>
+</worksheet>`
 )
 
 func dumpStruct(t *testing.T, v interface{}) {
@@ -186,4 +281,9 @@ func TestScatterChartUnmarshaling(t *testing.T) {
 	if t.Failed() {
 		dumpStruct(t, chart)
 	}
+}
+
+func TestAutoFilterUnmarshaling(t *testing.T) {
+	sheet := UnmarshalAutoFilter([]byte(worksheet1))
+	dumpStruct(t, sheet)
 }

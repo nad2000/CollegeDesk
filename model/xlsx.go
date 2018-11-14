@@ -1,7 +1,9 @@
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/worksheet.go; zek -e <../assets/sheet.xml >>xlsx/worksheet.go"
 package model
 
 import (
 	"encoding/xml"
+	"extract-blocks/model/xlsx"
 	"strings"
 
 	"github.com/nad2000/excelize"
@@ -239,6 +241,12 @@ func unmarshalRelationships(fileContent []byte) (content xlsxRelationships) {
 
 // UnmarshalChart unmarshals the chart data
 func UnmarshalChart(fileContent []byte) (content XlsxBareChart) {
+	xml.Unmarshal(fileContent, &content)
+	return
+}
+
+// UnmarshalAutoFilter unmarshals a worksheets autofilter
+func UnmarshalAutoFilter(fileContent []byte) (content xlsx.Worksheet) {
 	xml.Unmarshal(fileContent, &content)
 	return
 }

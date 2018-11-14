@@ -1143,10 +1143,14 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
+	Db.LogMode(true)
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&DateGroup{})
+	Db.AutoMigrate(&Filter{})
+	Db.AutoMigrate(&DataSource{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1595,4 +1599,47 @@ type Chart struct {
 	FromCol, FromRow, ToCol, ToRow, ItemCount  int
 	Data, XData, YData, Type                   string
 	XMinValue, XMaxValue, YMaxValue, YMinValue string
+}
+
+// Filter - filters
+type Filter struct {
+	ID int
+	// WorksheetID int
+	Worksheet   Workbook
+	ColID       int    `gorm:"column:ColID"`
+	ColName     string `gorm:"column:ColName;type:varchar(255)"`
+	Operator    string `gorm:"column:Operator;type:varchar(50)"`
+	Value       string `gorm:"column:Value;type:varchar(255)"`
+	DateGroupID int
+	DateGroup   DateGroup
+}
+
+// TableName overrides default table name for the model
+func (Filter) TableName() string {
+	return "Filters"
+}
+
+// DateGroup - data group
+type DateGroup struct {
+	ID                   int
+	Type                 string        `gorm:"column:datetTimeGroupingType;type:varchar(10)"`
+	Year, Month, Day     sql.NullInt64 `gorm:"type:int"`
+	Hour, Minute, Second sql.NullInt64 `gorm:"type:int"`
+}
+
+// TableName overrides default table name for the model
+func (DateGroup) TableName() string {
+	return "DateGroupItems"
+}
+
+type DataSource struct {
+	ID          int
+	WorksheetID int
+	Worksheet   Workbook
+	Range       string `gorm:"column:Sourcerange;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (DataSource) TableName() string {
+	return "DataSources"
 }

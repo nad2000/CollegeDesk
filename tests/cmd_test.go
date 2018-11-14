@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jinzhu/now"
+	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 
 	log "github.com/Sirupsen/logrus"
@@ -1428,5 +1429,13 @@ func TestNewUUID(t *testing.T) {
 	t.Logf("UUID: %q, %q", uuid1, uuid2)
 	if uuid1 == uuid2 {
 		t.Errorf("Expected different values: %q, %q", uuid1, uuid2)
+	}
+}
+
+// TestFilters
+func TestFilters(t *testing.T) {
+	file, _ := excelize.OpenFile("Filter ALL TYPES.xlsx")
+	for _, sheet := range file.WorkBook.Sheets.Sheet {
+		t.Log(sheet)
 	}
 }
