@@ -43,7 +43,7 @@ func TestModel(t *testing.T) {
 		Db.Exec("DELETE FROM WorkBooks")
 		Db.Exec("TRUNCATE TABLE Comments")
 	}
-	Db.LogMode(true)
+	// Db.LogMode(true)
 	source := Source{S3Key: "KEY", FileName: "test.xlsx"}
 	Db.Create(&source)
 	answer := Answer{
@@ -69,7 +69,13 @@ func TestModel(t *testing.T) {
 			},
 		},
 	}
+
 	Db.Create(&block)
+	var wb Workbook
+	Db.Preload("Worksheets").First(&wb, "file_name = ?", "test.xlsx")
+	if wb.Worksheets == nil || len(wb.Worksheets) < 1 {
+		t.Error("Failed to get worksheets:", wb)
+	}
 	for _, r := range []string{"A1", "B2", "C3"} {
 		cell := Cell{
 			Range:     r,
@@ -94,7 +100,7 @@ func TestModel(t *testing.T) {
 	if expected := 1; count != expected {
 		t.Errorf("Expected to select %d worksheets linked to all cells, got: %d", expected, count)
 	}
-	Db.LogMode(false)
+	// Db.LogMode(false)
 }
 
 func TestNormalizeFloatRepr(t *testing.T) {

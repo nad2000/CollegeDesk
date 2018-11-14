@@ -130,7 +130,6 @@ func (q Question) String() string {
 // ImportFile imports form Excel file QuestionExcleData
 func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 	file, err := xlsx.OpenFile(fileName)
-
 	if err != nil {
 		return err
 	}
@@ -236,7 +235,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 		for i, row := range sheet.Rows {
 			for j, cell := range row.Cells {
 
-				if blocks.alreadyFound(i, j) {
+				if blocks.wasFound(i, j) {
 					continue
 				}
 				style := cell.GetStyle()
@@ -398,8 +397,8 @@ type Workbook struct {
 	FileName    string
 	CreatedAt   time.Time
 	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
-	Answer      Answer        `gorm:"ForeignKey:AnswerID"`
-	Worksheets  []Worksheet   `gorm:"ForeignKey:WorkbookID"`
+	Answer      Answer        `gorm:"foreignkey:AnswerID"`
+	Worksheets  []Worksheet   // `gorm:"foreignkey:WorkbookID"`
 	IsReference bool          // the workbook is used for referencing the expected bloks
 }
 
@@ -731,24 +730,29 @@ func (b Block) String() string {
 		output = "Block"
 	}
 	return fmt.Sprintf(
-		"%s {ID: %d, Range: %q, Color: %q, Formula: %q, Relative Formula: %q, WorksheetID: %d}",
-		output, b.ID, b.Range, b.Color, b.Formula, b.RelativeFormula, b.WorksheetID)
+		"%s {ID: %d, Range: %q [%d, %d, %d, %d], Color: %q, Formula: %q, Relative Formula: %q, WorksheetID: %d}",
+		output, b.ID, b.Range, b.TRow, b.LCol, b.BRow, b.RCol, b.Color, b.Formula, b.RelativeFormula, b.WorksheetID)
 }
 
 func (b *Block) save() {
 	if !DryRun {
-		if !b.IsReference && b.Color != "" {
+		if !b.IsReference {
 			for i := b.LCol; i <= b.RCol; i++ {
 				for j := b.TRow; j <= b.BRow; j++ {
-					address := CellAddress(j, i)
-					address += ":" + address
 					if b.isEmpty || i < b.i.sc || i > b.i.ec || j < b.i.sr || j > b.i.er {
+						address := CellAddress(j, i)
+						address += ":" + address
 						empty := Block{
 							WorksheetID: b.WorksheetID,
 							Range:       address,
 							Color:       b.Color,
 							TRow:        j,
 							LCol:        i,
+							BRow:        j,
+							RCol:        i,
+						}
+						if VerboseLevel > 0 {
+							log.Infof("*** Created an empty cell/block: %#v", empty)
 						}
 						r := Db.Where("worksheet_id = ? AND BlockCellRange = ?", b.WorksheetID, address).
 							First(&empty)
@@ -767,6 +771,9 @@ func (b *Block) save() {
 				b.Range = b.Address()
 			} else {
 				b.Range = b.InnerAddress()
+				if b.LCol <= b.i.sc && b.i.ec <= b.RCol && b.TRow <= b.i.sr && b.i.er <= b.BRow {
+					b.LCol, b.TRow, b.RCol, b.BRow = b.i.sc, b.i.sr, b.i.ec, b.i.er
+				}
 			}
 			Db.Save(b)
 		}
@@ -878,6 +885,64 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 		return
 	}
 	// Find the part containing values
+	b.findInner(sheet)
+}
+
+// fildWholeWithin finds whole range with the same "relative" formula
+// withing the specific reference block ignoring the filling color.
+func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block) {
+	b.BRow, b.RCol = b.TRow, b.LCol
+	for r := b.TRow; r <= rb.BRow; r++ {
+
+		row := sheet.Row(r)
+		// Range is discontinued or of a differnt relative formula
+		if len(row.Cells) <= b.RCol ||
+			RelativeFormula(r, b.RCol, row.Cells[b.RCol].Formula()) != b.RelativeFormula {
+			log.Debugf("Reached the edge row of the block at row %d", r)
+			b.BRow = r - 1
+			break
+		} else {
+			b.BRow = r
+		}
+
+		for c := b.RCol + 1; c <= rb.RCol; c++ {
+			// skip columns until the start:
+			cell := sheet.Cell(r, c)
+
+			// Reached the bottom-right corner:
+			if relFormula := RelativeFormula(r, c, cell.Formula()); relFormula == b.RelativeFormula {
+				b.RCol = c
+			} else {
+				log.Debugf("Reached the edge column  of the block at column %d", c)
+				if c > b.RCol {
+					b.RCol = c - 1
+				}
+				break
+			}
+		}
+	}
+	b.Range = b.Address()
+	for r := b.TRow; r <= b.BRow; r++ {
+		for c := b.LCol; c <= b.RCol; c++ {
+			cell := sheet.Cell(r, c)
+			if value := cellValue(cell); value != "" {
+				Db.Create(&Cell{
+					BlockID:     b.ID,
+					WorksheetID: b.WorksheetID,
+					Formula:     cell.Formula(),
+					Value:       value,
+					Range:       CellAddress(r, c),
+				})
+				if Db.Error != nil {
+					log.Error("Error occured: ", Db.Error.Error())
+				}
+			}
+		}
+	}
+}
+
+// findInner finds the part containing values
+func (b *Block) findInner(sheet *xlsx.Sheet) {
 	sr, sc, er, ec := b.TRow, b.LCol, b.BRow, b.RCol
 	for sc <= ec {
 		for r := sr; r <= er; r++ {
@@ -1202,9 +1267,9 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 
 type blockList []Block
 
-// alreadyFound tests if the range containing the cell
+// wasFound tests if the range containing the cell
 // coordinates hhas been already found.
-func (bl *blockList) alreadyFound(r, c int) bool {
+func (bl *blockList) wasFound(r, c int) bool {
 	for _, b := range *bl {
 		if b.IsInside(r, c) {
 			return true
@@ -1213,67 +1278,63 @@ func (bl *blockList) alreadyFound(r, c int) bool {
 	return false
 }
 
+// createEmptyCellBlock - create a block consisting of a single cell
+func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
+	address := CellAddress(r, c)
+	address += ":" + address
+	return Db.Create(&Block{
+		WorksheetID: ws.ID,
+		Range:       address,
+		TRow:        r,
+		LCol:        c,
+		BRow:        r,
+		RCol:        c,
+	}).Error
+}
+
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
 func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 	var (
-		b          Block
-		cell       *xlsx.Cell
-		relFormula string
+		b      Block
+		cell   *xlsx.Cell
+		blocks = blockList{}
 	)
-	r := rb.TRow
-	cell = sheet.Cell(rb.TRow, rb.LCol)
-	for r <= rb.BRow {
-		relFormula = RelativeFormula(r, rb.LCol, cell.Formula())
-		b = Block{
-			WorksheetID:     ws.ID,
-			Formula:         cell.Formula(),
-			RelativeFormula: relFormula,
-			Range:           rb.Range,
-			TRow:            r,
-			LCol:            rb.LCol,
-			BRow:            rb.BRow,
-			RCol:            rb.RCol,
-		}
-		b.Range = b.Address()
-		err = Db.Create(&b).Error
-		if err != nil {
-			return
-		}
-		for {
-			for c := rb.LCol; c <= rb.RCol; c++ {
-				cell := sheet.Cell(r, c)
-				if value := cellValue(cell); value != "" {
-					c := Cell{
-						BlockID:     b.ID,
-						WorksheetID: ws.ID,
-						Formula:     cell.Formula(),
-						Value:       value,
-						Range:       CellAddress(r, c),
-						Row:         r,
-						Col:         c,
-					}
-					if DebugLevel > 1 {
-						log.Debugf("Inserting %#v", c)
-					}
-					Db.Create(&c)
-					if Db.Error != nil {
-						return Db.Error
-					}
-				}
-			}
-			r++
-			if r > rb.BRow {
-				return
+
+	for r := rb.TRow; r <= rb.BRow; r++ {
+		for c := rb.LCol; c <= rb.RCol; c++ {
+
+			if blocks.wasFound(r, c) {
+				continue
 			}
 
-			cell = sheet.Cell(r, rb.LCol)
-			if relFormula != RelativeFormula(r, rb.LCol, cell.Formula()) {
-				if r != b.BRow {
-					b.BRow = r - 1
-					b.Range = b.Address()
-					Db.Save(&b)
+			cell = sheet.Cell(r, c)
+			if formula, value := cell.Formula(), cellValue(cell); value != "" && formula != "" {
+				b = Block{
+					WorksheetID:     ws.ID,
+					TRow:            r,
+					LCol:            c,
+					Formula:         formula,
+					RelativeFormula: RelativeFormula(r, c, formula),
 				}
-				break
+				if !DryRun {
+					Db.Create(&b)
+				}
+
+				if DebugLevel > 1 {
+					log.Debugf("Created %#v", b)
+				}
+
+				b.findWholeWithin(sheet, rb)
+				b.Range = b.Address()
+				Db.Save(b)
+				blocks = append(blocks, b)
+			}
+		}
+	}
+	for r := rb.TRow; r <= rb.BRow; r++ {
+		for c := rb.LCol; c <= rb.RCol; c++ {
+			if !blocks.wasFound(r, c) {
+				ws.createEmptyCellBlock(r, c)
 			}
 		}
 	}
@@ -1406,7 +1467,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			for i, row := range sheet.Rows {
 				for j, cell := range row.Cells {
 
-					if blocks.alreadyFound(i, j) {
+					if blocks.wasFound(i, j) {
 						continue
 					}
 					style := cell.GetStyle()
