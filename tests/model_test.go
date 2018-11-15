@@ -31,7 +31,7 @@ func TestFilters(t *testing.T) {
 	t.Logf("%+v", file.WorkBook.Sheets)
 	for _, sheet := range file.WorkBook.Sheets.Sheet {
 		name := "xl/worksheets/sheet" + sheet.SheetID + ".xml"
-		s := model.UnmarshalAutoFilter(file.XLSX[name])
+		s := model.UnmarshalWorksheet(file.XLSX[name])
 		t.Log(s.AutoFilter)
 	}
 }

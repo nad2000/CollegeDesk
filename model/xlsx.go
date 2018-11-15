@@ -1,4 +1,5 @@
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/worksheet.go; zek -e <../assets/sheet.xml >>xlsx/worksheet.go"
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/shared_strings.go; zek -e <../assets/sharedStrings.xml >>xlsx/shared_strings.go"
 package model
 
 import (
@@ -246,7 +247,7 @@ func UnmarshalChart(fileContent []byte) (content XlsxBareChart) {
 }
 
 // UnmarshalAutoFilter unmarshals a worksheets autofilter
-func UnmarshalAutoFilter(fileContent []byte) (content xlsx.Worksheet) {
+func UnmarshalWorksheet(fileContent []byte) (content xlsx.Worksheet) {
 	xml.Unmarshal(fileContent, &content)
 	return
 }

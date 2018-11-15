@@ -543,6 +543,13 @@ func TestProcessing(t *testing.T) {
 	t.Run("CurruptedFiles", testCorruptedFiles)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
 	t.Run("CWA175", testCWA175)
+	t.Run("ImportWorksheets", testImportWorksheets)
+}
+
+func testImportWorksheets(t *testing.T) {
+	wb := model.Workbook{FileName: "Filter ALL TYPES.xlsx"}
+	db.Create(&wb)
+	wb.ImportWorksheets(wb.FileName)
 }
 
 func testFindBlocksInside(t *testing.T) {

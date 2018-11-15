@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/xml"
 	"extract-blocks/s3"
 	"fmt"
 	"path"
@@ -15,6 +16,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
 
+	x "extract-blocks/model/xlsx"
 	//"github.com/tealeg/xlsx"
 	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
@@ -471,14 +473,27 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 	return
 }
 
-// ImportCharts - import charts form workbook file
-func (wb *Workbook) ImportCharts(fileName string) {
-
+// ImportWorksheets - import charts, filter, ...  form workbook file
+func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
 		log.Errorf("Failed to open file %q", fileName)
 		log.Errorln(err)
 		return
+	}
+
+	var sharedStrings []string
+	content, ok := file.XLSX["xl/sharedStrings.xml"]
+	if ok {
+		var sst x.Sst
+		_ = xml.Unmarshal(content, &sst)
+		if sst.Si != nil && len(sst.Si) > 0 {
+			sharedStrings = make([]string, len(sst.Si))
+			for i, si := range sst.Si {
+				sharedStrings[i] = si.T.Text
+			}
+		}
+
 	}
 
 	for _, sheet := range file.WorkBook.Sheets.Sheet {
@@ -502,92 +517,132 @@ func (wb *Workbook) ImportCharts(fileName string) {
 				log.Debugf("Ceated workbook entry %#v", wb)
 			}
 		}
+		ws.SheetID = sheet.SheetID
+		Db.Save(ws)
+		ws.ImportCharts(file)
+		ws.ImportFilters(file, sharedStrings)
 
-		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
-		sheetRels := unmarshalRelationships(file.XLSX[name])
-		for _, r := range sheetRels.Relationships {
-			if strings.Contains(r.Target, "drawings/drawing") {
-				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
-				drawing := unmarshalDrawing(file.XLSX["xl/drawings/"+filepath.Base(r.Target)])
-				drawingRels := unmarshalRelationships(file.XLSX[name])
-				for _, dr := range drawingRels.Relationships {
-					if strings.Contains(dr.Target, "charts/chart") {
-						chartName := "xl/charts/" + filepath.Base(dr.Target)
-						chart := UnmarshalChart(file.XLSX[chartName])
-						chartTitle := chart.Title.Value()
-						log.Debugf("*** %s: %#v", chartName, chart)
-						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
-						itemCount := chart.ItemCount()
-						chartEntry := Chart{
-							WorksheetID: ws.ID,
-							Title:       chartTitle,
-							XLabel:      chart.XLabel(),
-							YLabel:      chart.YLabel(),
-							FromCol:     drawing.FromCol,
-							FromRow:     drawing.FromRow,
-							ToCol:       drawing.ToCol,
-							ToRow:       drawing.ToRow,
-							Type:        chart.Type(),
-							Data:        chart.PlotArea.Chart.Data,
-							XData:       chart.PlotArea.Chart.XData,
-							YData:       chart.PlotArea.Chart.YData,
-							ItemCount:   itemCount,
-							XMinValue:   chart.XMinValue(),
-							XMaxValue:   chart.XMaxValue(),
-							YMaxValue:   chart.YMaxValue(),
-							YMinValue:   chart.YMinValue(),
-						}
-						Db.Create(&chartEntry)
-						chartID := NewNullInt64(chartEntry.ID)
+	}
+}
 
-						Db.Create(&Block{
+// ImportCharts - import charts for the wroksheet
+func (ws *Worksheet) ImportCharts(file *excelize.File) {
+
+	name := "xl/worksheets/_rels/sheet" + ws.SheetID + ".xml.rels"
+	sheetRels := unmarshalRelationships(file.XLSX[name])
+	for _, r := range sheetRels.Relationships {
+		if strings.Contains(r.Target, "drawings/drawing") {
+			name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
+			drawing := unmarshalDrawing(file.XLSX["xl/drawings/"+filepath.Base(r.Target)])
+			drawingRels := unmarshalRelationships(file.XLSX[name])
+			for _, dr := range drawingRels.Relationships {
+				if strings.Contains(dr.Target, "charts/chart") {
+					chartName := "xl/charts/" + filepath.Base(dr.Target)
+					chart := UnmarshalChart(file.XLSX[chartName])
+					chartTitle := chart.Title.Value()
+					log.Debugf("*** %s: %#v", chartName, chart)
+					log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, ws.Name)
+					itemCount := chart.ItemCount()
+					chartEntry := Chart{
+						WorksheetID: ws.ID,
+						Title:       chartTitle,
+						XLabel:      chart.XLabel(),
+						YLabel:      chart.YLabel(),
+						FromCol:     drawing.FromCol,
+						FromRow:     drawing.FromRow,
+						ToCol:       drawing.ToCol,
+						ToRow:       drawing.ToRow,
+						Type:        chart.Type(),
+						Data:        chart.PlotArea.Chart.Data,
+						XData:       chart.PlotArea.Chart.XData,
+						YData:       chart.PlotArea.Chart.YData,
+						ItemCount:   itemCount,
+						XMinValue:   chart.XMinValue(),
+						XMaxValue:   chart.XMaxValue(),
+						YMaxValue:   chart.YMaxValue(),
+						YMinValue:   chart.YMinValue(),
+					}
+					Db.Create(&chartEntry)
+					chartID := NewNullInt64(chartEntry.ID)
+
+					Db.Create(&Block{
+						WorksheetID: ws.ID,
+						Range:       "ChartRange",
+						Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
+							drawing.FromRow,
+							drawing.FromCol,
+							drawing.ToRow,
+							drawing.ToCol+2),
+						ChartID: chartID,
+					})
+					c := chart.PlotArea.Chart
+					var propCount int
+					properties := []struct{ Name, Value string }{
+						{"ChartType", chart.Type()},
+						{"ChartTitle", chartTitle},
+						{"X-Axis Title", chart.XLabel()},
+						{"Y-Axis Title", chart.YLabel()},
+						{"SourceData", c.Data},
+						{"X-Axis Data", c.XData},
+						{"Y-Axis Data", c.YData},
+						{"ItemCount", strconv.Itoa(itemCount)},
+						{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
+						{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
+						{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
+						{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
+					}
+					for _, p := range properties {
+						block := Block{
 							WorksheetID: ws.ID,
-							Range:       "ChartRange",
-							Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
-								drawing.FromRow,
-								drawing.FromCol,
-								drawing.ToRow,
-								drawing.ToCol+2),
+							Range:       p.Name,
+							Formula:     p.Value,
+							RelativeFormula: CellAddress(
+								drawing.FromRow+propCount, drawing.ToCol+2),
 							ChartID: chartID,
+						}
+						Db.Create(&block)
+						Db.Create(&Cell{
+							Block:       block,
+							WorksheetID: ws.ID,
+							Range:       block.Range,
+							Formula:     block.Formula,
 						})
-						c := chart.PlotArea.Chart
-						var propCount int
-						properties := []struct{ Name, Value string }{
-							{"ChartType", chart.Type()},
-							{"ChartTitle", chartTitle},
-							{"X-Axis Title", chart.XLabel()},
-							{"Y-Axis Title", chart.YLabel()},
-							{"SourceData", c.Data},
-							{"X-Axis Data", c.XData},
-							{"Y-Axis Data", c.YData},
-							{"ItemCount", strconv.Itoa(itemCount)},
-							{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
-							{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
-							{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
-							{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
-						}
-						for _, p := range properties {
-							block := Block{
-								WorksheetID: ws.ID,
-								Range:       p.Name,
-								Formula:     p.Value,
-								RelativeFormula: CellAddress(
-									drawing.FromRow+propCount, drawing.ToCol+2),
-								ChartID: chartID,
-							}
-							Db.Create(&block)
-							Db.Create(&Cell{
-								Block:       block,
-								WorksheetID: ws.ID,
-								Range:       block.Range,
-								Formula:     block.Formula,
-							})
-							propCount++
-						}
+						propCount++
 					}
 				}
 			}
 		}
+	}
+}
+
+// ImportFilters imports all filters
+func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) {
+
+	SharedString := func(id int) (ss string) {
+		if sharedStrings != nil && id < len(sharedStrings) {
+			ss = sharedStrings[id]
+		}
+		return
+	}
+
+	name := "xl/worksheets/sheet" + ws.SheetID + ".xml"
+	sheet := UnmarshalWorksheet(file.XLSX[name])
+	for _, af := range sheet.AutoFilter {
+		autoFilter := AutoFilter{
+			WorksheetID: ws.ID,
+			Range:       af.Ref,
+		}
+		Db.Create(&autoFilter)
+		for _, fc := range af.FilterColumn {
+			colID, _ := strconv.Atoi(fc.ColId)
+			filter := Filter{
+				AutoFilterID: autoFilter.ID,
+				ColID:        colID,
+				ColName:      SharedString(colID),
+			}
+			Db.Create(&filter)
+		}
+
 	}
 }
 
@@ -614,6 +669,7 @@ type Worksheet struct {
 	WorkbookID       int           `gorm:"index"`
 	IsReference      bool
 	OrderNum         int
+	SheetID          string
 }
 
 // TableName overrides default table name for the model
@@ -1148,9 +1204,9 @@ func SetDb() {
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&AutoFilter{})
 	Db.AutoMigrate(&DateGroup{})
 	Db.AutoMigrate(&Filter{})
-	Db.AutoMigrate(&DataSource{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1524,7 +1580,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 
-	wb.ImportCharts(fileName)
+	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
 		Exec(`
 			UPDATE StudentAnswers
@@ -1601,17 +1657,32 @@ type Chart struct {
 	XMinValue, XMaxValue, YMaxValue, YMinValue string
 }
 
+// AutoFilter - autofilter
+type AutoFilter struct {
+	ID          int
+	WorksheetID int
+	Worksheet   Workbook
+	Range       string `gorm:"column:Sourcerange;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (AutoFilter) TableName() string {
+	return "DataSources"
+}
+
 // Filter - filters
 type Filter struct {
-	ID int
-	// WorksheetID int
-	Worksheet   Workbook
-	ColID       int    `gorm:"column:ColID"`
-	ColName     string `gorm:"column:ColName;type:varchar(255)"`
-	Operator    string `gorm:"column:Operator;type:varchar(50)"`
-	Value       string `gorm:"column:Value;type:varchar(255)"`
-	DateGroupID int
-	DateGroup   DateGroup
+	ID           int
+	WorksheetID  int
+	Worksheet    *Workbook
+	AutoFilterID int `gorm:"column:DataSourceID"`
+	AutoFilter   *AutoFilter
+	ColID        int    `gorm:"column:ColID"`
+	ColName      string `gorm:"column:ColName;type:varchar(255)"`
+	Operator     string `gorm:"column:Operator;type:varchar(50)"`
+	Value        string `gorm:"column:Value;type:varchar(255)"`
+	DateGroupID  int
+	DateGroup    DateGroup
 }
 
 // TableName overrides default table name for the model
@@ -1630,16 +1701,4 @@ type DateGroup struct {
 // TableName overrides default table name for the model
 func (DateGroup) TableName() string {
 	return "DateGroupItems"
-}
-
-type DataSource struct {
-	ID          int
-	WorksheetID int
-	Worksheet   Workbook
-	Range       string `gorm:"column:Sourcerange;type:varchar(255)"`
-}
-
-// TableName overrides default table name for the model
-func (DataSource) TableName() string {
-	return "DataSources"
 }
