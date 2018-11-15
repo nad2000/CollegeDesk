@@ -97,8 +97,18 @@ func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
 
 // NewNullInt64 - a helper function that makes nullable from a plain int
-func NewNullInt64(value int) sql.NullInt64 {
-	return sql.NullInt64{Valid: true, Int64: int64(value)}
+func NewNullInt64(value interface{}) sql.NullInt64 {
+	switch value.(type) {
+	case int:
+		return sql.NullInt64{Valid: true, Int64: int64(value.(int))}
+	case string:
+		if value.(string) == "" {
+			return sql.NullInt64{}
+		}
+		v, _ := strconv.Atoi(value.(string))
+		return sql.NullInt64{Valid: true, Int64: int64(v)}
+	}
+	return sql.NullInt64{}
 }
 
 // Question - questions
@@ -635,12 +645,57 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 		Db.Create(&autoFilter)
 		for _, fc := range af.FilterColumn {
 			colID, _ := strconv.Atoi(fc.ColId)
+			colName := SharedString(colID)
 			filter := Filter{
 				AutoFilterID: autoFilter.ID,
 				ColID:        colID,
-				ColName:      SharedString(colID),
+				ColName:      colName,
+			}
+			if fc.Top10.Top != "" || fc.Top10.Val != "" || fc.Top10.FilterVal != "" {
+				filter.Operator = fc.Top10.FilterVal
+				filter.Value = fc.Top10.Val
+			} else if fc.CustomFilters.CustomFilter != nil {
+				for i, cf := range fc.CustomFilters.CustomFilter {
+					var f *Filter
+					if i == 0 {
+						f = &filter
+					} else {
+						f = &Filter{
+							AutoFilterID: autoFilter.ID,
+							ColID:        colID,
+							ColName:      colName,
+						}
+					}
+					switch cf.Operator {
+					case "greaterThan":
+						f.Operator = ">"
+					case "lessThan":
+						f.Operator = "<"
+					default:
+						f.Operator = "="
+					}
+					f.Value = cf.Val
+					if i > 0 {
+						Db.Create(f)
+					}
+				}
+			} else if fc.DynamicFilter.Type != "" || fc.DynamicFilter.Val != "" {
+				filter.Operator = fc.DynamicFilter.Type
+				filter.Value = fc.DynamicFilter.Val
 			}
 			Db.Create(&filter)
+			for _, dgi := range fc.Filters.DateGroupItem {
+				item := DateGroupItem{
+					Grouping: dgi.DateTimeGrouping,
+					Year:     NewNullInt64(dgi.Year),
+					Month:    NewNullInt64(dgi.Month),
+					Day:      NewNullInt64(dgi.Day),
+					Hour:     NewNullInt64(dgi.Hour),
+					Minute:   NewNullInt64(dgi.Minute),
+					Second:   NewNullInt64(dgi.Second),
+				}
+				Db.Create(&item)
+			}
 		}
 
 	}
@@ -1205,8 +1260,8 @@ func SetDb() {
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
 	Db.AutoMigrate(&AutoFilter{})
-	Db.AutoMigrate(&DateGroup{})
 	Db.AutoMigrate(&Filter{})
+	Db.AutoMigrate(&DateGroupItem{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1681,8 +1736,6 @@ type Filter struct {
 	ColName      string `gorm:"column:ColName;type:varchar(255)"`
 	Operator     string `gorm:"column:Operator;type:varchar(50)"`
 	Value        string `gorm:"column:Value;type:varchar(255)"`
-	DateGroupID  int
-	DateGroup    DateGroup
 }
 
 // TableName overrides default table name for the model
@@ -1690,15 +1743,17 @@ func (Filter) TableName() string {
 	return "Filters"
 }
 
-// DateGroup - data group
-type DateGroup struct {
+// DateGroupItem - data group
+type DateGroupItem struct {
 	ID                   int
-	Type                 string        `gorm:"column:datetTimeGroupingType;type:varchar(10)"`
+	Grouping             string        `gorm:"column:datetTimeGroupingType;type:varchar(10)"`
 	Year, Month, Day     sql.NullInt64 `gorm:"type:int"`
 	Hour, Minute, Second sql.NullInt64 `gorm:"type:int"`
+	FilterID             int
+	Filter               *Filter
 }
 
 // TableName overrides default table name for the model
-func (DateGroup) TableName() string {
+func (DateGroupItem) TableName() string {
 	return "DateGroupItems"
 }
