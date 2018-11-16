@@ -1,68 +1,28 @@
 package xlsx; import "encoding/xml"
-// Worksheet was generated 2018-11-15 20:05:32 by rcir178 on rcir178.
+// Worksheet was generated 2018-11-16 18:31:45 by rcir178 on rcir178.
 type Worksheet struct {
 	XMLName   xml.Name `xml:"worksheet"`
 	Text      string   `xml:",chardata"`
 	Xmlns     string   `xml:"xmlns,attr"`
 	R         string   `xml:"r,attr"`
 	Mc        string   `xml:"mc,attr"`
-	Ignorable string   `xml:"Ignorable,attr"`
 	X14ac     string   `xml:"x14ac,attr"`
-	SheetPr   struct {
-		Text       string `xml:",chardata"`
-		FilterMode string `xml:"filterMode,attr"`
-	} `xml:"sheetPr"`
-	Dimension struct {
-		Text string `xml:",chardata"`
-		Ref  string `xml:"ref,attr"`
-	} `xml:"dimension"`
-	SheetViews struct {
-		Text      string `xml:",chardata"`
-		SheetView struct {
-			Text           string `xml:",chardata"`
-			WorkbookViewId string `xml:"workbookViewId,attr"`
-			Selection      struct {
-				Text       string `xml:",chardata"`
-				ActiveCell string `xml:"activeCell,attr"`
-				Sqref      string `xml:"sqref,attr"`
-			} `xml:"selection"`
-		} `xml:"sheetView"`
-	} `xml:"sheetViews"`
-	SheetFormatPr struct {
-		Text             string `xml:",chardata"`
-		DefaultRowHeight string `xml:"defaultRowHeight,attr"`
-		DyDescent        string `xml:"dyDescent,attr"`
-	} `xml:"sheetFormatPr"`
-	Cols struct {
-		Text string `xml:",chardata"`
-		Col  struct {
-			Text        string `xml:",chardata"`
-			Min         string `xml:"min,attr"`
-			Max         string `xml:"max,attr"`
-			Width       string `xml:"width,attr"`
-			BestFit     string `xml:"bestFit,attr"`
-			CustomWidth string `xml:"customWidth,attr"`
-		} `xml:"col"`
-	} `xml:"cols"`
-	SheetData struct {
-		Text string `xml:",chardata"`
-		Row  []struct {
-			Text      string `xml:",chardata"`
-			R         string `xml:"r,attr"`
-			Spans     string `xml:"spans,attr"`
-			DyDescent string `xml:"dyDescent,attr"`
-			Hidden    string `xml:"hidden,attr"`
-			C         []struct {
-				Text string `xml:",chardata"`
-				R    string `xml:"r,attr"`
-				S    string `xml:"s,attr"`
-				T    string `xml:"t,attr"`
-				V    struct {
-					Text string `xml:",chardata"` // 0, 1, 2, 3, 4, 5, 6, 34, ...
-				} `xml:"v"`
-			} `xml:"c"`
-		} `xml:"row"`
-	} `xml:"sheetData"`
+	Ignorable string   `xml:"Ignorable,attr"`
+	SortState []struct {
+		Text          string `xml:",chardata"`
+		Ref           string `xml:"ref,attr"`
+		ColumnSort    string `xml:"columnSort,attr"`
+		SortCondition []struct {
+			Text       string `xml:",chardata"`
+			SortBy     string `xml:"sortBy,attr"`
+			Ref        string `xml:"ref,attr"`
+			DxfId      string `xml:"dxfId,attr"`
+			Descending string `xml:"descending,attr"`
+			CustomList string `xml:"customList,attr"`
+			IconSet    string `xml:"iconSet,attr"`
+			IconId     string `xml:"iconId,attr"`
+		} `xml:"sortCondition"`
+	} `xml:"sortState"`
 	AutoFilter []struct {
 		Text         string `xml:",chardata"`
 		Ref          string `xml:"ref,attr"`

@@ -471,9 +471,7 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 					var cell Cell
 					result := Db.First(&cell, "worksheet_id = ? AND range = ?", ws.ID, c.Ref)
 					if !result.RecordNotFound() {
-						Db.LogMode(true)
 						Db.Model(&cell).UpdateColumn("comment", t.T)
-						Db.LogMode(false)
 					}
 				}
 			}
@@ -483,7 +481,7 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 	return
 }
 
-// ImportWorksheets - import charts, filter, ...  form workbook file
+// ImportWorksheets - import charts, filters, ...  form workbook file
 func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
@@ -530,8 +528,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 		ws.SheetID = sheet.SheetID
 		Db.Save(ws)
 		ws.ImportCharts(file)
-		ws.ImportFilters(file, sharedStrings)
-
+		ws.ImportWorksheetData(file, sharedStrings)
 	}
 }
 
@@ -625,8 +622,8 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 	}
 }
 
-// ImportFilters imports all filters
-func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) {
+// ImportWorksheetData imports all filters
+func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []string) {
 
 	SharedString := func(id int) (ss string) {
 		if sharedStrings != nil && id < len(sharedStrings) {
@@ -637,22 +634,62 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 
 	name := "xl/worksheets/sheet" + ws.SheetID + ".xml"
 	sheet := UnmarshalWorksheet(file.XLSX[name])
+	log.Info(ws.WorkbookFileName, sheet.SortState)
+
+	Db.LogMode(true)
+	// Sorting:
+	for _, ss := range sheet.SortState {
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       ss.Ref,
+		}
+		Db.Create(&ds)
+		var method string
+		switch ss.ColumnSort {
+		case "1":
+			method = "Horizontal"
+		default:
+			method = "Vertical"
+		}
+		for _, sc := range ss.SortCondition {
+			var st string
+			if sc.Descending == "1" {
+				st = "descending"
+			} else {
+				st = "assending"
+			}
+			sorting := Sorting{
+				DataSourceID: ds.ID,
+				Method:       method,
+				Reference:    sc.Ref,
+				Type:         st,
+				CustomList:   sc.CustomList,
+				IconSet:      sc.IconSet,
+				IconID:       sc.IconId,
+			}
+			Db.Create(&sorting)
+		}
+	}
+	Db.LogMode(false)
+
+	// Filters:
 	for _, af := range sheet.AutoFilter {
-		autoFilter := AutoFilter{
+		ds := DataSource{
 			WorksheetID: ws.ID,
 			Range:       af.Ref,
 		}
-		Db.Create(&autoFilter)
+		Db.Create(&ds)
 		Db.Create(&Block{
 			WorksheetID: ws.ID,
 			Range:       "FilterSource",
 			Formula:     af.Ref,
 		})
+
 		for _, fc := range af.FilterColumn {
 			colID, _ := strconv.Atoi(fc.ColId)
 			colName := SharedString(colID)
 			filter := Filter{
-				AutoFilterID: autoFilter.ID,
+				DataSourceID: ds.ID,
 				ColID:        colID,
 				ColName:      colName,
 			}
@@ -666,7 +703,7 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 						f = &filter
 					} else {
 						f = &Filter{
-							AutoFilterID: autoFilter.ID,
+							DataSourceID: ds.ID,
 							ColID:        colID,
 							ColName:      colName,
 						}
@@ -1298,14 +1335,14 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
-	Db.LogMode(true)
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
-	Db.AutoMigrate(&AutoFilter{})
+	Db.AutoMigrate(&DataSource{})
 	Db.AutoMigrate(&Filter{})
 	Db.AutoMigrate(&DateGroupItem{})
+	Db.AutoMigrate(&Sorting{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1756,8 +1793,8 @@ type Chart struct {
 	XMinValue, XMaxValue, YMaxValue, YMinValue string
 }
 
-// AutoFilter - autofilter
-type AutoFilter struct {
+// DataSource - autofilter
+type DataSource struct {
 	ID          int
 	WorksheetID int
 	Worksheet   Workbook
@@ -1765,7 +1802,7 @@ type AutoFilter struct {
 }
 
 // TableName overrides default table name for the model
-func (AutoFilter) TableName() string {
+func (DataSource) TableName() string {
 	return "DataSources"
 }
 
@@ -1774,8 +1811,8 @@ type Filter struct {
 	ID           int
 	WorksheetID  int
 	Worksheet    *Workbook
-	AutoFilterID int `gorm:"column:DataSourceID"`
-	AutoFilter   *AutoFilter
+	DataSourceID int `gorm:"column:DataSourceID"`
+	DataSource   *DataSource
 	ColID        int    `gorm:"column:ColID"`
 	ColName      string `gorm:"column:ColName;type:varchar(255)"`
 	Operator     string `gorm:"column:Operator;type:varchar(50)"`
@@ -1800,4 +1837,22 @@ type DateGroupItem struct {
 // TableName overrides default table name for the model
 func (DateGroupItem) TableName() string {
 	return "DateGroupItems"
+}
+
+// Sorting - column sorting
+type Sorting struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceID"`
+	Method       string `gorm:"column:SortMethod;type:varchar(10);not null"`
+	Reference    string `gorm:"column:SortingReference;type:varchar(255);not null"`
+	Type         string `gorm:"column:SortType;type:varchar(50);not null"`
+	SortBy       string `gorm:"column:sortBy;type:varchar(50);not null"`
+	CustomList   string `gorm:"column:customList;type:varchar(255)"`
+	IconSet      string `gorm:"column:iconSet;type:varchar(255)"`
+	IconID       string `gorm:"column:iconId;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (Sorting) TableName() string {
+	return "Sortings"
 }

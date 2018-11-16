@@ -547,9 +547,15 @@ func TestProcessing(t *testing.T) {
 }
 
 func testImportWorksheets(t *testing.T) {
-	wb := model.Workbook{FileName: "Filter ALL TYPES.xlsx"}
-	db.Create(&wb)
-	wb.ImportWorksheets(wb.FileName)
+	for _, fn := range []string{
+		"Filter ALL TYPES.xlsx",
+		"Sorting ALL TYPES.xlsx",
+		"Sorting Horizontal.xlsx",
+	} {
+		wb := model.Workbook{FileName: fn}
+		db.Create(&wb)
+		wb.ImportWorksheets(fn)
+	}
 }
 
 func testFindBlocksInside(t *testing.T) {
