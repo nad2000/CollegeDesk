@@ -7,6 +7,7 @@ import (
 	"extract-blocks/model/xlsx"
 	"strings"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/nad2000/excelize"
 )
 
@@ -246,9 +247,13 @@ func UnmarshalChart(fileContent []byte) (content XlsxBareChart) {
 	return
 }
 
-// UnmarshalAutoFilter unmarshals a worksheets autofilter
+// UnmarshalWorksheet unmarshals a worksheets autofilter
 func UnmarshalWorksheet(fileContent []byte) (content xlsx.Worksheet) {
-	xml.Unmarshal(fileContent, &content)
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
 	return
 }
 

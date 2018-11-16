@@ -548,9 +548,9 @@ func TestProcessing(t *testing.T) {
 
 func testImportWorksheets(t *testing.T) {
 	for _, fn := range []string{
-		"Filter ALL TYPES.xlsx",
 		"Sorting ALL TYPES.xlsx",
 		"Sorting Horizontal.xlsx",
+		"Filter ALL TYPES.xlsx",
 	} {
 		wb := model.Workbook{FileName: fn}
 		db.Create(&wb)

@@ -504,16 +504,16 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 
 	}
 
-	for _, sheet := range file.WorkBook.Sheets.Sheet {
+	for sheetIdx, sheetName := range file.GetSheetMap() {
 		var ws Worksheet
 		result := Db.First(&ws, Worksheet{
-			Name:       sheet.Name,
+			Name:       sheetName,
 			AnswerID:   wb.AnswerID,
 			WorkbookID: wb.ID,
 		})
 		if result.RecordNotFound() && !DryRun {
 			ws = Worksheet{
-				Name:             sheet.Name,
+				Name:             sheetName,
 				WorkbookFileName: filepath.Base(fileName),
 				AnswerID:         wb.AnswerID,
 				WorkbookID:       wb.ID,
@@ -525,7 +525,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 				log.Debugf("Ceated workbook entry %#v", wb)
 			}
 		}
-		ws.SheetID = sheet.SheetID
+		ws.Idx = sheetIdx
 		Db.Save(ws)
 		ws.ImportCharts(file)
 		ws.ImportWorksheetData(file, sharedStrings)
@@ -535,7 +535,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 // ImportCharts - import charts for the wroksheet
 func (ws *Worksheet) ImportCharts(file *excelize.File) {
 
-	name := "xl/worksheets/_rels/sheet" + ws.SheetID + ".xml.rels"
+	name := "xl/worksheets/_rels/sheet" + strconv.Itoa(ws.Idx) + ".xml.rels"
 	sheetRels := unmarshalRelationships(file.XLSX[name])
 	for _, r := range sheetRels.Relationships {
 		if strings.Contains(r.Target, "drawings/drawing") {
@@ -547,7 +547,6 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 					chartName := "xl/charts/" + filepath.Base(dr.Target)
 					chart := UnmarshalChart(file.XLSX[chartName])
 					chartTitle := chart.Title.Value()
-					log.Debugf("*** %s: %#v", chartName, chart)
 					log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, ws.Name)
 					itemCount := chart.ItemCount()
 					chartEntry := Chart{
@@ -632,9 +631,8 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []st
 		return
 	}
 
-	name := "xl/worksheets/sheet" + ws.SheetID + ".xml"
+	name := "xl/worksheets/sheet" + strconv.Itoa(ws.Idx) + ".xml"
 	sheet := UnmarshalWorksheet(file.XLSX[name])
-	log.Info(ws.WorkbookFileName, sheet.SortState)
 
 	Db.LogMode(true)
 	// Sorting:
@@ -644,6 +642,12 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []st
 			Range:       ss.Ref,
 		}
 		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "SortSource",
+			Formula:     ss.Ref,
+		})
+
 		var method string
 		switch ss.ColumnSort {
 		case "1":
@@ -668,6 +672,19 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []st
 				IconID:       sc.IconId,
 			}
 			Db.Create(&sorting)
+			Db.Create(&Block{
+				WorksheetID: ws.ID,
+				Range:       sc.Ref,
+				Formula: strings.Join([]string{
+					sorting.Method,
+					sorting.Type,
+					sorting.SortBy,
+					sorting.CustomList,
+					sorting.IconSet,
+					sorting.IconID,
+				}, ","),
+				SortingID: NewNullInt64(sorting.ID),
+			})
 		}
 	}
 	Db.LogMode(false)
@@ -804,7 +821,7 @@ type Worksheet struct {
 	WorkbookID       int           `gorm:"index"`
 	IsReference      bool
 	OrderNum         int
-	SheetID          string
+	Idx              int
 }
 
 // TableName overrides default table name for the model
@@ -905,6 +922,7 @@ type Block struct {
 	BRow            int                          `gorm:"index"` // Bottom row
 	RCol            int                          `gorm:"index"` // Right column
 	FilterID        sql.NullInt64                `gorm:"type:int"`
+	SortingID       sql.NullInt64                `gorm:"column:sort_id;type:int"`
 	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
 	isEmpty         bool                         `gorm:"-"` // All block cells are empty
 }

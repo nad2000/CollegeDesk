@@ -7,29 +7,17 @@
     <sortCondition descending="1" sortBy="fontColor" ref="G2:G98" dxfId="0"/>
     <sortCondition ref="H2:H98" customList="Sun,Mon,Tue,Wed,Thu,Fri,Sat"/>
     <sortCondition ref="A2:A98" sortBy="ico" iconSet="icon,set" iconId="123"/>
-    <sortCondition ref="B2:B98"/>
-    <sortCondition descending="1" ref="C2:C98"/>
     <sortCondition ref="E2:E98"/>
     <sortCondition descending="1" ref="F2:F98"/>
   </sortState>
   <sortState columnSort="1" ref="A1:K7">
     <sortCondition descending="1" ref="A1:K1"/>
     <sortCondition ref="A2:K2"/>
-    <sortCondition descending="1" ref="A3:K3"/>
-    <sortCondition ref="A4:K4"/>
   </sortState>
   <autoFilter ref="A100:M199">
     <filterColumn colId="0">
       <filters>
         <dateGroupItem year="2010" dateTimeGrouping="year"/>
-        <dateGroupItem year="2009" month="1" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="2" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="3" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="4" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="5" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="6" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="7" dateTimeGrouping="month"/>
-        <dateGroupItem year="2009" month="8" dateTimeGrouping="month"/>
         <dateGroupItem year="2009" month="9" dateTimeGrouping="month"/>
         <dateGroupItem year="2009" month="10" dateTimeGrouping="month" day="11" hour="23" minute="20" second="second"/>
       </filters>

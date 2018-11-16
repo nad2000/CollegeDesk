@@ -1,5 +1,8 @@
-package xlsx; import "encoding/xml"
-// Worksheet was generated 2018-11-16 18:31:45 by rcir178 on rcir178.
+package xlsx
+
+import "encoding/xml"
+
+// Worksheet was generated 2018-11-16 23:52:34 by rcir178 on rcir178.
 type Worksheet struct {
 	XMLName   xml.Name `xml:"worksheet"`
 	Text      string   `xml:",chardata"`
@@ -9,11 +12,9 @@ type Worksheet struct {
 	X14ac     string   `xml:"x14ac,attr"`
 	Ignorable string   `xml:"Ignorable,attr"`
 	SortState []struct {
-		Text          string `xml:",chardata"`
 		Ref           string `xml:"ref,attr"`
 		ColumnSort    string `xml:"columnSort,attr"`
 		SortCondition []struct {
-			Text       string `xml:",chardata"`
 			SortBy     string `xml:"sortBy,attr"`
 			Ref        string `xml:"ref,attr"`
 			DxfId      string `xml:"dxfId,attr"`
@@ -81,5 +82,4 @@ type Worksheet struct {
 		Header string `xml:"header,attr"`
 		Footer string `xml:"footer,attr"`
 	} `xml:"pageMargins"`
-} 
-
+}
