@@ -96,7 +96,7 @@ func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
 
-// NewNullInt64 - a helper function that makes nullable from a plain int
+// NewNullInt64 - a helper function that makes nullable from a plain int or a string
 func NewNullInt64(value interface{}) sql.NullInt64 {
 	switch value.(type) {
 	case int:
@@ -643,6 +643,11 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 			Range:       af.Ref,
 		}
 		Db.Create(&autoFilter)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "FilterSource",
+			Formula:     af.Ref,
+		})
 		for _, fc := range af.FilterColumn {
 			colID, _ := strconv.Atoi(fc.ColId)
 			colName := SharedString(colID)
@@ -677,15 +682,38 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 					f.Value = cf.Val
 					if i > 0 {
 						Db.Create(f)
+						Db.Create(&Block{
+							WorksheetID:     ws.ID,
+							Range:           colName,
+							Formula:         f.Operator,
+							RelativeFormula: f.Value,
+							FilterID:        NewNullInt64(f.ID),
+						})
 					}
 				}
 			} else if fc.DynamicFilter.Type != "" || fc.DynamicFilter.Val != "" {
-				filter.Operator = fc.DynamicFilter.Type
+
+				switch fc.DynamicFilter.Type {
+				case "aboveAverage":
+					filter.Operator = ">"
+				case "belowAverage":
+					filter.Operator = "<"
+				default:
+					filter.Operator = fc.DynamicFilter.Type
+				}
 				filter.Value = fc.DynamicFilter.Val
 			}
 			Db.Create(&filter)
+			Db.Create(&Block{
+				WorksheetID:     ws.ID,
+				Range:           colName,
+				Formula:         filter.Operator,
+				RelativeFormula: filter.Value,
+				FilterID:        NewNullInt64(filter.ID),
+			})
 			for _, dgi := range fc.Filters.DateGroupItem {
 				item := DateGroupItem{
+					FilterID: filter.ID,
 					Grouping: dgi.DateTimeGrouping,
 					Year:     NewNullInt64(dgi.Year),
 					Month:    NewNullInt64(dgi.Month),
@@ -695,6 +723,21 @@ func (ws *Worksheet) ImportFilters(file *excelize.File, sharedStrings []string) 
 					Second:   NewNullInt64(dgi.Second),
 				}
 				Db.Create(&item)
+				var date string
+				switch item.Grouping {
+				case "month":
+					date = dgi.Year + "/" + dgi.Month
+				case "day":
+					date = dgi.Year + "/" + dgi.Month + "/" + dgi.Day
+				}
+				Db.Create(&Block{
+					WorksheetID:     ws.ID,
+					Range:           colName,
+					Formula:         item.Grouping,
+					RelativeFormula: date,
+					FilterID:        NewNullInt64(filter.ID),
+				})
+
 			}
 		}
 
@@ -824,8 +867,9 @@ type Block struct {
 	LCol            int                          `gorm:"index"` // Left column
 	BRow            int                          `gorm:"index"` // Bottom row
 	RCol            int                          `gorm:"index"` // Right column
-	i               struct{ sr, sc, er, ec int } `gorm:"-"`     // "Inner" block - the block containing values
-	isEmpty         bool                         `gorm:"-"`     // All block cells are empty
+	FilterID        sql.NullInt64                `gorm:"type:int"`
+	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
+	isEmpty         bool                         `gorm:"-"` // All block cells are empty
 }
 
 // TableName overrides default table name for the model
