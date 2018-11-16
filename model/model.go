@@ -481,16 +481,12 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 	return
 }
 
-// ImportWorksheets - import charts, filters, ...  form workbook file
-func (wb *Workbook) ImportWorksheets(fileName string) {
-	file, err := excelize.OpenFile(fileName)
-	if err != nil {
-		log.Errorf("Failed to open file %q", fileName)
-		log.Errorln(err)
-		return
-	}
+// SharedStrings - workbook shared strings
+type SharedStrings []string
 
-	var sharedStrings []string
+// GetSharedStrings - loads and stores the shared string into a string slice
+func GetSharedStrings(file *excelize.File) SharedStrings {
+	var sharedStrings SharedStrings
 	content, ok := file.XLSX["xl/sharedStrings.xml"]
 	if ok {
 		var sst x.Sst
@@ -502,6 +498,25 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 			}
 		}
 
+	}
+	return sharedStrings
+}
+
+// Get returns a shared string
+func (sharedStrings SharedStrings) Get(id int) (ss string) {
+	if sharedStrings != nil && id < len(sharedStrings) {
+		ss = sharedStrings[id]
+	}
+	return
+}
+
+// ImportWorksheets - import charts, filters, ...  form workbook file
+func (wb *Workbook) ImportWorksheets(fileName string) {
+	file, err := excelize.OpenFile(fileName)
+	if err != nil {
+		log.Errorf("Failed to open file %q", fileName)
+		log.Errorln(err)
+		return
 	}
 
 	for sheetIdx, sheetName := range file.GetSheetMap() {
@@ -527,6 +542,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 		}
 		ws.Idx = sheetIdx
 		Db.Save(ws)
+		sharedStrings := GetSharedStrings(file)
 		ws.ImportCharts(file)
 		ws.ImportWorksheetData(file, sharedStrings)
 	}
@@ -622,14 +638,7 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 }
 
 // ImportWorksheetData imports all filters
-func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []string) {
-
-	SharedString := func(id int) (ss string) {
-		if sharedStrings != nil && id < len(sharedStrings) {
-			ss = sharedStrings[id]
-		}
-		return
-	}
+func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings SharedStrings) {
 
 	name := "xl/worksheets/sheet" + strconv.Itoa(ws.Idx) + ".xml"
 	sheet := UnmarshalWorksheet(file.XLSX[name])
@@ -704,7 +713,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings []st
 
 		for _, fc := range af.FilterColumn {
 			colID, _ := strconv.Atoi(fc.ColId)
-			colName := SharedString(colID)
+			colName := sharedStrings.Get(colID)
 			filter := Filter{
 				DataSourceID: ds.ID,
 				ColID:        colID,

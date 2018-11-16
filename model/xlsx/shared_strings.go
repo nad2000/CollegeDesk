@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// Sst was generated 2018-11-16 23:52:34 by rcir178 on rcir178.
+// Sst was generated 2018-11-17 00:55:36 by rcir178 on rcir178.
 type Sst struct {
 	XMLName     xml.Name `xml:"sst"`
 	Text        string   `xml:",chardata"`
