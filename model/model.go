@@ -715,6 +715,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			colID, _ := strconv.Atoi(fc.ColId)
 			colName := sharedStrings.Get(colID)
 			filter := Filter{
+				WorksheetID:  ws.ID,
 				DataSourceID: ds.ID,
 				ColID:        colID,
 				ColName:      colName,
@@ -729,6 +730,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 						f = &filter
 					} else {
 						f = &Filter{
+							WorksheetID:  ws.ID,
 							DataSourceID: ds.ID,
 							ColID:        colID,
 							ColName:      colName,
