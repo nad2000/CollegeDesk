@@ -551,6 +551,7 @@ func testImportWorksheets(t *testing.T) {
 		"Sorting ALL TYPES.xlsx",
 		"Sorting Horizontal.xlsx",
 		"Filter ALL TYPES.xlsx",
+		"Pivot 2.xlsx",
 	} {
 		wb := model.Workbook{FileName: fn}
 		db.Create(&wb)

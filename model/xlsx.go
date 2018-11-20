@@ -259,6 +259,26 @@ func UnmarshalWorksheet(fileContent []byte) (content xlsx.Worksheet) {
 	return
 }
 
+// UnmarshalPivotCacheDefinition unmarshals a worksheets autofilter
+func UnmarshalPivotCacheDefinition(fileContent []byte) (content xlsx.PivotCacheDefinition) {
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
+	return
+}
+
+// UnmarshalPivotTableDefinition  unmarshals a worksheets autofilter
+func UnmarshalPivotTableDefinition(fileContent []byte) (content xlsx.PivotTableDefinition) {
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
+	return
+}
+
 func unmarshalDrawing(fileContent []byte) (content xlsxBareDrawing) {
 	// log.Info("----", fileContent)
 	xml.Unmarshal(fileContent, &content)

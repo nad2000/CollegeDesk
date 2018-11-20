@@ -807,6 +807,24 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		}
 
 	}
+	// Pivot Tables:
+
+	if content, ok := file.XLSX["xl/pivotCache/pivotCacheDefinition"+strconv.Itoa(ws.Idx)+".xml"]; ok {
+		pcd := UnmarshalPivotCacheDefinition(content)
+		ptd := UnmarshalPivotTableDefinition(
+			file.XLSX["xl/pivotTables/pivotTable"+strconv.Itoa(ws.Idx)+".xml"])
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       pcd.CacheSource.WorksheetSource.Ref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "????PivotSource????",
+			Formula:     ds.Range,
+		})
+		log.Info(ptd.XMLName)
+	}
 }
 
 // normalizeFloatRepr - if val is float representation round it to 3 digits after the '.'
@@ -1356,7 +1374,7 @@ func SetDb() {
 	// Migrate the schema
 	isMySQL := strings.HasPrefix(Db.Dialect().GetName(), "mysql")
 	log.Debug("Add to automigrate...")
-	worksheetsExists := Db.HasTable("WorkSheets")
+
 	Db.AutoMigrate(&Source{})
 	if isMySQL {
 		// Modify struct tag for MySQL
@@ -1372,6 +1390,7 @@ func SetDb() {
 	Db.AutoMigrate(&Filter{})
 	Db.AutoMigrate(&DateGroupItem{})
 	Db.AutoMigrate(&Sorting{})
+	Db.AutoMigrate(&PivotTable{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1380,7 +1399,7 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
-	if isMySQL && !worksheetsExists {
+	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
 		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
@@ -1394,6 +1413,11 @@ func SetDb() {
 		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to QuestionExcelData...")
 		Db.Model(&QuestionExcelData{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		Db.Model(&DataSource{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Filter{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
+		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -1884,4 +1908,19 @@ type Sorting struct {
 // TableName overrides default table name for the model
 func (Sorting) TableName() string {
 	return "Sortings"
+}
+
+// PivotTable - pivot table
+type PivotTable struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceId"`
+	Type         string `gorm:"column:Type;type:varchar(50)"`
+	Label        string `gorm:"column:Label;type:varchar(255)"`
+	DisplayName  string `gorm:"column:DisplayName;type:varchar(255)"`
+	Function     string `gorm:"column:Function;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (PivotTable) TableName() string {
+	return "PivotTables"
 }
