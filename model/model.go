@@ -503,8 +503,15 @@ func GetSharedStrings(file *excelize.File) SharedStrings {
 }
 
 // Get returns a shared string
-func (sharedStrings SharedStrings) Get(id int) (ss string) {
-	if sharedStrings != nil && id < len(sharedStrings) {
+func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
+	var id int
+	switch idx.(type) {
+	case string:
+		id, _ = strconv.Atoi(idx.(string))
+	case int:
+		id = idx.(int)
+	}
+	if sharedStrings != nil && id < len(sharedStrings) && id >= 0 {
 		ss = sharedStrings[id]
 	}
 	return
@@ -721,7 +728,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				ColName:      colName,
 			}
 			if fc.Top10.Top != "" || fc.Top10.Val != "" || fc.Top10.FilterVal != "" {
-				filter.Operator = fc.Top10.FilterVal
+				filter.Operator = "top10"
 				filter.Value = fc.Top10.Val
 			} else if fc.CustomFilters.CustomFilter != nil {
 				for i, cf := range fc.CustomFilters.CustomFilter {
@@ -808,7 +815,6 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 
 	}
 	// Pivot Tables:
-
 	if content, ok := file.XLSX["xl/pivotCache/pivotCacheDefinition"+strconv.Itoa(ws.Idx)+".xml"]; ok {
 		pcd := UnmarshalPivotCacheDefinition(content)
 		ptd := UnmarshalPivotTableDefinition(
@@ -824,6 +830,34 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Formula:     ds.Range,
 		})
 		log.Info(ptd.XMLName)
+		if ptd.PivotFields.Count >= "0" {
+			var pfIdx, rfIdx, cfIdx = 0, 0, 0
+			for _, pf := range ptd.PivotFields.PivotField {
+				var label, fieldType string
+
+				switch pf.Axis {
+				case "axisPage":
+					fieldType = "Filter"
+					label = sharedStrings.Get(ptd.PageFields.PageField[pfIdx].Fld)
+					pfIdx++
+				case "axisRow":
+					fieldType = "Row"
+					label = sharedStrings.Get(ptd.RowFields.Field[rfIdx].X)
+					rfIdx++
+				case "axisCol":
+					fieldType = "Column"
+					label = sharedStrings.Get(ptd.ColFields.Field[cfIdx].X)
+					cfIdx++
+				}
+
+				rec := PivotTable{
+					DataSourceID: ds.ID,
+					Type:         fieldType,
+					Label:        label,
+				}
+				Db.Create(&rec)
+			}
+		}
 	}
 }
 
