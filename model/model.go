@@ -809,7 +809,6 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					RelativeFormula: date,
 					FilterID:        NewNullInt64(filter.ID),
 				})
-
 			}
 		}
 
@@ -833,19 +832,19 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		if ptd.PivotFields.Count >= "0" {
 			var pfIdx, rfIdx, cfIdx = 0, 0, 0
 			for _, pf := range ptd.PivotFields.PivotField {
-				var label, fieldType string
+				var label, fieldType, blockCellRange string
 
 				switch pf.Axis {
 				case "axisPage":
-					fieldType = "Filter"
+					fieldType, blockCellRange = "Filter", "PageField"
 					label = sharedStrings.Get(ptd.PageFields.PageField[pfIdx].Fld)
 					pfIdx++
 				case "axisRow":
-					fieldType = "Row"
+					fieldType, blockCellRange = "Row", "RowField"
 					label = sharedStrings.Get(ptd.RowFields.Field[rfIdx].X)
 					rfIdx++
 				case "axisCol":
-					fieldType = "Column"
+					fieldType, blockCellRange = "Column", "ColField"
 					label = sharedStrings.Get(ptd.ColFields.Field[cfIdx].X)
 					cfIdx++
 				}
@@ -856,6 +855,37 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					Label:        label,
 				}
 				Db.Create(&rec)
+				Db.Create(&Block{
+					WorksheetID: ws.ID,
+					Range:       blockCellRange,
+					Formula:     label,
+					PivotID:     NewNullInt64(rec.ID),
+				})
+			}
+		}
+		if ptd.DataFields.Count >= "0" {
+			for _, df := range ptd.DataFields.DataField {
+				label := sharedStrings.Get(df.Fld)
+				var function string
+				if df.Subtotal != "" {
+					function = df.Subtotal
+				} else {
+					function = "sum"
+				}
+				rec := PivotTable{
+					DataSourceID: ds.ID,
+					Type:         "Value",
+					Label:        label,
+					Function:     function,
+					DisplayName:  df.Name,
+				}
+				Db.Create(&rec)
+				Db.Create(&Block{
+					WorksheetID: ws.ID,
+					Range:       "DataField",
+					Formula:     strings.Join([]string{label, df.Name, function}, ","),
+					PivotID:     NewNullInt64(rec.ID),
+				})
 			}
 		}
 	}
@@ -986,6 +1016,7 @@ type Block struct {
 	RCol            int                          `gorm:"index"` // Right column
 	FilterID        sql.NullInt64                `gorm:"type:int"`
 	SortingID       sql.NullInt64                `gorm:"column:sort_id;type:int"`
+	PivotID         sql.NullInt64                `gorm:"type:int"`
 	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
 	isEmpty         bool                         `gorm:"-"` // All block cells are empty
 }
@@ -1442,6 +1473,9 @@ func SetDb() {
 		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
+		Db.Model(&Block{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("sort_id", "Sortings(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("pivot_id", "PivotTables(id)", "CASCADE", "CASCADE")
 		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "WorkBooks(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Questions...")
 		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
