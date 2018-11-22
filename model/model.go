@@ -841,60 +841,63 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		})
 		log.Info(ptd.XMLName)
 		if ptd.PivotFields.Count >= "0" {
-			var pfIdx, rfIdx, cfIdx = 0, 0, 0
+			var pfIdx, rfIdx, cfIdx, dfIdx = 0, 0, 0, 0
 			for _, pf := range ptd.PivotFields.PivotField {
 				var label, fieldType, blockCellRange string
+				var rec PivotTable
 
-				switch pf.Axis {
-				case "axisPage":
-					fieldType, blockCellRange = "Filter", "PageField"
-					label = sharedStrings.Get(ptd.PageFields.PageField[pfIdx].Fld)
-					pfIdx++
-				case "axisRow":
-					fieldType, blockCellRange = "Row", "RowField"
-					label = sharedStrings.Get(ptd.RowFields.Field[rfIdx].X)
-					rfIdx++
-				case "axisCol":
-					fieldType, blockCellRange = "Column", "ColField"
-					label = sharedStrings.Get(ptd.ColFields.Field[cfIdx].X)
-					cfIdx++
+				if pf.DataField == "" {
+					switch pf.Axis {
+					case "axisPage":
+						fieldType, blockCellRange = "Filter", "PageField"
+						label = sharedStrings.Get(ptd.PageFields.PageField[pfIdx].Fld)
+						pfIdx++
+					case "axisRow":
+						fieldType, blockCellRange = "Row", "RowField"
+						label = sharedStrings.Get(ptd.RowFields.Field[rfIdx].X)
+						rfIdx++
+					case "axisCol":
+						fieldType, blockCellRange = "Column", "ColField"
+						label = sharedStrings.Get(ptd.ColFields.Field[cfIdx].X)
+						cfIdx++
+					default:
+						log.Warnf("Unhandled pivot field: %#v", pf)
+						continue
+					}
+
+					rec = PivotTable{
+						DataSourceID: ds.ID,
+						Type:         fieldType,
+						Label:        label,
+					}
+
+				} else {
+					// DataField
+					var function string
+					df := ptd.DataFields.DataField[dfIdx]
+					fieldType, blockCellRange = "Value", "DataField"
+					label = sharedStrings.Get(df.Fld)
+					if df.Subtotal != "" {
+						function = df.Subtotal
+					} else {
+						function = "sum"
+					}
+					dfIdx++
+
+					rec = PivotTable{
+						DataSourceID: ds.ID,
+						Type:         "Value",
+						Label:        label,
+						Function:     function,
+						DisplayName:  df.Name,
+					}
 				}
 
-				rec := PivotTable{
-					DataSourceID: ds.ID,
-					Type:         fieldType,
-					Label:        label,
-				}
 				Db.Create(&rec)
 				Db.Create(&Block{
 					WorksheetID: ws.ID,
 					Range:       blockCellRange,
 					Formula:     label,
-					PivotID:     NewNullInt64(rec.ID),
-				})
-			}
-		}
-		if ptd.DataFields.Count >= "0" {
-			for _, df := range ptd.DataFields.DataField {
-				label := sharedStrings.Get(df.Fld)
-				var function string
-				if df.Subtotal != "" {
-					function = df.Subtotal
-				} else {
-					function = "sum"
-				}
-				rec := PivotTable{
-					DataSourceID: ds.ID,
-					Type:         "Value",
-					Label:        label,
-					Function:     function,
-					DisplayName:  df.Name,
-				}
-				Db.Create(&rec)
-				Db.Create(&Block{
-					WorksheetID: ws.ID,
-					Range:       "DataField",
-					Formula:     joinStr(",", label, df.Name, function),
 					PivotID:     NewNullInt64(rec.ID),
 				})
 			}
