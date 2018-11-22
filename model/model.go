@@ -644,13 +644,25 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 	}
 }
 
+func joinStr(del string, strs ...string) (js string) {
+	for _, s := range strs {
+		if s == "" {
+			continue
+		}
+		if js != "" {
+			js += del
+		}
+		js += s
+	}
+	return
+}
+
 // ImportWorksheetData imports all filters
 func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings SharedStrings) {
 
 	name := "xl/worksheets/sheet" + strconv.Itoa(ws.Idx) + ".xml"
 	sheet := UnmarshalWorksheet(file.XLSX[name])
 
-	Db.LogMode(true)
 	// Sorting:
 	for _, ss := range sheet.SortState {
 		ds := DataSource{
@@ -691,19 +703,17 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Db.Create(&Block{
 				WorksheetID: ws.ID,
 				Range:       sc.Ref,
-				Formula: strings.Join([]string{
+				Formula: joinStr(",",
 					sorting.Method,
 					sorting.Type,
 					sorting.SortBy,
 					sorting.CustomList,
 					sorting.IconSet,
-					sorting.IconID,
-				}, ","),
+					sorting.IconID),
 				SortingID: NewNullInt64(sorting.ID),
 			})
 		}
 	}
-	Db.LogMode(false)
 
 	// Filters:
 	for _, af := range sheet.AutoFilter {
@@ -813,6 +823,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		}
 
 	}
+
 	// Pivot Tables:
 	if content, ok := file.XLSX["xl/pivotCache/pivotCacheDefinition"+strconv.Itoa(ws.Idx)+".xml"]; ok {
 		pcd := UnmarshalPivotCacheDefinition(content)
@@ -825,7 +836,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		Db.Create(&ds)
 		Db.Create(&Block{
 			WorksheetID: ws.ID,
-			Range:       "????PivotSource????",
+			Range:       "PivotSource",
 			Formula:     ds.Range,
 		})
 		log.Info(ptd.XMLName)
@@ -883,11 +894,87 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				Db.Create(&Block{
 					WorksheetID: ws.ID,
 					Range:       "DataField",
-					Formula:     strings.Join([]string{label, df.Name, function}, ","),
+					Formula:     joinStr(",", label, df.Name, function),
 					PivotID:     NewNullInt64(rec.ID),
 				})
 			}
 		}
+	}
+
+	// Conditional Formatting
+	for _, cf := range sheet.ConditionalFormatting {
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       cf.Sqref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID:  ws.ID,
+			Range:        "CFSource",
+			Formula:      ds.Range,
+			DataSourceID: NewNullInt64(ds.ID),
+		})
+		for _, cfr := range cf.CfRule {
+			var operator, formula1, formula2, formula3 string
+			switch cfr.Type {
+			case "iconSet":
+				operator = cfr.IconSet.IconSet
+			case "aboveAverage":
+				if cfr.AboveAverage == "0" {
+					operator = "bellow average"
+				} else {
+					operator = "above average"
+				}
+			case "top10":
+				if cfr.Bottom == "1" {
+					operator = "bottom"
+				} else {
+					operator = "top"
+				}
+			default:
+				operator = cfr.Operator
+			}
+			switch cfr.Type {
+			case "containsText":
+				formula1 = cfr.AttrText
+			case "timePeriod":
+				formula1 = cfr.TimePeriod
+			case "top10":
+				formula1 = cfr.Rank
+			default:
+				if len(cfr.Formula) > 0 {
+					formula1 = cfr.Formula[0].Text
+				}
+			}
+			if cfr.Type == "top10" {
+				if cfr.Percent != "" {
+					formula2 = "percent"
+				}
+			} else if len(cfr.Formula) > 1 {
+				formula2 = cfr.Formula[1].Text
+			}
+			if len(cfr.Formula) > 2 {
+				formula3 = cfr.Formula[2].Text
+			}
+
+			rec := ConditionalFormatting{
+				DataSourceID: ds.ID,
+				Type:         cfr.Type,
+				Operator:     operator,
+				Formula1:     formula1,
+				Formula2:     formula2,
+				Formula3:     formula3,
+			}
+			Db.Create(&rec)
+			Db.Create(&Block{
+				WorksheetID:  ws.ID,
+				Range:        rec.Type,
+				Formula:      joinStr(",", operator, formula1, formula1, formula3),
+				DataSourceID: NewNullInt64(ds.ID),
+			})
+
+		}
+
 	}
 }
 
@@ -1014,6 +1101,7 @@ type Block struct {
 	LCol            int                          `gorm:"index"` // Left column
 	BRow            int                          `gorm:"index"` // Bottom row
 	RCol            int                          `gorm:"index"` // Right column
+	DataSourceID    sql.NullInt64                `gorm:"column:source_id;type:int"`
 	FilterID        sql.NullInt64                `gorm:"type:int"`
 	SortingID       sql.NullInt64                `gorm:"column:sort_id;type:int"`
 	PivotID         sql.NullInt64                `gorm:"type:int"`
@@ -1456,6 +1544,7 @@ func SetDb() {
 	Db.AutoMigrate(&DateGroupItem{})
 	Db.AutoMigrate(&Sorting{})
 	Db.AutoMigrate(&PivotTable{})
+	Db.AutoMigrate(&ConditionalFormatting{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1476,6 +1565,7 @@ func SetDb() {
 		Db.Model(&Block{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&Block{}).AddForeignKey("sort_id", "Sortings(id)", "CASCADE", "CASCADE")
 		Db.Model(&Block{}).AddForeignKey("pivot_id", "PivotTables(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("source_id", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "WorkBooks(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Questions...")
 		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
@@ -1991,4 +2081,20 @@ type PivotTable struct {
 // TableName overrides default table name for the model
 func (PivotTable) TableName() string {
 	return "PivotTables"
+}
+
+// ConditionalFormatting - conditional formatting entries
+type ConditionalFormatting struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceId"`
+	Type         string `gorm:"column:Type;type:varchar(50)"`
+	Operator     string `gorm:"column:Operator;type:varchar(50)"`
+	Formula1     string `gorm:"column:Formula1;type:varchar(255)"`
+	Formula2     string `gorm:"column:Formula2;type:varchar(255)"`
+	Formula3     string `gorm:"column:Formula3;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (ConditionalFormatting) TableName() string {
+	return "ConditionalFormattings"
 }

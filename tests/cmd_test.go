@@ -197,6 +197,11 @@ func deleteData() {
 		&model.Answer{},
 		&model.Source{},
 		&model.Comment{},
+		&model.ConditionalFormatting{},
+		&model.Filter{},
+		&model.Sorting{},
+		&model.PivotTable{},
+		&model.DataSource{},
 	} {
 		err := db.Delete(m).Error
 		if err != nil {
@@ -548,6 +553,7 @@ func TestProcessing(t *testing.T) {
 
 func testImportWorksheets(t *testing.T) {
 	for _, fn := range []string{
+		"CF ALL TYPES.xlsx",
 		"Sorting ALL TYPES.xlsx",
 		"Sorting Horizontal.xlsx",
 		"Filter ALL TYPES.xlsx",
