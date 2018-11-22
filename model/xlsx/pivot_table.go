@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// PivotTableDefinition was generated 2018-11-17 00:55:36 by rcir178 on rcir178.
+// PivotTableDefinition was generated 2018-11-22 13:11:11 by rcir178 on rcir178.
 type PivotTableDefinition struct {
 	XMLName                 xml.Name `xml:"pivotTableDefinition"`
 	Text                    string   `xml:",chardata"`

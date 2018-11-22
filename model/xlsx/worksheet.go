@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// Worksheet was generated 2018-11-17 00:55:36 by rcir178 on rcir178.
+// Worksheet was generated 2018-11-22 13:11:11 by rcir178 on rcir178.
 type Worksheet struct {
 	XMLName   xml.Name `xml:"worksheet"`
 	Text      string   `xml:",chardata"`
@@ -72,6 +72,69 @@ type Worksheet struct {
 			} `xml:"colorFilter"`
 		} `xml:"filterColumn"`
 	} `xml:"autoFilter"`
+	ConditionalFormatting []struct {
+		Text   string `xml:",chardata"`
+		Sqref  string `xml:"sqref,attr"`
+		CfRule []struct {
+			Text         string `xml:",chardata"`
+			Type         string `xml:"type,attr"`
+			DxfId        string `xml:"dxfId,attr"`
+			Priority     string `xml:"priority,attr"`
+			Operator     string `xml:"operator,attr"`
+			AttrText     string `xml:"text,attr"`
+			TimePeriod   string `xml:"timePeriod,attr"`
+			AboveAverage string `xml:"aboveAverage,attr"`
+			Percent      string `xml:"percent,attr"`
+			Bottom       string `xml:"bottom,attr"`
+			Rank         string `xml:"rank,attr"`
+			Formula      []struct {
+				Text string `xml:",chardata"` // 10, 20, 10, 20, 84, 99, 3...
+			} `xml:"formula"`
+			DataBar struct {
+				Text string `xml:",chardata"`
+				Cfvo []struct {
+					Text string `xml:",chardata"`
+					Type string `xml:"type,attr"`
+				} `xml:"cfvo"`
+				Color struct {
+					Text string `xml:",chardata"`
+					Rgb  string `xml:"rgb,attr"`
+				} `xml:"color"`
+			} `xml:"dataBar"`
+			ExtLst struct {
+				Text string `xml:",chardata"`
+				Ext  struct {
+					Text string `xml:",chardata"`
+					X14  string `xml:"x14,attr"`
+					URI  string `xml:"uri,attr"`
+					ID   struct {
+						Text string `xml:",chardata"` // {4D3A9FBE-0C2F-4905-AB07-...
+					} `xml:"id"`
+				} `xml:"ext"`
+			} `xml:"extLst"`
+			ColorScale struct {
+				Text string `xml:",chardata"`
+				Cfvo []struct {
+					Text string `xml:",chardata"`
+					Type string `xml:"type,attr"`
+					Val  string `xml:"val,attr"`
+				} `xml:"cfvo"`
+				Color []struct {
+					Text string `xml:",chardata"`
+					Rgb  string `xml:"rgb,attr"`
+				} `xml:"color"`
+			} `xml:"colorScale"`
+			IconSet struct {
+				Text    string `xml:",chardata"`
+				IconSet string `xml:"iconSet,attr"`
+				Cfvo    []struct {
+					Text string `xml:",chardata"`
+					Type string `xml:"type,attr"`
+					Val  string `xml:"val,attr"`
+				} `xml:"cfvo"`
+			} `xml:"iconSet"`
+		} `xml:"cfRule"`
+	} `xml:"conditionalFormatting"`
 	PageMargins struct {
 		Text   string `xml:",chardata"`
 		Left   string `xml:"left,attr"`
