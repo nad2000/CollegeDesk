@@ -559,6 +559,7 @@ func testImportWorksheets(t *testing.T) {
 		"Filter ALL TYPES.xlsx",
 		"Salesman filter.xlsx",
 		"Pivot 2.xlsx",
+		"Multi text custom filter.xlsx",
 	} {
 		wb := model.Workbook{FileName: fn}
 		db.Create(&wb)

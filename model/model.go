@@ -997,7 +997,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Db.Create(&Block{
 				WorksheetID:  ws.ID,
 				Range:        rec.Type,
-				Formula:      joinStr(",", operator, formula1, formula1, formula3),
+				Formula:      joinStr(",", operator, formula1, formula2, formula3),
 				DataSourceID: NewNullInt64(ds.ID),
 			})
 

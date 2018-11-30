@@ -14,6 +14,38 @@
     <sortCondition descending="1" ref="A1:K1"/>
     <sortCondition ref="A2:K2"/>
   </sortState>
+  <autoFilter ref="A1:F1080">
+    <filterColumn colId="0">
+      <customFilters>
+        <customFilter val="D*"/>
+      </customFilters>
+    </filterColumn>
+    <filterColumn colId="1">
+      <customFilters>
+        <customFilter val="*a"/>
+      </customFilters>
+    </filterColumn>
+    <filterColumn colId="2">
+      <customFilters>
+        <customFilter val="*C*"/>
+      </customFilters>
+    </filterColumn>
+    <filterColumn colId="3">
+      <customFilters>
+        <customFilter operator="notEqual" val="*b*"/>
+      </customFilters>
+    </filterColumn>
+    <filterColumn colId="4">
+      <filters>
+        <filter val="South East"/>
+      </filters>
+    </filterColumn>
+    <filterColumn colId="5">
+      <customFilters>
+        <customFilter operator="notEqual" val="Komal"/>
+      </customFilters>
+    </filterColumn>
+  </autoFilter>
   <autoFilter ref="A100:M199">
     <filterColumn colId="0">
       <filters>

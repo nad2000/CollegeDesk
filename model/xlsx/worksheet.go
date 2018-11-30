@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// Worksheet was generated 2018-11-22 13:11:11 by rcir178 on rcir178.
+// Worksheet was generated 2018-11-30 21:25:00 by rcir178 on rcir178-Latitude-E7470.
 type Worksheet struct {
 	XMLName   xml.Name `xml:"worksheet"`
 	Text      string   `xml:",chardata"`
@@ -27,10 +27,23 @@ type Worksheet struct {
 		Text         string `xml:",chardata"`
 		Ref          string `xml:"ref,attr"`
 		FilterColumn []struct {
-			Text    string `xml:",chardata"`
-			ColId   string `xml:"colId,attr"`
+			Text          string `xml:",chardata"`
+			ColId         string `xml:"colId,attr"`
+			CustomFilters struct {
+				Text         string `xml:",chardata"`
+				And          string `xml:"and,attr"`
+				CustomFilter []struct {
+					Text     string `xml:",chardata"`
+					Val      string `xml:"val,attr"`
+					Operator string `xml:"operator,attr"`
+				} `xml:"customFilter"`
+			} `xml:"customFilters"`
 			Filters struct {
-				Text          string `xml:",chardata"`
+				Text   string `xml:",chardata"`
+				Filter []struct {
+					Text string `xml:",chardata"`
+					Val  string `xml:"val,attr"`
+				} `xml:"filter"`
 				DateGroupItem []struct {
 					Text             string `xml:",chardata"`
 					Year             string `xml:"year,attr"`
@@ -41,20 +54,7 @@ type Worksheet struct {
 					Minute           string `xml:"minute,attr"`
 					Second           string `xml:"second,attr"`
 				} `xml:"dateGroupItem"`
-				Filter []struct {
-					Text string `xml:",chardata"`
-					Val  string `xml:"val,attr"`
-				} `xml:"filter"`
 			} `xml:"filters"`
-			CustomFilters struct {
-				Text         string `xml:",chardata"`
-				And          string `xml:"and,attr"`
-				CustomFilter []struct {
-					Text     string `xml:",chardata"`
-					Operator string `xml:"operator,attr"`
-					Val      string `xml:"val,attr"`
-				} `xml:"customFilter"`
-			} `xml:"customFilters"`
 			Top10 struct {
 				Text      string `xml:",chardata"`
 				Val       string `xml:"val,attr"`
