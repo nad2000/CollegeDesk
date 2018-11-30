@@ -807,15 +807,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					}
 				}
 			} else if fc.DynamicFilter.Type != "" || fc.DynamicFilter.Val != "" {
-
-				switch fc.DynamicFilter.Type {
-				case "aboveAverage":
-					filter.Operator = ">"
-				case "belowAverage":
-					filter.Operator = "<"
-				default:
-					filter.Operator = fc.DynamicFilter.Type
-				}
+				filter.Operator = fc.DynamicFilter.Type
 				filter.Value = fc.DynamicFilter.Val
 			}
 			Db.Create(&filter)
