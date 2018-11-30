@@ -785,6 +785,12 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 						f.Operator = ">"
 					case "lessThan":
 						f.Operator = "<"
+					case "notEqual":
+						f.Operator = "#"
+					case "greaterThanOrEqual":
+						f.Operator = ">="
+					case "lessThanOrEqual":
+						f.Operator = "<="
 					default:
 						f.Operator = "="
 					}
