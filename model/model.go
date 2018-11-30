@@ -737,7 +737,34 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				ColID:        colID,
 				ColName:      colName,
 			}
-			if fc.Top10.Top != "" || fc.Top10.Val != "" || fc.Top10.FilterVal != "" {
+			if fc.Filters.Filter != nil {
+				for i, ff := range fc.Filters.Filter {
+					var f *Filter
+					if i == 0 {
+						f = &filter
+					} else {
+						f = &Filter{
+							WorksheetID:  ws.ID,
+							DataSourceID: ds.ID,
+							ColID:        colID,
+							ColName:      colName,
+						}
+					}
+					f.Operator = "="
+					f.Value = ff.Val
+					if i > 0 {
+						Db.Create(f)
+						Db.Create(&Block{
+							WorksheetID:     ws.ID,
+							Range:           colName,
+							Formula:         f.Operator,
+							RelativeFormula: f.Value,
+							FilterID:        NewNullInt64(f.ID),
+						})
+					}
+				}
+
+			} else if fc.Top10.Top != "" || fc.Top10.Val != "" || fc.Top10.FilterVal != "" {
 				filter.Operator = "top10"
 				filter.Value = fc.Top10.Val
 			} else if fc.CustomFilters.CustomFilter != nil {
