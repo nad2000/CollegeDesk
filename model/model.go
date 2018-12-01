@@ -810,6 +810,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				filter.Operator = fc.DynamicFilter.Type
 				filter.Value = fc.DynamicFilter.Val
 			}
+			Db.LogMode(true)
 			Db.Create(&filter)
 			Db.Create(&Block{
 				WorksheetID:     ws.ID,
@@ -819,7 +820,6 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				FilterID:        NewNullInt64(filter.ID),
 			})
 			for _, dgi := range fc.Filters.DateGroupItem {
-				Db.LogMode(true)
 				item := DateGroupItem{
 					FilterID: filter.ID,
 					Grouping: dgi.DateTimeGrouping,
@@ -831,7 +831,6 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					Second:   NewNullInt64(dgi.Second),
 				}
 				Db.Create(&item)
-				Db.LogMode(false)
 				var date string
 				switch item.Grouping {
 				case "month":
@@ -847,6 +846,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					FilterID:        NewNullInt64(filter.ID),
 				})
 			}
+			Db.LogMode(false)
 		}
 
 	}
