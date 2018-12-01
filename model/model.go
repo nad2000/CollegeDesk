@@ -819,6 +819,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				FilterID:        NewNullInt64(filter.ID),
 			})
 			for _, dgi := range fc.Filters.DateGroupItem {
+				Db.LogMode(true)
 				item := DateGroupItem{
 					FilterID: filter.ID,
 					Grouping: dgi.DateTimeGrouping,
@@ -830,6 +831,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					Second:   NewNullInt64(dgi.Second),
 				}
 				Db.Create(&item)
+				Db.LogMode(false)
 				var date string
 				switch item.Grouping {
 				case "month":
