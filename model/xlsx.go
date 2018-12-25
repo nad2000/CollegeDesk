@@ -1,9 +1,15 @@
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/worksheet.go; zek -e <../assets/sheet.xml >>xlsx/worksheet.go"
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/shared_strings.go; zek -e <../assets/sharedStrings.xml >>xlsx/shared_strings.go"
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/pivot_table.go; zek -e <../assets/pivotTable.xml >>xlsx/pivot_table.go"
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/pivot_cache_definition.go; zek -e <../assets/pivotCacheDefinition.xml >>xlsx/pivot_cache_definition.go"
 package model
 
 import (
 	"encoding/xml"
+	"extract-blocks/model/xlsx"
 	"strings"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/nad2000/excelize"
 )
 
@@ -240,6 +246,36 @@ func unmarshalRelationships(fileContent []byte) (content xlsxRelationships) {
 // UnmarshalChart unmarshals the chart data
 func UnmarshalChart(fileContent []byte) (content XlsxBareChart) {
 	xml.Unmarshal(fileContent, &content)
+	return
+}
+
+// UnmarshalWorksheet unmarshals a worksheets autofilter
+func UnmarshalWorksheet(fileContent []byte) (content xlsx.Worksheet) {
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
+	return
+}
+
+// UnmarshalPivotCacheDefinition unmarshals a worksheets autofilter
+func UnmarshalPivotCacheDefinition(fileContent []byte) (content xlsx.PivotCacheDefinition) {
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
+	return
+}
+
+// UnmarshalPivotTableDefinition  unmarshals a worksheets autofilter
+func UnmarshalPivotTableDefinition(fileContent []byte) (content xlsx.PivotTableDefinition) {
+	err := xml.Unmarshal(fileContent, &content)
+	if err != nil {
+		log.Errorf("ERROR: %#v", err)
+		log.Info(string(fileContent))
+	}
 	return
 }
 

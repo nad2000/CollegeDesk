@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="111" uniqueCount="56">
+<si><t>Month</t></si>
+<si><t>Salesman</t></si>
+<si><t>Region</t></si>
+<si><t>Course</t></si>
+<si><t>No. Customers</t></si>
+<si><t>Net Sales</t></si>
+<si><t>Profit</t></si>
+
+<si><t>Rachana</t></si><si><t>Kashmir</t></si><si><t>CPMT</t></si><si><t>Bishnu</t></si><si><t>Andhra Pradesh</t></si><si><t>GMAT</t></si><si><t>Vipul</t></si><si><t>Punjab</t></si><si><t>MAT</t></si><si><t>Devasis</t></si><si><t>CAT</t></si><si><t>Row Labels</t></si><si><t>Grand Total</t></si><si><t>(All)</t></si><si><t>Sum of Net Sales</t></si><si><t>Sum of No. Customers</t></si><si><t>Column Labels</t></si><si><t>Total Sum of No. Customers</t></si><si><t>Total Sum of Net Sales</t></si><si><t>Sum of Profit</t></si>
+
+<si><t>Continent</t></si>
+<si><t>Country</t></si>
+<si><t>Category</t></si>
+
+<si><t>Asia</t></si><si><t>India</t></si><si><t>Hyderabad</t></si><si><t>Pakistan</t></si><si><t>USA</t></si><si><t>Virginia</t></si><si><t>Finance</t></si><si><t>Accounting</t></si><si><t>Prep</t></si><si><t>North Am</t></si><si><t>Asia Sum of Net Sales</t></si><si><t>Asia Sum of Profit</t></si><si><t>North Am Sum of Net Sales</t></si><si><t>North Am Sum of Profit</t></si><si><t>Total Sum of Profit</t></si><si><t>Asia Sum of No. Customers</t></si><si><t>North Am Sum of No. Customers</t></si><si><t>India Sum of Profit</t></si><si><t>India Sum of Net Sales</t></si><si><t>Pakistan Sum of Profit</t></si><si><t>Pakistan Sum of Net Sales</t></si><si><t>USA Sum of Profit</t></si><si><t>USA Sum of Net Sales</t></si><si><t>India Sum of No. Customers</t></si><si><t>Pakistan Sum of No. Customers</t></si><si><t>USA Sum of No. Customers</t></si></sst>

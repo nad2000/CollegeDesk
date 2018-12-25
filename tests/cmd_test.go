@@ -197,6 +197,11 @@ func deleteData() {
 		&model.Answer{},
 		&model.Source{},
 		&model.Comment{},
+		&model.ConditionalFormatting{},
+		&model.Filter{},
+		&model.Sorting{},
+		&model.PivotTable{},
+		&model.DataSource{},
 	} {
 		err := db.Delete(m).Error
 		if err != nil {
@@ -543,6 +548,23 @@ func TestProcessing(t *testing.T) {
 	t.Run("CurruptedFiles", testCorruptedFiles)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
 	t.Run("CWA175", testCWA175)
+	t.Run("ImportWorksheets", testImportWorksheets)
+}
+
+func testImportWorksheets(t *testing.T) {
+	for _, fn := range []string{
+		"CF ALL TYPES.xlsx",
+		"Sorting ALL TYPES.xlsx",
+		"Sorting Horizontal.xlsx",
+		"Filter ALL TYPES.xlsx",
+		"Salesman filter.xlsx",
+		"Pivot 2.xlsx",
+		"Multi text custom filter.xlsx",
+	} {
+		wb := model.Workbook{FileName: fn}
+		db.Create(&wb)
+		wb.ImportWorksheets(fn)
+	}
 }
 
 func testFindBlocksInside(t *testing.T) {

@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/xml"
 	"extract-blocks/s3"
 	"fmt"
 	"path"
@@ -15,6 +16,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/jinzhu/gorm"
 
+	x "extract-blocks/model/xlsx"
 	//"github.com/tealeg/xlsx"
 	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
@@ -94,9 +96,19 @@ func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
 
-// NewNullInt64 - a helper function that makes nullable from a plain int
-func NewNullInt64(value int) sql.NullInt64 {
-	return sql.NullInt64{Valid: true, Int64: int64(value)}
+// NewNullInt64 - a helper function that makes nullable from a plain int or a string
+func NewNullInt64(value interface{}) sql.NullInt64 {
+	switch value.(type) {
+	case int:
+		return sql.NullInt64{Valid: true, Int64: int64(value.(int))}
+	case string:
+		if value.(string) == "" {
+			return sql.NullInt64{}
+		}
+		v, _ := strconv.Atoi(value.(string))
+		return sql.NullInt64{Valid: true, Int64: int64(v)}
+	}
+	return sql.NullInt64{}
 }
 
 // Question - questions
@@ -459,9 +471,7 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 					var cell Cell
 					result := Db.First(&cell, "worksheet_id = ? AND range = ?", ws.ID, c.Ref)
 					if !result.RecordNotFound() {
-						Db.LogMode(true)
 						Db.Model(&cell).UpdateColumn("comment", t.T)
-						Db.LogMode(false)
 					}
 				}
 			}
@@ -471,9 +481,44 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 	return
 }
 
-// ImportCharts - import charts form workbook file
-func (wb *Workbook) ImportCharts(fileName string) {
+// SharedStrings - workbook shared strings
+type SharedStrings []string
 
+// GetSharedStrings - loads and stores the shared string into a string slice
+func GetSharedStrings(file *excelize.File) SharedStrings {
+	var sharedStrings SharedStrings
+	content, ok := file.XLSX["xl/sharedStrings.xml"]
+	if ok {
+		var sst x.Sst
+		_ = xml.Unmarshal(content, &sst)
+		if sst.Si != nil && len(sst.Si) > 0 {
+			sharedStrings = make([]string, len(sst.Si))
+			for i, si := range sst.Si {
+				sharedStrings[i] = si.T.Text
+			}
+		}
+
+	}
+	return sharedStrings
+}
+
+// Get returns a shared string
+func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
+	var id int
+	switch idx.(type) {
+	case string:
+		id, _ = strconv.Atoi(idx.(string))
+	case int:
+		id = idx.(int)
+	}
+	if sharedStrings != nil && id < len(sharedStrings) && id >= 0 {
+		ss = sharedStrings[id]
+	}
+	return
+}
+
+// ImportWorksheets - import charts, filters, ...  form workbook file
+func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
 		log.Errorf("Failed to open file %q", fileName)
@@ -481,16 +526,16 @@ func (wb *Workbook) ImportCharts(fileName string) {
 		return
 	}
 
-	for _, sheet := range file.WorkBook.Sheets.Sheet {
+	for sheetIdx, sheetName := range file.GetSheetMap() {
 		var ws Worksheet
 		result := Db.First(&ws, Worksheet{
-			Name:       sheet.Name,
+			Name:       sheetName,
 			AnswerID:   wb.AnswerID,
 			WorkbookID: wb.ID,
 		})
 		if result.RecordNotFound() && !DryRun {
 			ws = Worksheet{
-				Name:             sheet.Name,
+				Name:             sheetName,
 				WorkbookFileName: filepath.Base(fileName),
 				AnswerID:         wb.AnswerID,
 				WorkbookID:       wb.ID,
@@ -502,92 +547,464 @@ func (wb *Workbook) ImportCharts(fileName string) {
 				log.Debugf("Ceated workbook entry %#v", wb)
 			}
 		}
+		ws.Idx = sheetIdx
+		Db.Save(ws)
+		sharedStrings := GetSharedStrings(file)
+		ws.ImportCharts(file)
+		ws.ImportWorksheetData(file, sharedStrings)
+	}
+}
 
-		name := "xl/worksheets/_rels/sheet" + sheet.SheetID + ".xml.rels"
-		sheetRels := unmarshalRelationships(file.XLSX[name])
-		for _, r := range sheetRels.Relationships {
-			if strings.Contains(r.Target, "drawings/drawing") {
-				name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
-				drawing := unmarshalDrawing(file.XLSX["xl/drawings/"+filepath.Base(r.Target)])
-				drawingRels := unmarshalRelationships(file.XLSX[name])
-				for _, dr := range drawingRels.Relationships {
-					if strings.Contains(dr.Target, "charts/chart") {
-						chartName := "xl/charts/" + filepath.Base(dr.Target)
-						chart := UnmarshalChart(file.XLSX[chartName])
-						chartTitle := chart.Title.Value()
-						log.Debugf("*** %s: %#v", chartName, chart)
-						log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, sheet.Name)
-						itemCount := chart.ItemCount()
-						chartEntry := Chart{
-							WorksheetID: ws.ID,
-							Title:       chartTitle,
-							XLabel:      chart.XLabel(),
-							YLabel:      chart.YLabel(),
-							FromCol:     drawing.FromCol,
-							FromRow:     drawing.FromRow,
-							ToCol:       drawing.ToCol,
-							ToRow:       drawing.ToRow,
-							Type:        chart.Type(),
-							Data:        chart.PlotArea.Chart.Data,
-							XData:       chart.PlotArea.Chart.XData,
-							YData:       chart.PlotArea.Chart.YData,
-							ItemCount:   itemCount,
-							XMinValue:   chart.XMinValue(),
-							XMaxValue:   chart.XMaxValue(),
-							YMaxValue:   chart.YMaxValue(),
-							YMinValue:   chart.YMinValue(),
-						}
-						Db.Create(&chartEntry)
-						chartID := NewNullInt64(chartEntry.ID)
+// ImportCharts - import charts for the wroksheet
+func (ws *Worksheet) ImportCharts(file *excelize.File) {
 
-						Db.Create(&Block{
+	name := "xl/worksheets/_rels/sheet" + strconv.Itoa(ws.Idx) + ".xml.rels"
+	sheetRels := unmarshalRelationships(file.XLSX[name])
+	for _, r := range sheetRels.Relationships {
+		if strings.Contains(r.Target, "drawings/drawing") {
+			name := "xl/drawings/_rels/" + filepath.Base(r.Target) + ".rels"
+			drawing := unmarshalDrawing(file.XLSX["xl/drawings/"+filepath.Base(r.Target)])
+			drawingRels := unmarshalRelationships(file.XLSX[name])
+			for _, dr := range drawingRels.Relationships {
+				if strings.Contains(dr.Target, "charts/chart") {
+					chartName := "xl/charts/" + filepath.Base(dr.Target)
+					chart := UnmarshalChart(file.XLSX[chartName])
+					chartTitle := chart.Title.Value()
+					log.Infof("Found %q chart (titled: %q) on the sheet %q", chart.Type(), chartTitle, ws.Name)
+					itemCount := chart.ItemCount()
+					chartEntry := Chart{
+						WorksheetID: ws.ID,
+						Title:       chartTitle,
+						XLabel:      chart.XLabel(),
+						YLabel:      chart.YLabel(),
+						FromCol:     drawing.FromCol,
+						FromRow:     drawing.FromRow,
+						ToCol:       drawing.ToCol,
+						ToRow:       drawing.ToRow,
+						Type:        chart.Type(),
+						Data:        chart.PlotArea.Chart.Data,
+						XData:       chart.PlotArea.Chart.XData,
+						YData:       chart.PlotArea.Chart.YData,
+						ItemCount:   itemCount,
+						XMinValue:   chart.XMinValue(),
+						XMaxValue:   chart.XMaxValue(),
+						YMaxValue:   chart.YMaxValue(),
+						YMinValue:   chart.YMinValue(),
+					}
+					Db.Create(&chartEntry)
+					chartID := NewNullInt64(chartEntry.ID)
+
+					Db.Create(&Block{
+						WorksheetID: ws.ID,
+						Range:       "ChartRange",
+						Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
+							drawing.FromRow,
+							drawing.FromCol,
+							drawing.ToRow,
+							drawing.ToCol+2),
+						ChartID: chartID,
+					})
+					c := chart.PlotArea.Chart
+					var propCount int
+					properties := []struct{ Name, Value string }{
+						{"ChartType", chart.Type()},
+						{"ChartTitle", chartTitle},
+						{"X-Axis Title", chart.XLabel()},
+						{"Y-Axis Title", chart.YLabel()},
+						{"SourceData", c.Data},
+						{"X-Axis Data", c.XData},
+						{"Y-Axis Data", c.YData},
+						{"ItemCount", strconv.Itoa(itemCount)},
+						{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
+						{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
+						{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
+						{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
+					}
+					for _, p := range properties {
+						block := Block{
 							WorksheetID: ws.ID,
-							Range:       "ChartRange",
-							Formula: fmt.Sprintf("((%d,%d),(%d,%d))",
-								drawing.FromRow,
-								drawing.FromCol,
-								drawing.ToRow,
-								drawing.ToCol+2),
+							Range:       p.Name,
+							Formula:     p.Value,
+							RelativeFormula: CellAddress(
+								drawing.FromRow+propCount, drawing.ToCol+2),
 							ChartID: chartID,
+						}
+						Db.Create(&block)
+						Db.Create(&Cell{
+							Block:       block,
+							WorksheetID: ws.ID,
+							Range:       block.Range,
+							Formula:     block.Formula,
 						})
-						c := chart.PlotArea.Chart
-						var propCount int
-						properties := []struct{ Name, Value string }{
-							{"ChartType", chart.Type()},
-							{"ChartTitle", chartTitle},
-							{"X-Axis Title", chart.XLabel()},
-							{"Y-Axis Title", chart.YLabel()},
-							{"SourceData", c.Data},
-							{"X-Axis Data", c.XData},
-							{"Y-Axis Data", c.YData},
-							{"ItemCount", strconv.Itoa(itemCount)},
-							{"X-Axis MinValue", normalizeFloatRepr(chart.XMinValue())},
-							{"Y-Axis MinValue", normalizeFloatRepr(chart.YMinValue())},
-							{"X-Axis MaxValue", normalizeFloatRepr(chart.XMaxValue())},
-							{"Y-Axis MaxValue", normalizeFloatRepr(chart.YMaxValue())},
-						}
-						for _, p := range properties {
-							block := Block{
-								WorksheetID: ws.ID,
-								Range:       p.Name,
-								Formula:     p.Value,
-								RelativeFormula: CellAddress(
-									drawing.FromRow+propCount, drawing.ToCol+2),
-								ChartID: chartID,
-							}
-							Db.Create(&block)
-							Db.Create(&Cell{
-								Block:       block,
-								WorksheetID: ws.ID,
-								Range:       block.Range,
-								Formula:     block.Formula,
-							})
-							propCount++
-						}
+						propCount++
 					}
 				}
 			}
 		}
+	}
+}
+
+func joinStr(del string, strs ...string) (js string) {
+	for _, s := range strs {
+		if s == "" {
+			continue
+		}
+		if js != "" {
+			js += del
+		}
+		js += s
+	}
+	return
+}
+
+// ImportWorksheetData imports all filters
+func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings SharedStrings) {
+
+	name := "xl/worksheets/sheet" + strconv.Itoa(ws.Idx) + ".xml"
+	sheet := UnmarshalWorksheet(file.XLSX[name])
+
+	// Sorting:
+	for _, ss := range sheet.SortState {
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       ss.Ref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "SortSource",
+			Formula:     ss.Ref,
+		})
+
+		var method string
+		switch ss.ColumnSort {
+		case "1":
+			method = "Horizontal"
+		default:
+			method = "Vertical"
+		}
+		for _, sc := range ss.SortCondition {
+			var st string
+			if sc.Descending == "1" {
+				st = "descending"
+			} else {
+				st = "assending"
+			}
+			sorting := Sorting{
+				DataSourceID: ds.ID,
+				Method:       method,
+				Reference:    sc.Ref,
+				Type:         st,
+				CustomList:   sc.CustomList,
+				IconSet:      sc.IconSet,
+				IconID:       sc.IconId,
+			}
+			Db.Create(&sorting)
+			Db.Create(&Block{
+				WorksheetID: ws.ID,
+				Range:       sc.Ref,
+				Formula: joinStr(",",
+					sorting.Method,
+					sorting.Type,
+					sorting.SortBy,
+					sorting.CustomList,
+					sorting.IconSet,
+					sorting.IconID),
+				SortingID: NewNullInt64(sorting.ID),
+			})
+		}
+	}
+
+	// Filters:
+	for _, af := range sheet.AutoFilter {
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       af.Ref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "FilterSource",
+			Formula:     af.Ref,
+		})
+
+		for _, fc := range af.FilterColumn {
+			colID, _ := strconv.Atoi(fc.ColId)
+			colName := sharedStrings.Get(colID)
+			filter := Filter{
+				WorksheetID:  ws.ID,
+				DataSourceID: ds.ID,
+				ColID:        colID,
+				ColName:      colName,
+			}
+			if fc.Filters.Filter != nil {
+				for i, ff := range fc.Filters.Filter {
+					var f *Filter
+					if i == 0 {
+						f = &filter
+					} else {
+						f = &Filter{
+							WorksheetID:  ws.ID,
+							DataSourceID: ds.ID,
+							ColID:        colID,
+							ColName:      colName,
+						}
+					}
+					f.Operator = "="
+					f.Value = ff.Val
+					if i > 0 {
+						Db.Create(f)
+						Db.Create(&Block{
+							WorksheetID:     ws.ID,
+							Range:           colName,
+							Formula:         f.Operator,
+							RelativeFormula: f.Value,
+							FilterID:        NewNullInt64(f.ID),
+						})
+					}
+				}
+
+			} else if fc.Top10.Top != "" || fc.Top10.Val != "" || fc.Top10.FilterVal != "" {
+				filter.Operator = "top10"
+				filter.Value = fc.Top10.Val
+			} else if fc.CustomFilters.CustomFilter != nil {
+				for i, cf := range fc.CustomFilters.CustomFilter {
+					var f *Filter
+					if i == 0 {
+						f = &filter
+					} else {
+						f = &Filter{
+							WorksheetID:  ws.ID,
+							DataSourceID: ds.ID,
+							ColID:        colID,
+							ColName:      colName,
+						}
+					}
+					switch cf.Operator {
+					case "greaterThan":
+						f.Operator = ">"
+					case "lessThan":
+						f.Operator = "<"
+					case "notEqual":
+						f.Operator = "#"
+					case "greaterThanOrEqual":
+						f.Operator = ">="
+					case "lessThanOrEqual":
+						f.Operator = "<="
+					default:
+						f.Operator = "="
+					}
+					f.Value = cf.Val
+					if i > 0 {
+						Db.Create(f)
+						Db.Create(&Block{
+							WorksheetID:     ws.ID,
+							Range:           colName,
+							Formula:         f.Operator,
+							RelativeFormula: f.Value,
+							FilterID:        NewNullInt64(f.ID),
+						})
+					}
+				}
+			} else if fc.DynamicFilter.Type != "" || fc.DynamicFilter.Val != "" {
+				filter.Operator = fc.DynamicFilter.Type
+				filter.Value = fc.DynamicFilter.Val
+			}
+			Db.LogMode(true)
+			Db.Create(&filter)
+			Db.Create(&Block{
+				WorksheetID:     ws.ID,
+				Range:           colName,
+				Formula:         filter.Operator,
+				RelativeFormula: filter.Value,
+				FilterID:        NewNullInt64(filter.ID),
+			})
+			for _, dgi := range fc.Filters.DateGroupItem {
+				item := DateGroupItem{
+					FilterID: filter.ID,
+					Grouping: dgi.DateTimeGrouping,
+					Year:     NewNullInt64(dgi.Year),
+					Month:    NewNullInt64(dgi.Month),
+					Day:      NewNullInt64(dgi.Day),
+					Hour:     NewNullInt64(dgi.Hour),
+					Minute:   NewNullInt64(dgi.Minute),
+					Second:   NewNullInt64(dgi.Second),
+				}
+				Db.Create(&item)
+				var date string
+				switch item.Grouping {
+				case "month":
+					date = dgi.Year + "/" + dgi.Month
+				case "day":
+					date = dgi.Year + "/" + dgi.Month + "/" + dgi.Day
+				}
+				Db.Create(&Block{
+					WorksheetID:     ws.ID,
+					Range:           colName,
+					Formula:         item.Grouping,
+					RelativeFormula: date,
+					FilterID:        NewNullInt64(filter.ID),
+				})
+			}
+			Db.LogMode(false)
+		}
+
+	}
+
+	// Pivot Tables:
+	if content, ok := file.XLSX["xl/pivotCache/pivotCacheDefinition"+strconv.Itoa(ws.Idx)+".xml"]; ok {
+		pcd := UnmarshalPivotCacheDefinition(content)
+		ptd := UnmarshalPivotTableDefinition(
+			file.XLSX["xl/pivotTables/pivotTable"+strconv.Itoa(ws.Idx)+".xml"])
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       pcd.CacheSource.WorksheetSource.Ref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID: ws.ID,
+			Range:       "PivotSource",
+			Formula:     ds.Range,
+		})
+		log.Info(ptd.XMLName)
+		if ptd.PivotFields.Count >= "0" {
+			var pfIdx, rfIdx, cfIdx, dfIdx = 0, 0, 0, 0
+			for _, pf := range ptd.PivotFields.PivotField {
+				var label, fieldType, blockCellRange string
+				var rec PivotTable
+
+				if pf.DataField == "" {
+					switch pf.Axis {
+					case "axisPage":
+						fieldType, blockCellRange = "Filter", "PageField"
+						label = sharedStrings.Get(ptd.PageFields.PageField[pfIdx].Fld)
+						pfIdx++
+					case "axisRow":
+						fieldType, blockCellRange = "Row", "RowField"
+						label = sharedStrings.Get(ptd.RowFields.Field[rfIdx].X)
+						rfIdx++
+					case "axisCol":
+						fieldType, blockCellRange = "Column", "ColField"
+						label = sharedStrings.Get(ptd.ColFields.Field[cfIdx].X)
+						cfIdx++
+					default:
+						log.Warnf("Unhandled pivot field: %#v", pf)
+						continue
+					}
+
+					rec = PivotTable{
+						DataSourceID: ds.ID,
+						Type:         fieldType,
+						Label:        label,
+					}
+
+				} else {
+					// DataField
+					var function string
+					df := ptd.DataFields.DataField[dfIdx]
+					fieldType, blockCellRange = "Value", "DataField"
+					label = sharedStrings.Get(df.Fld)
+					if df.Subtotal != "" {
+						function = df.Subtotal
+					} else {
+						function = "sum"
+					}
+					dfIdx++
+
+					rec = PivotTable{
+						DataSourceID: ds.ID,
+						Type:         "Value",
+						Label:        label,
+						Function:     function,
+						DisplayName:  df.Name,
+					}
+				}
+
+				Db.Create(&rec)
+				Db.Create(&Block{
+					WorksheetID: ws.ID,
+					Range:       blockCellRange,
+					Formula:     label,
+					PivotID:     NewNullInt64(rec.ID),
+				})
+			}
+		}
+	}
+
+	// Conditional Formatting
+	for _, cf := range sheet.ConditionalFormatting {
+		ds := DataSource{
+			WorksheetID: ws.ID,
+			Range:       cf.Sqref,
+		}
+		Db.Create(&ds)
+		Db.Create(&Block{
+			WorksheetID:  ws.ID,
+			Range:        "CFSource",
+			Formula:      ds.Range,
+			DataSourceID: NewNullInt64(ds.ID),
+		})
+		for _, cfr := range cf.CfRule {
+			var operator, formula1, formula2, formula3 string
+			switch cfr.Type {
+			case "iconSet":
+				operator = cfr.IconSet.IconSet
+			case "aboveAverage":
+				if cfr.AboveAverage == "0" {
+					operator = "bellow average"
+				} else {
+					operator = "above average"
+				}
+			case "top10":
+				if cfr.Bottom == "1" {
+					operator = "bottom"
+				} else {
+					operator = "top"
+				}
+			default:
+				operator = cfr.Operator
+			}
+			switch cfr.Type {
+			case "containsText":
+				formula1 = cfr.AttrText
+			case "timePeriod":
+				formula1 = cfr.TimePeriod
+			case "top10":
+				formula1 = cfr.Rank
+			default:
+				if len(cfr.Formula) > 0 {
+					formula1 = cfr.Formula[0].Text
+				}
+			}
+			if cfr.Type == "top10" {
+				if cfr.Percent != "" {
+					formula2 = "percent"
+				}
+			} else if len(cfr.Formula) > 1 {
+				formula2 = cfr.Formula[1].Text
+			}
+			if len(cfr.Formula) > 2 {
+				formula3 = cfr.Formula[2].Text
+			}
+
+			rec := ConditionalFormatting{
+				DataSourceID: ds.ID,
+				Type:         cfr.Type,
+				Operator:     operator,
+				Formula1:     formula1,
+				Formula2:     formula2,
+				Formula3:     formula3,
+			}
+			Db.Create(&rec)
+			Db.Create(&Block{
+				WorksheetID:  ws.ID,
+				Range:        rec.Type,
+				Formula:      joinStr(",", operator, formula1, formula2, formula3),
+				DataSourceID: NewNullInt64(ds.ID),
+			})
+
+		}
+
 	}
 }
 
@@ -614,6 +1031,7 @@ type Worksheet struct {
 	WorkbookID       int           `gorm:"index"`
 	IsReference      bool
 	OrderNum         int
+	Idx              int
 }
 
 // TableName overrides default table name for the model
@@ -713,8 +1131,12 @@ type Block struct {
 	LCol            int                          `gorm:"index"` // Left column
 	BRow            int                          `gorm:"index"` // Bottom row
 	RCol            int                          `gorm:"index"` // Right column
-	i               struct{ sr, sc, er, ec int } `gorm:"-"`     // "Inner" block - the block containing values
-	isEmpty         bool                         `gorm:"-"`     // All block cells are empty
+	DataSourceID    sql.NullInt64                `gorm:"column:source_id;type:int"`
+	FilterID        sql.NullInt64                `gorm:"type:int"`
+	SortingID       sql.NullInt64                `gorm:"column:sort_id;type:int"`
+	PivotID         sql.NullInt64                `gorm:"type:int"`
+	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
+	isEmpty         bool                         `gorm:"-"` // All block cells are empty
 }
 
 // TableName overrides default table name for the model
@@ -1135,7 +1557,7 @@ func SetDb() {
 	// Migrate the schema
 	isMySQL := strings.HasPrefix(Db.Dialect().GetName(), "mysql")
 	log.Debug("Add to automigrate...")
-	worksheetsExists := Db.HasTable("WorkSheets")
+
 	Db.AutoMigrate(&Source{})
 	if isMySQL {
 		// Modify struct tag for MySQL
@@ -1147,6 +1569,12 @@ func SetDb() {
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
 	Db.AutoMigrate(&Worksheet{})
+	Db.AutoMigrate(&DataSource{})
+	Db.AutoMigrate(&Filter{})
+	Db.AutoMigrate(&DateGroupItem{})
+	Db.AutoMigrate(&Sorting{})
+	Db.AutoMigrate(&PivotTable{})
+	Db.AutoMigrate(&ConditionalFormatting{})
 	Db.AutoMigrate(&Chart{})
 	Db.AutoMigrate(&Block{})
 	Db.AutoMigrate(&Cell{})
@@ -1155,7 +1583,7 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
-	if isMySQL && !worksheetsExists {
+	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
 		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
@@ -1164,11 +1592,20 @@ func SetDb() {
 		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
+		Db.Model(&Block{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("sort_id", "Sortings(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("pivot_id", "PivotTables(id)", "CASCADE", "CASCADE")
+		Db.Model(&Block{}).AddForeignKey("source_id", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&Worksheet{}).AddForeignKey("workbook_id", "WorkBooks(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Questions...")
 		Db.Model(&Question{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to QuestionExcelData...")
 		Db.Model(&QuestionExcelData{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		Db.Model(&DataSource{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Filter{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
+		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -1520,7 +1957,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 
-	wb.ImportCharts(fileName)
+	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
 		Exec(`
 			UPDATE StudentAnswers
@@ -1595,4 +2032,99 @@ type Chart struct {
 	FromCol, FromRow, ToCol, ToRow, ItemCount  int
 	Data, XData, YData, Type                   string
 	XMinValue, XMaxValue, YMaxValue, YMinValue string
+}
+
+// DataSource - autofilter
+type DataSource struct {
+	ID          int
+	WorksheetID int
+	Worksheet   Workbook
+	Range       string `gorm:"column:Sourcerange;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (DataSource) TableName() string {
+	return "DataSources"
+}
+
+// Filter - filters
+type Filter struct {
+	ID           int
+	WorksheetID  int
+	Worksheet    *Workbook
+	DataSourceID int `gorm:"column:DataSourceID"`
+	DataSource   *DataSource
+	ColID        int    `gorm:"column:ColID"`
+	ColName      string `gorm:"column:ColName;type:varchar(255)"`
+	Operator     string `gorm:"column:Operator;type:varchar(50)"`
+	Value        string `gorm:"column:Value;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (Filter) TableName() string {
+	return "Filters"
+}
+
+// DateGroupItem - data group
+type DateGroupItem struct {
+	ID                   int
+	Grouping             string        `gorm:"column:datetTimeGroupingType;type:varchar(10)"`
+	Year, Month, Day     sql.NullInt64 `gorm:"type:int"`
+	Hour, Minute, Second sql.NullInt64 `gorm:"type:int"`
+	FilterID             int
+	Filter               *Filter
+}
+
+// TableName overrides default table name for the model
+func (DateGroupItem) TableName() string {
+	return "DateGroupItems"
+}
+
+// Sorting - column sorting
+type Sorting struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceID"`
+	Method       string `gorm:"column:SortMethod;type:varchar(10);not null"`
+	Reference    string `gorm:"column:SortingReference;type:varchar(255);not null"`
+	Type         string `gorm:"column:SortType;type:varchar(50);not null"`
+	SortBy       string `gorm:"column:sortBy;type:varchar(50);not null"`
+	CustomList   string `gorm:"column:customList;type:varchar(255)"`
+	IconSet      string `gorm:"column:iconSet;type:varchar(255)"`
+	IconID       string `gorm:"column:iconId;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (Sorting) TableName() string {
+	return "Sortings"
+}
+
+// PivotTable - pivot table
+type PivotTable struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceId"`
+	Type         string `gorm:"column:Type;type:varchar(50)"`
+	Label        string `gorm:"column:Label;type:varchar(255)"`
+	DisplayName  string `gorm:"column:DisplayName;type:varchar(255)"`
+	Function     string `gorm:"column:Function;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (PivotTable) TableName() string {
+	return "PivotTables"
+}
+
+// ConditionalFormatting - conditional formatting entries
+type ConditionalFormatting struct {
+	ID           int
+	DataSourceID int    `gorm:"column:DataSourceId"`
+	Type         string `gorm:"column:Type;type:varchar(50)"`
+	Operator     string `gorm:"column:Operator;type:varchar(50)"`
+	Formula1     string `gorm:"column:Formula1;type:varchar(255)"`
+	Formula2     string `gorm:"column:Formula2;type:varchar(255)"`
+	Formula3     string `gorm:"column:Formula3;type:varchar(255)"`
+}
+
+// TableName overrides default table name for the model
+func (ConditionalFormatting) TableName() string {
+	return "ConditionalFormattings"
 }
