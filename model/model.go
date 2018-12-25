@@ -1586,6 +1586,8 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
+	Db.AutoMigrate(&User{})
+	Db.AutoMigrate(&XLQTransformation{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1609,6 +1611,9 @@ func SetDb() {
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
+		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -2132,7 +2137,34 @@ func (ConditionalFormatting) TableName() string {
 	return "ConditionalFormattings"
 }
 
-// AutoCommentCells adds automatic comment to the student answer cells
+// XLQTransformation - XLQ Transformations
+type XLQTransformation struct {
+	ID            int
+	CellReference string    `gorm:"type:varchar(10);not null"`
+	TimeStamp     time.Time `gorm:"not null"`
+	UserID        int       `gorm:"column:UserID;type:int unsigned;not null;index"`
+	Question      Question
+	QuestionID    int `gorm:"column:QuestionID;type:int unsigned;not null;index"`
+	Source        Source
+	SourceID      int `gorm:"column:FileID;type:int unsigned;not null;index"`
+}
+
+// TableName overrides default table name for the model
+func (XLQTransformation) TableName() string {
+	return "XLQTransformation"
+}
+
+// User - users
+type User struct {
+	ID int `gorm:"column:UserID"`
+}
+
+// TableName overrides default table name for the model
+func (User) TableName() string {
+	return "Users"
+}
+
+// AutoCommentAnswerCells adds automatic comment to the student answer cells
 func AutoCommentAnswerCells() {
 	var answers []Answer
 	Db.Preload("Worksheets").Preload("Worksheets.Cells").
