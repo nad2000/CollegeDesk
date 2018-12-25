@@ -371,9 +371,10 @@ type Answer struct {
 	Source              Source        `gorm:"Association_ForeignKey:FileID"`
 	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
-	QuestionID          sql.NullInt64   `gorm:"column:QuestionID;type:int"`
-	WasCommentProcessed uint8           `gorm:"type:tinyint;default:0"`
-	WasXLProcessed      uint8           `gorm:"type:tinyint;default:0"`
+	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
+	WasCommentProcessed uint8         `gorm:"type:tinyint;default:0"`
+	WasXLProcessed      uint8         `gorm:"type:tinyint;default:0"`
+	WasAutocommented    bool
 	AnswerComments      []AnswerComment `gorm:"ForeignKey:AnswerID"`
 }
 
@@ -1033,6 +1034,7 @@ type Worksheet struct {
 	OrderNum         int
 	Idx              int
 	IsPlagiarised    bool
+	Cells            []Cell `gorm:"ForeignKey:WorksheetID"`
 }
 
 // TableName overrides default table name for the model

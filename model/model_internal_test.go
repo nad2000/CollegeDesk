@@ -101,6 +101,10 @@ func TestModel(t *testing.T) {
 		t.Errorf("Expected to select %d worksheets linked to all cells, got: %d", expected, count)
 	}
 	// Db.LogMode(false)
+	var answers []Answer
+	Db.LogMode(true)
+	Db.Preload("Worksheets").Preload("Worksheets.Cells").Where("was_autocommented = ?", 0).Find(&answers)
+	Db.LogMode(false)
 }
 
 func TestNormalizeFloatRepr(t *testing.T) {
