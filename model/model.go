@@ -1032,6 +1032,7 @@ type Worksheet struct {
 	IsReference      bool
 	OrderNum         int
 	Idx              int
+	IsPlagiarised    bool
 }
 
 // TableName overrides default table name for the model
