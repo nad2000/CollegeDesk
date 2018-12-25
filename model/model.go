@@ -2131,3 +2131,18 @@ type ConditionalFormatting struct {
 func (ConditionalFormatting) TableName() string {
 	return "ConditionalFormattings"
 }
+
+// AutoCommentCells adds automatic comment to the student answer cells
+func AutoCommentAnswerCells() {
+	var answers []Answer
+	Db.Preload("Worksheets").Preload("Worksheets.Cells").
+		Where("was_autocommented = ?", 0).
+		Or("was_autocommented IS NULL").Find(&answers)
+	for _, a := range answers {
+		for _, w := range a.Worksheets {
+			for _, c := range w.Cells {
+				log.Info(c)
+			}
+		}
+	}
+}

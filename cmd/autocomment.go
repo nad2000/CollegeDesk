@@ -15,8 +15,9 @@
 package cmd
 
 import (
-	"fmt"
+	"extract-blocks/model"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +49,22 @@ Then
 
 *(4)* After processing all the CellIds for the given StudentAnswerID , set StudentAnswers.was_autocommented = 1.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("autocomment called")
+		model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
+		getConfig()
+		debugCmd(cmd)
+
+		var err error
+		Db, err = model.OpenDb(url)
+		if err != nil {
+			log.Error(err)
+			log.Fatalf("Failed to connect database %q", url)
+		}
+		defer Db.Close()
+		if debugLevel > 1 {
+			Db.LogMode(true)
+		}
+
+		model.AutoCommentAnswerCells()
 	},
 }
 

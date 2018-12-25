@@ -22,13 +22,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-// FileDownloader generic file downloader interfacae
+// FileManager generic file downloader interfacae
 type FileManager interface {
 	Download(fileName, containerName, sourceName, destinationName string) (string, error)
 	Upload(fileName, containerName, key string) (string, error)
 }
 
-// Downloader AWS S3 file downloader
+// Manager AWS S3 file downloader
 type Manager struct {
 	s3Downloader *s3manager.Downloader
 	s3Uploader   *s3manager.Uploader
@@ -62,12 +62,12 @@ func newAwsSession(accessKeyID, secretAccessKey, region string) (*session.Sessio
 	})
 }
 
-// NewS3ManagerWithCredentials instantiates an AWS S3 file manager
+// NewManagerWithCredentials instantiates an AWS S3 file manager
 func NewManagerWithCredentials(accessKeyID, secretAccessKey, region string) Manager {
 	m := Manager{}
 	sess, err := newAwsSession(accessKeyID, secretAccessKey, region)
 	if err != nil {
-		log.Errorln("Failed to connect to AWS: %s", err.Error())
+		log.Errorln("Failed to connect to AWS: ", err.Error())
 	}
 	m.s3Downloader = s3manager.NewDownloader(sess)
 	m.s3Uploader = s3manager.NewUploader(sess)
