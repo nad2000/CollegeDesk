@@ -1,0 +1,18 @@
+##
+## Copy this file into $HOME/.extract-blocks.yaml or the current directory
+##
+# DB connection URL:
+# For MySQL (NB! it's important to add '?parseTime=true' for MySQL due to a bug with date parsing in MySQL!!!):
+#url: mysql://root:p455w0rd@tcp(172.17.0.3:3306)/mysql?parseTime=true
+# OR (without specifying the driver) falls back to "mysql":
+#url: root:p455w0rd@tcp(172.17.0.3:3306)/blocks?parseTime=true
+# For sqlite3:
+url: sqlite://blocks.db
+#url: sqlite3:blocks.db
+color: FFFFFF00
+force: True
+# dest: /some/directory/of/your/preference
+aws-region: REGION
+aws-access-key-id: KEY_ID
+aws-secret-access-key: SECRET
+
