@@ -314,7 +314,7 @@ func testQuestionsToProcess(t *testing.T) {
 		var s model.Source
 		db.Model(&r).Related(&s, "FileID")
 	}
-	if expected, count := 16, len(rows); expected != count {
+	if expected, count := 17, len(rows); expected != count {
 		t.Errorf("Expected %d question rows, got %d", expected, count)
 	}
 
@@ -330,7 +330,7 @@ func testQuestionsToProcess(t *testing.T) {
 			t.Errorf("Wrong extension: %q, expected: '.xlsx'", s.FileName)
 		}
 	}
-	if expected, count := 10, len(questions); expected != count {
+	if expected, count := 11, len(questions); expected != count {
 		t.Errorf("Expected %d rows, got %d", expected, count)
 	}
 
@@ -1436,7 +1436,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 9, len(rows); got != expected {
+	if expected, got := 10, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {

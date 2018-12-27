@@ -45,7 +45,7 @@ func CellAddress(rowIndex, colIndex int) string {
 func RelCellAddress(address string, rowIncrement, colIncrement int) (string, error) {
 	colIndex, rowIndex, err := xlsx.GetCoordsFromCellIDString(address)
 	if err != nil {
-		log.Errorf("Failed to map address %q: %s", address, err.Error())
+		log.WithError(err).Error("Failed to map address ", address)
 		return "", err
 	}
 	return xlsx.GetCellIDStringFromCoords(colIndex+colIncrement, rowIndex+rowIncrement), nil
@@ -55,7 +55,7 @@ func RelCellAddress(address string, rowIncrement, colIncrement int) (string, err
 func RelativeCellAddress(rowIndex, colIndex int, cellID string) string {
 	x, y, err := xlsx.GetCoordsFromCellIDString(cellID)
 	if err != nil {
-		log.Fatalf("Failed to find coordinates for %q: %s", cellID, err.Error())
+		log.WithError(err).Errorln("Failed to find coordinates for ", cellID)
 	}
 	var r1c1 string
 
@@ -203,9 +203,10 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 	fileName := source.FileName
 	if !DryRun {
 		wb = Workbook{FileName: fileName, IsReference: true}
-		result := Db.Create(&wb)
-		if result.Error != nil {
-			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
+
+		if err := Db.Create(&wb).Error; err != nil {
+			log.WithError(err).Errorf("Failed to create workbook entry %#v", wb)
+			return
 		}
 		if DebugLevel > 1 {
 			log.Debugf("Ceated workbook entry %#v", wb)
@@ -424,18 +425,17 @@ func (Workbook) TableName() string {
 func (wb *Workbook) Reset() {
 
 	var worksheets []Worksheet
-	result := Db.Where("workbook_id = ?", wb.ID).Find(&worksheets)
-	if result.Error != nil {
-		log.Error(result.Error)
+
+	if err := Db.Where("workbook_id = ?", wb.ID).Find(&worksheets).Error; err != nil {
+		log.WithError(err).Errorln("Couldn't find the record of the Workbook, ID:", wb.ID)
 	}
 	log.Debugf("Deleting worksheets: %#v", worksheets)
 	for _, ws := range worksheets {
 		Db.Delete(Chart{}, "worksheet_id = ?", ws.ID)
 		var blocks []Block
 		Db.Model(&ws).Related(&blocks)
-		result := Db.Where("worksheet_id = ?", ws.ID).Find(&blocks)
-		if result.Error != nil {
-			log.Error(result.Error)
+		if err := Db.Where("worksheet_id = ?", ws.ID).Find(&blocks).Error; err != nil {
+			log.WithError(err).Error("Failed to find any blocks of the worksheet", ws)
 		}
 		for _, b := range blocks {
 			log.Debugf("Deleting blocks: %#v", blocks)
@@ -523,8 +523,7 @@ func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
 func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
-		log.Errorf("Failed to open file %q", fileName)
-		log.Errorln(err)
+		log.WithError(err).Errorf("Failed to open file %q", fileName)
 		return
 	}
 
@@ -813,7 +812,6 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				filter.Operator = fc.DynamicFilter.Type
 				filter.Value = fc.DynamicFilter.Val
 			}
-			Db.LogMode(true)
 			Db.Create(&filter)
 			Db.Create(&Block{
 				WorksheetID:     ws.ID,
@@ -849,9 +847,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					FilterID:        NewNullInt64(filter.ID),
 				})
 			}
-			Db.LogMode(false)
 		}
-
 	}
 
 	// Pivot Tables:
@@ -1234,7 +1230,7 @@ func cellValue(cell *xlsx.Cell) (value string) {
 	var err error
 	if cell.Type() == 2 {
 		if value, err = cell.FormattedValue(); err != nil {
-			log.Error(err.Error())
+			log.WithError(err).Error("Failed to read cell value: ", *cell)
 			value = cell.Value
 		}
 	} else {
@@ -1290,9 +1286,9 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 							if DebugLevel > 1 {
 								log.Debugf("Inserting %#v", c)
 							}
-							Db.Create(&c)
-							if Db.Error != nil {
-								log.Error("Error occured: ", Db.Error.Error())
+
+							if err := Db.Create(&c).Error; err != nil {
+								log.WithError(err).Error("Failed to create a cell: ", c)
 							}
 						}
 					}
@@ -1353,15 +1349,15 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block) {
 		for c := b.LCol; c <= b.RCol; c++ {
 			cell := sheet.Cell(r, c)
 			if value := cellValue(cell); value != "" {
-				Db.Create(&Cell{
+				err := Db.Create(&Cell{
 					BlockID:     b.ID,
 					WorksheetID: b.WorksheetID,
 					Formula:     cell.Formula(),
 					Value:       value,
 					Range:       CellAddress(r, c),
-				})
-				if Db.Error != nil {
-					log.Error("Error occured: ", Db.Error.Error())
+				}).Error
+				if err != nil {
+					log.WithError(err).Error("Failed to create a cell.")
 				}
 			}
 		}
@@ -1570,6 +1566,7 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
+	Db.AutoMigrate(&User{})
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
 	Db.AutoMigrate(&Workbook{})
@@ -1588,7 +1585,6 @@ func SetDb() {
 	Db.AutoMigrate(&Assignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
-	Db.AutoMigrate(&User{})
 	Db.AutoMigrate(&XLQTransformation{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
@@ -1613,9 +1609,12 @@ func SetDb() {
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+
+		Db.LogMode(true)
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.LogMode(false)
 	}
 }
 
@@ -1809,14 +1808,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		log.Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt: %s",
-			fileName, answerID, err.Error())
-		res := Db.Model(&answer).Updates(map[string]interface{}{
+		log.WithError(err).Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt.",
+			fileName, answerID)
+		err = Db.Model(&answer).Updates(map[string]interface{}{
 			"was_xl_processed": 0,
 			"FileID":           gorm.Expr("NULL"),
-		})
-		if res.Error != nil {
-			log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+		}).Error
+		if err != nil {
+			log.WithError(err).Errorf("Failed to update the answer entry.")
 		}
 		return
 	}
@@ -1986,7 +1985,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			UPDATE StudentAnswers
 			SET was_xl_processed = 1
 			WHERE StudentAnswerID = ?`, answerID); err != nil {
-		log.Errorf("Failed to update the answer entry: %s", err.Error())
+		log.WithError(err).Errorf("Failed to update the answer entry.")
 	}
 
 	// Comments that should be linked with the file:
@@ -2025,7 +2024,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
-		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
+		log.WithError(err).Errorln("Failed to insert block -> comment mapping.")
 	}
 
 	// Insert block -> comment mapping:
@@ -2036,12 +2035,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
-		log.Errorf("Failed to insert block -> comment mapping: %s", err.Error())
+		log.WithError(err).Errorln("Failed to insert block -> comment mapping.")
 	}
 
-	res = Db.Model(&answer).UpdateColumn("was_xl_processed", 1)
-	if res.Error != nil {
-		log.Errorf("Failed to update the answer entry: %s", res.Error.Error())
+	err = Db.Model(&answer).UpdateColumn("was_xl_processed", 1).Error
+	if err != nil {
+		log.WithError(err).Errorln("Failed to update the answer entry.")
 	}
 	return
 }
@@ -2171,7 +2170,7 @@ func (XLQTransformation) TableName() string {
 
 // User - users
 type User struct {
-	ID int `gorm:"column:UserID"`
+	ID int `gorm:"column:UserID;primary_key;auto_increment"`
 }
 
 // TableName overrides default table name for the model
