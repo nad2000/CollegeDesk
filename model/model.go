@@ -519,6 +519,7 @@ func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
 }
 
 // ImportWorksheets - import charts, filters, ...  form workbook file
+// also read and match plagiarism key
 func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
@@ -553,6 +554,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 		sharedStrings := GetSharedStrings(file)
 		ws.ImportCharts(file)
 		ws.ImportWorksheetData(file, sharedStrings)
+		wb.MatchPlagiarismKeys(file)
 	}
 }
 
@@ -1033,7 +1035,7 @@ type Worksheet struct {
 	IsReference      bool
 	OrderNum         int
 	Idx              int
-	IsPlagiarised    bool
+	IsPlagiarised    sql.NullBool
 	Cells            []Cell `gorm:"ForeignKey:WorksheetID"`
 }
 
@@ -1965,6 +1967,19 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 
+	// Read and match plagiarism key
+	var transformations []XLQTransformation
+	Db.Joins(`JOIN StudentAnswers AS a 
+		ON a.QuestionID = XLQTransformation.QuestionID
+			AND a.FileID = XLQTransformation.FileID`).
+		Joins("JOIN WorkSheets AS s ON s.StudentAnswerID = a.StudentAnswerID").
+		Preload("Question").
+		Preload("Question.Answers").
+		Preload("Question.Answers.Worksheets").
+		Where("s.is_plagiarised IS NULL").
+		Where("a.StudentAnswerID = ?", answerID).
+		Find(&transformations)
+
 	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
 		Exec(`
@@ -2174,6 +2189,33 @@ func AutoCommentAnswerCells() {
 		for _, w := range a.Worksheets {
 			for _, c := range w.Cells {
 				log.Info(c)
+			}
+		}
+	}
+}
+
+// MatchPlagiarismKeys reads plagiarism key and match with the one stored
+// in SpreadsheetTransformationTable (NB! the worksheets should be already imported)
+func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
+	var transformations []XLQTransformation
+	Db.Joins(`JOIN StudentAnswers AS a 
+		ON a.QuestionID = XLQTransformation.QuestionID
+			AND a.FileID = XLQTransformation.FileID`).
+		Joins("JOIN WorkSheets AS s ON s.StudentAnswerID = a.StudentAnswerID").
+		Preload("Question").
+		Preload("Question.Answers").
+		Preload("Question.Answers.Worksheets").
+		Where("s.is_plagiarised IS NULL").
+		Where("a.StudentAnswerID = ?", wb.AnswerID).
+		Find(&transformations)
+
+	for _, t := range transformations {
+		keyValue := t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+		for _, a := range t.Question.Answers {
+			for _, ws := range a.Worksheets {
+				value := file.GetCellValue(ws.Name, t.CellReference)
+				ws.IsPlagiarised = sql.NullBool{Valid: true, Bool: (value == keyValue)}
+				Db.Save(&ws)
 			}
 		}
 	}

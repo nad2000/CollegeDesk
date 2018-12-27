@@ -35,6 +35,7 @@ var testFileNames = []string{
 	"test2.xlsx",
 	"test.xlsx",
 	"test_floats.xlsx",
+	"Sample-poi-file.xlsx",
 }
 var testDb = path.Join(os.TempDir(), "extract-block-test.db")
 var defaultURL = "sqlite3://" + testDb
@@ -184,6 +185,7 @@ func deleteData() {
 		defer db.Close()
 	}
 	for _, m := range []interface{}{
+		&model.XLQTransformation{},
 		&model.Cell{},
 		&model.Block{},
 		&model.Chart{},
@@ -202,6 +204,7 @@ func deleteData() {
 		&model.Sorting{},
 		&model.PivotTable{},
 		&model.DataSource{},
+		&model.User{},
 	} {
 		err := db.Delete(m).Error
 		if err != nil {
@@ -228,6 +231,7 @@ func createTestDB() *gorm.DB {
 
 	deleteData()
 	//db.LogMode(true)
+	db.Create(&model.User{ID: 4952})
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -252,6 +256,16 @@ func createTestDB() *gorm.DB {
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
+		if fn == "Sample-poi-file.xlsx" {
+			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2018")
+			db.Create(&model.XLQTransformation{
+				CellReference: "AT9013",
+				UserID:        4952,
+				TimeStamp:     t,
+				QuestionID:    q.ID,
+				SourceID:      f.ID,
+			})
+		}
 	}
 
 	ignore := model.Source{FileName: "ignore.abc"}
@@ -526,6 +540,11 @@ func testHandleAnswers(t *testing.T) {
 		t.Errorf(
 			"Expeced that the number of answers to be processed dorps, got %d before, and %d after.",
 			countBefore, countAfter)
+	}
+	var ws model.Worksheet
+	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
+	if !ws.IsPlagiarised.Bool {
+		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
 	}
 }
 
