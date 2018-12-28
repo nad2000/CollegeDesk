@@ -262,7 +262,7 @@ func createTestDB() *gorm.DB {
 			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2018")
 			db.Create(&model.XLQTransformation{
 				CellReference: "AT9013",
-				UserID:        4952,
+				UserID:        9999,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
 				SourceID:      f.ID,
@@ -547,7 +547,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
 	// if !ws.IsPlagiarised.Bool {
 	if !ws.IsPlagiarised {
-		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
 	}
 }
 
@@ -661,7 +661,7 @@ func testPOI(t *testing.T) {
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
 	db.Create(&a)
-	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2018")
+	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2088")
 	db.Create(&model.XLQTransformation{
 		CellReference: "KE4423",
 		UserID:        4951,
@@ -674,7 +674,7 @@ func testPOI(t *testing.T) {
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", fileName).First(&ws)
 	if !ws.IsPlagiarised {
-		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
 	}
 }
 
