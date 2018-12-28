@@ -231,9 +231,9 @@ func createTestDB() *gorm.DB {
 
 	deleteData()
 	//db.LogMode(true)
-	db.Create(&model.User{ID: 4951})
-	db.Create(&model.User{ID: 4952})
-	db.Create(&model.User{ID: 4953})
+	for _, uid := range []int{4951, 4952, 4953} {
+		db.Create(&model.User{ID: uid})
+	}
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -259,10 +259,10 @@ func createTestDB() *gorm.DB {
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 		if fn == "Sample-poi-file.xlsx" {
-			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2018")
+			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2042")
 			db.Create(&model.XLQTransformation{
 				CellReference: "AT9013",
-				UserID:        9999,
+				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
 				SourceID:      f.ID,
