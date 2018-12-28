@@ -1031,7 +1031,7 @@ type Worksheet struct {
 	IsReference      bool
 	OrderNum         int
 	Idx              int
-	IsPlagiarised    sql.NullBool
+	IsPlagiarised    bool   // sql.NullBool
 	Cells            []Cell `gorm:"ForeignKey:WorksheetID"`
 }
 
@@ -1966,19 +1966,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 
-	// Read and match plagiarism key
-	var transformations []XLQTransformation
-	Db.Joins(`JOIN StudentAnswers AS a 
-		ON a.QuestionID = XLQTransformation.QuestionID
-			AND a.FileID = XLQTransformation.FileID`).
-		Joins("JOIN WorkSheets AS s ON s.StudentAnswerID = a.StudentAnswerID").
-		Preload("Question").
-		Preload("Question.Answers").
-		Preload("Question.Answers.Worksheets").
-		Where("s.is_plagiarised IS NULL").
-		Where("a.StudentAnswerID = ?", answerID).
-		Find(&transformations)
-
 	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
 		Exec(`
@@ -2204,7 +2191,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		Preload("Question").
 		Preload("Question.Answers").
 		Preload("Question.Answers.Worksheets").
-		Where("s.is_plagiarised IS NULL").
+		// Where("s.is_plagiarised IS NULL").
 		Where("a.StudentAnswerID = ?", wb.AnswerID).
 		Find(&transformations)
 
@@ -2213,7 +2200,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		for _, a := range t.Question.Answers {
 			for _, ws := range a.Worksheets {
 				value := file.GetCellValue(ws.Name, t.CellReference)
-				ws.IsPlagiarised = sql.NullBool{Valid: true, Bool: (value == keyValue)}
+				ws.IsPlagiarised = (value == keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
 				Db.Save(&ws)
 			}
 		}

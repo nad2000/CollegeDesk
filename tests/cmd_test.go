@@ -231,6 +231,7 @@ func createTestDB() *gorm.DB {
 
 	deleteData()
 	//db.LogMode(true)
+	db.Create(&model.User{ID: 4951})
 	db.Create(&model.User{ID: 4952})
 
 	for _, fn := range testFileNames {
@@ -543,7 +544,8 @@ func testHandleAnswers(t *testing.T) {
 	}
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
-	if !ws.IsPlagiarised.Bool {
+	// if !ws.IsPlagiarised.Bool {
+	if !ws.IsPlagiarised {
 		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
 	}
 }
@@ -568,6 +570,55 @@ func TestProcessing(t *testing.T) {
 	t.Run("ImportQuestionFile", testImportQuestionFile)
 	t.Run("CWA175", testCWA175)
 	t.Run("ImportWorksheets", testImportWorksheets)
+	t.Run("POI", testPOI)
+}
+
+func testPOI(t *testing.T) {
+
+	fileName := "POI Q1.xlsx"
+	q := model.Question{
+		Source: model.Source{
+			FileName:     fileName,
+			S3BucketName: "studentanswers",
+			S3Key:        fileName,
+		},
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: fileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  true,
+	}
+
+	if err := db.Create(&q).Error; err != nil {
+		t.Error(err)
+	}
+	q.ImportFile(fileName, "FFFFFF00", true)
+
+	// Answer
+	fileName = "POI Q1_4951_null.xlsx"
+	f := model.Source{FileName: fileName, S3BucketName: "studentanswers"}
+	db.Create(&f)
+	a := model.Answer{
+		Source:         model.Source{FileName: fileName, S3BucketName: "studentanswers"},
+		QuestionID:     model.NewNullInt64(q.ID),
+		SubmissionTime: *parseTime("2018-09-30 12:42"),
+	}
+	db.Create(&a)
+	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2018")
+	db.Create(&model.XLQTransformation{
+		CellReference: "KE4423",
+		UserID:        4951,
+		TimeStamp:     ts,
+		QuestionID:    q.ID,
+		SourceID:      a.Source.ID,
+	})
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+
+	var ws model.Worksheet
+	db.Where("workbook_file_name = ?", fileName).First(&ws)
+	if !ws.IsPlagiarised {
+		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+	}
 }
 
 func testImportWorksheets(t *testing.T) {
