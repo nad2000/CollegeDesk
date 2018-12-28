@@ -2200,7 +2200,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		for _, a := range t.Question.Answers {
 			for _, ws := range a.Worksheets {
 				value := file.GetCellValue(ws.Name, t.CellReference)
-				ws.IsPlagiarised = (value == keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
+				ws.IsPlagiarised = (value != keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
 				Db.Save(&ws)
 			}
 		}
