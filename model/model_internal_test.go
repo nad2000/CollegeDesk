@@ -86,6 +86,12 @@ func TestModel(t *testing.T) {
 		}
 		cell.Row, cell.Col, err = xlsx.GetCoordsFromCellIDString(r)
 		Db.Create(&cell)
+		if r == "C3" {
+			Db.Create(&AutoEvaluation{
+				CellID:         cell.ID,
+				IsValueCorrect: true,
+			})
+		}
 	}
 	Db.Create(&BlockCommentMapping{
 		Block:   block,
@@ -102,7 +108,10 @@ func TestModel(t *testing.T) {
 	}
 	// Db.LogMode(false)
 	var answers []Answer
-	Db.Preload("Worksheets").Preload("Worksheets.Cells").Where("was_autocommented = ?", 0).Find(&answers)
+	Db.Preload("Worksheets").
+		Preload("Worksheets.Cells").
+		Preload("Worksheets.Cells.AutoEvaluation").
+		Where("was_autocommented = ?", 0).Find(&answers)
 }
 
 func TestNormalizeFloatRepr(t *testing.T) {

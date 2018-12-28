@@ -258,6 +258,21 @@ func createTestDB() *gorm.DB {
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 		})
 		if fn == "Sample-poi-file.xlsx" {
+			rwb := model.Workbook{IsReference: true}
+			db.Create(&rwb)
+			q.ReferenceID = model.NewNullInt64(rwb.ID)
+			db.Save(&q)
+			rws := model.Worksheet{IsReference: true, WorkbookID: rwb.ID}
+			db.Create(&rws)
+			db.Create(&model.Block{
+				WorksheetID: rws.ID,
+				Range:       "A1:M98",
+				TRow:        0,
+				LCol:        0,
+				BRow:        97,
+				RCol:        12,
+				IsReference: true,
+			})
 			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2018")
 			db.Create(&model.XLQTransformation{
 				CellReference: "AT9013",
@@ -548,6 +563,17 @@ func testHandleAnswers(t *testing.T) {
 	if !ws.IsPlagiarised {
 		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
 	}
+	// Auto-commenting
+	db.LogMode(true)
+	var cells []model.Cell
+	db.Find(&cells)
+	for i, c := range cells {
+		if i%5 <= 1 {
+			db.Create(&model.AutoEvaluation{IsValueCorrect: i%2 == 0, CellID: c.ID})
+		}
+	}
+	model.AutoCommentAnswerCells(12345)
+	db.LogMode(false)
 }
 
 func TestProcessing(t *testing.T) {

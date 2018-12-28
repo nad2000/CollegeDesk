@@ -1421,23 +1421,36 @@ func (b *Block) IsInside(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID          int
-	Block       Block `gorm:"ForeignKey:BlockID"`
-	BlockID     int   `gorm:"index"`
-	Worksheet   Worksheet
-	WorksheetID int    `gorm:"index"`
-	Range       string `gorm:"column:cell_range"`
-	Formula     string
-	Value       string `gorm:"size:2000"`
-	Comment     Comment
-	CommentID   sql.NullInt64 `gorm:"column:CommentID;type:int"`
-	Row         int           `gorm:"index"`
-	Col         int           `gorm:"index"`
+	ID             int
+	Block          Block `gorm:"ForeignKey:BlockID"`
+	BlockID        int   `gorm:"index"`
+	Worksheet      Worksheet
+	WorksheetID    int    `gorm:"index"`
+	Range          string `gorm:"column:cell_range"`
+	Formula        string
+	Value          string `gorm:"size:2000"`
+	Comment        Comment
+	CommentID      sql.NullInt64 `gorm:"column:CommentID;type:int"`
+	Row            int           `gorm:"index"`
+	Col            int           `gorm:"index"`
+	AutoEvaluation *AutoEvaluation
 }
 
 // TableName overrides default table name for the model
 func (Cell) TableName() string {
 	return "Cells"
+}
+
+// AutoEvaluation - ...
+type AutoEvaluation struct {
+	ValueResult    string `gorm:"column:ValueResult;type:varchar(255);not_null;default '0'"`
+	CellID         int    `gorm:"index"`
+	IsValueCorrect bool   `gorm:"column:IsValueCorrect"`
+}
+
+// TableName overrides default table name for the model
+func (AutoEvaluation) TableName() string {
+	return "AutoEvaluation"
 }
 
 // OpenDb opens DB connection based on given URL
@@ -1586,6 +1599,7 @@ func SetDb() {
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
 	Db.AutoMigrate(&XLQTransformation{})
+	Db.AutoMigrate(&AutoEvaluation{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1614,6 +1628,7 @@ func SetDb() {
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
 		Db.LogMode(false)
 	}
 }
@@ -2166,16 +2181,53 @@ func (User) TableName() string {
 }
 
 // AutoCommentAnswerCells adds automatic comment to the student answer cells
-func AutoCommentAnswerCells() {
-	var answers []Answer
-	Db.Preload("Worksheets").Preload("Worksheets.Cells").
+func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
+
+	var (
+		answers []Answer
+		comment Comment
+	)
+	if isPlagiarisedCommentID == 0 {
+		isPlagiarisedCommentID = 12345
+	}
+	result := Db.Where("CommentID = ?", isPlagiarisedCommentID).First(&comment)
+	if result.RecordNotFound() {
+		Db.Create(&Comment{ID: isPlagiarisedCommentID})
+	}
+
+	Db.Preload("Worksheets").
+		Preload("Worksheets.Cells").
+		Preload("Worksheets.Cells.AutoEvaluation").
 		Where("was_autocommented = ?", 0).
 		Or("was_autocommented IS NULL").Find(&answers)
 	for _, a := range answers {
 		for _, w := range a.Worksheets {
 			for _, c := range w.Cells {
-				log.Info(c)
+				if w.IsPlagiarised {
+					Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
+					c.CommentID = NewNullInt64(isPlagiarisedCommentID)
+					Db.Save(&c)
+
+				} else if c.AutoEvaluation != nil {
+					if c.AutoEvaluation.IsValueCorrect {
+						comment = Comment{
+							Text:  "Answer is correct",
+							Marks: sql.NullFloat64{Float64: 1.0, Valid: true},
+						}
+					} else {
+						comment = Comment{
+							Text:  "Answer is wrong",
+							Marks: sql.NullFloat64{Float64: 0.0, Valid: true},
+						}
+					}
+					Db.Create(&comment)
+					Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
+					c.CommentID = NewNullInt64(comment.ID)
+					Db.Save(&c)
+				}
 			}
+			a.WasAutocommented = true
+			Db.Save(&a)
 		}
 	}
 }

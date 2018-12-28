@@ -36,21 +36,22 @@ const (
 // Db - shared DB connection
 var Db *gorm.DB
 var (
-	awsAccessKeyID     string
-	awsProfile         string
-	awsRegion          string
-	awsSecretAccessKey string
-	cfgFile            string
-	color              = defaultColor
-	debug              bool
-	debugLevel         int
-	dest               string
-	force              bool
-	region             string
-	testing            bool
-	url                string
-	verbose            bool
-	verboseLevel       int
+	awsAccessKeyID         string
+	awsProfile             string
+	awsRegion              string
+	awsSecretAccessKey     string
+	cfgFile                string
+	color                  = defaultColor
+	debug                  bool
+	debugLevel             int
+	dest                   string
+	force                  bool
+	region                 string
+	testing                bool
+	url                    string
+	verbose                bool
+	verboseLevel           int
+	isPlagiarisedCommentID int
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -79,6 +80,7 @@ func getConfig() {
 	color = viper.GetString("color")
 	force = viper.GetBool("force")
 	dest = viper.GetString("dest")
+	isPlagiarisedCommentID = viper.GetInt("is-plagiarised-comment-id")
 	if !strings.HasPrefix(dest, "/") {
 		dest += "/"
 	}
@@ -119,6 +121,7 @@ func init() {
 	viper.BindEnv("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
 	viper.SetDefault("aws-region", "ap-south-1")
 	viper.SetDefault("dest", os.TempDir())
+	viper.SetDefault("is-plagiarised-comment-id", 12345)
 }
 
 // initConfig reads in config file and ENV variables if set.
