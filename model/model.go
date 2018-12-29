@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/xml"
+	"errors"
 	"extract-blocks/s3"
 	"fmt"
 	"path"
@@ -120,8 +121,8 @@ type Question struct {
 	AnswerExplanation  sql.NullString `gorm:"column:AnswerExplanation;type:text"`
 	MaxScore           float32        `gorm:"column:MaxScore;type:float;not null"`
 	AuthorUserID       int            `gorm:"column:AuthorUserID;not null"`
-	WasCompared        bool           `gorm:"type:tinyint(1)"`
-	IsProcessed        bool           `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
+	WasCompared        bool
+	IsProcessed        bool `gorm:"column:IsProcessed;default:0"`
 	Source             Source
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
@@ -1500,8 +1501,8 @@ type MySQLQuestion struct {
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
-	WasCompared        bool                `gorm:"type:tinyint(1);default:0"`
-	IsProcessed        bool                `gorm:"column:IsProcessed;type:tinyint(1);default:0"`
+	WasCompared        bool                `gorm:"default:0"`
+	IsProcessed        bool                `gorm:"column:IsProcessed;default:0"`
 	Source             Source              `gorm:"ForeignKey:FileID"`
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
@@ -1530,9 +1531,9 @@ func (Comment) TableName() string {
 // BlockCommentMapping - block-comment mapping
 type BlockCommentMapping struct {
 	Block     Block
-	BlockID   int `gorm:"column:ExcelBlockID;type:int unsigned"`
+	BlockID   int `gorm:"column:ExcelBlockID"`
 	Comment   Comment
-	CommentID int `gorm:"column:ExcelCommentID;type:int unsigned"`
+	CommentID int `gorm:"column:ExcelCommentID"`
 }
 
 // TableName overrides default table name for the model
@@ -1556,9 +1557,9 @@ func (AnswerComment) TableName() string {
 // QuestionAssignment - question-assignment mapping
 type QuestionAssignment struct {
 	Assignment   Assignment
-	AssignmentID int `gorm:"column:AssignmentID;type:int unsigned"`
+	AssignmentID int `gorm:"column:AssignmentID"`
 	Question     Question
-	QuestionID   int `gorm:"column:QuestionID;type:int unsigned"`
+	QuestionID   int `gorm:"column:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -1623,13 +1624,10 @@ func SetDb() {
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
-
-		Db.LogMode(true)
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
-		Db.LogMode(false)
 	}
 }
 
@@ -1811,13 +1809,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	if len(answerIDs) > 0 {
 		answerID = answerIDs[0]
 	} else {
-		log.Errorln("Missing AnswerID.")
+		err = errors.New("Missing AnswerID")
 		return
 	}
 	res := Db.First(&answer, answerID)
 	if res.RecordNotFound() {
 		err = fmt.Errorf("Answer (ID: %d) not found", answerID)
-		log.Error(err.Error())
 		return
 	}
 
@@ -1825,18 +1822,17 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	if err != nil {
 		log.WithError(err).Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt.",
 			fileName, answerID)
-		err = Db.Model(&answer).Updates(map[string]interface{}{
+
+		if err := Db.Model(&answer).Updates(map[string]interface{}{
 			"was_xl_processed": 0,
 			"FileID":           gorm.Expr("NULL"),
-		}).Error
-		if err != nil {
-			log.WithError(err).Errorf("Failed to update the answer entry.")
+		}).Error; err != nil {
+			log.WithError(err).Errorln("Failed to update the answer entry.")
 		}
 		return
 	}
 
-	var result *gorm.DB
-	result = Db.First(&wb, Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)})
+	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)})
 	if !result.RecordNotFound() {
 		if !force {
 			log.Errorf("File %q was already processed.", fileName)
@@ -1846,33 +1842,38 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		if !DryRun {
 			wb.Reset()
 		}
-	} else if !DryRun {
+	} else if result.RecordNotFound() {
+		if !DryRun {
 
-		wb = Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)}
-		result = Db.Create(&wb)
-		if result.Error != nil {
-			log.Fatalf("Failed to create workbook entry %#v: %s", wb, result.Error.Error())
+			wb = Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)}
+
+			if err = Db.Create(&wb).Error; err != nil {
+				log.WithError(err).Errorf("Failed to create workbook entry %#v", wb)
+				return
+			}
+			if DebugLevel > 1 {
+				log.Debugf("Ceated workbook entry %#v", wb)
+			}
 		}
-		if DebugLevel > 1 {
-			log.Debugf("Ceated workbook entry %#v", wb)
-		}
+	} else if err = result.Error; err != nil {
+		return
 	}
 
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
 	var q Question
-	result = Db.
+	err = Db.
 		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
 		Where("StudentAnswers.StudentAnswerID = ?", answerID).
 		Order("Questions.reference_id DESC").
-		First(&q)
-	if result.Error != nil {
-		log.Error(result.Error)
+		First(&q).Error
+	if err != nil {
+		log.WithError(err).Errorln("Failed to retrieve the question entry for the answer ID: ", answerID)
 		return
 	}
 	if verbose {
-		log.Infof("*** Processing the answer ID:%d for the queestion %s", answerID, q)
+		log.Infof("*** Processing the answer ID: %d for the queestion %s", answerID, q)
 	}
 
 	for orderNum, sheet := range file.Sheets {
@@ -1889,35 +1890,38 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		var ws Worksheet
 		var references []Block
 		if !DryRun {
-			Db.FirstOrCreate(&ws, Worksheet{
+			err = Db.FirstOrCreate(&ws, Worksheet{
 				Name:             sheet.Name,
 				WorkbookID:       wb.ID,
 				WorkbookFileName: wb.FileName,
 				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
-			})
-		}
-		if Db.Error != nil {
-			log.Fatalf("*** Failed to create worksheet entry: %s", Db.Error.Error())
+			}).Error
+			if err != nil {
+				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
+			}
 		}
 
+		// Attempt to use reference blocks for the answer if it's given:
 		if q.ReferenceID.Valid {
-			// Attempt to use reference blocks for the answer:
-			result = Db.
+			err = Db.
 				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
 				Where("ExcelBlocks.is_reference").
 				Where("WorkSheets.workbook_id = ?", q.ReferenceID).
 				Where("WorkSheets.order_num = ?", orderNum).
-				Find(&references)
-			if result.Error != nil {
-				log.Error(result.Error)
+				Find(&references).Error
+			if err != nil {
+				log.WithError(err).Errorln("Failed to fetch reference blocks for the question:", q)
 				continue
 			}
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
+				if verbose {
+					log.Info("Attempt to use a reference block: ", rb)
+				}
 				err = ws.FindBlocksInside(sheet, rb)
 				if err != nil {
-					log.Errorln(err)
+					log.WithError(err).Errorln("Failed to find the blocks using the reference block: ", rb)
 				}
 			}
 		} else {
@@ -2158,11 +2162,11 @@ type XLQTransformation struct {
 	ID            int
 	CellReference string    `gorm:"type:varchar(10);not null"`
 	TimeStamp     time.Time `gorm:"not null"`
-	UserID        int       `gorm:"column:UserID;type:int unsigned;not null;index"`
+	UserID        int       `gorm:"column:UserID;not null;index"`
 	Question      Question
-	QuestionID    int `gorm:"column:QuestionID;type:int unsigned;not null;index"`
+	QuestionID    int `gorm:"column:QuestionID;not null;index"`
 	Source        Source
-	SourceID      int `gorm:"column:FileID;type:int unsigned;not null;index"`
+	SourceID      int `gorm:"column:FileID;not null;index"`
 }
 
 // TableName overrides default table name for the model
@@ -2252,7 +2256,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		for _, a := range t.Question.Answers {
 			for _, ws := range a.Worksheets {
 				value := file.GetCellValue(ws.Name, t.CellReference)
-				ws.IsPlagiarised = (value == keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
+				ws.IsPlagiarised = (value != keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
 				Db.Save(&ws)
 			}
 		}

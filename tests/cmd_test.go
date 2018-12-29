@@ -231,8 +231,9 @@ func createTestDB() *gorm.DB {
 
 	deleteData()
 	//db.LogMode(true)
-	db.Create(&model.User{ID: 4951})
-	db.Create(&model.User{ID: 4952})
+	for _, uid := range []int{4951, 4952, 4953} {
+		db.Create(&model.User{ID: uid})
+	}
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -273,10 +274,10 @@ func createTestDB() *gorm.DB {
 				RCol:        12,
 				IsReference: true,
 			})
-			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2018")
+			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2042")
 			db.Create(&model.XLQTransformation{
 				CellReference: "AT9013",
-				UserID:        4952,
+				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
 				SourceID:      f.ID,
@@ -561,7 +562,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
 	// if !ws.IsPlagiarised.Bool {
 	if !ws.IsPlagiarised {
-		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
 	}
 	// Auto-commenting
 	db.LogMode(true)
@@ -597,6 +598,62 @@ func TestProcessing(t *testing.T) {
 	t.Run("CWA175", testCWA175)
 	t.Run("ImportWorksheets", testImportWorksheets)
 	t.Run("POI", testPOI)
+	t.Run("FullCycle", testFullCycle)
+}
+
+func testFullCycle(t *testing.T) {
+
+	for _, r := range []struct {
+		questionFileName, anserFileName, cr, ts string
+		uid                                     int
+	}{
+		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951},
+		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952},
+		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953},
+	} {
+
+		qf := model.Source{
+			FileName:     r.questionFileName,
+			S3BucketName: "studentanswers",
+			S3Key:        r.questionFileName,
+		}
+		db.Create(&qf)
+		q := model.Question{
+			SourceID:     model.NewNullInt64(qf.ID),
+			QuestionType: model.QuestionType("FileUpload"),
+			QuestionText: r.questionFileName,
+			MaxScore:     1010.88,
+			AuthorUserID: 123456789,
+			WasCompared:  false,
+		}
+		if err := db.Create(&q).Error; err != nil {
+			t.Error(err)
+		}
+		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+		// answer
+		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
+		db.Create(&af)
+		a := model.Answer{
+			SourceID:       model.NewNullInt64(af.ID),
+			QuestionID:     model.NewNullInt64(q.ID),
+			SubmissionTime: *parseTime("2018-09-30 12:42"),
+		}
+		db.Create(&a)
+		db.Create(&model.XLQTransformation{
+			CellReference: r.cr,
+			UserID:        r.uid,
+			TimeStamp:     *parseTime(r.ts),
+			QuestionID:    q.ID,
+			SourceID:      af.ID,
+		})
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+	}
+
+	// var ws model.Worksheet
+	// db.Where("workbook_file_name = ?", fileName).First(&ws)
+	// if !ws.IsPlagiarised {
+	// 	t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+	// }
 }
 
 func testPOI(t *testing.T) {
@@ -630,7 +687,7 @@ func testPOI(t *testing.T) {
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
 	db.Create(&a)
-	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2018")
+	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2088")
 	db.Create(&model.XLQTransformation{
 		CellReference: "KE4423",
 		UserID:        4951,
@@ -643,7 +700,7 @@ func testPOI(t *testing.T) {
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", fileName).First(&ws)
 	if !ws.IsPlagiarised {
-		t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
 	}
 }
 

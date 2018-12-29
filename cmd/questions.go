@@ -53,41 +53,42 @@ func HandleQuestions(manager s3.FileManager) error {
 
 	rows, err := model.QuestionsToProcess()
 	if err != nil {
-		log.Fatalf("Failed to retrieve list of question source files to process: %s",
-			err.Error())
+		log.WithError(err).Fatalf("Failed to retrieve list of question source files to process.")
 	}
 	var fileCount int
 	for _, q := range rows {
-		result := Db.Where("QuestionID = ?", q.ID).Delete(&model.QuestionExcelData{})
-		if result.Error != nil {
-			log.Error(result.Error)
+		if err := Db.Where("QuestionID = ?", q.ID).Delete(&model.QuestionExcelData{}).Error; err != nil {
+			log.WithError(err).Errorln("Failed to delete existing question data of the qustion: ", q)
 		}
 		var s model.Source
-		Db.Model(&q).Related(&s, "FileID")
+		if err := Db.Model(&q).Related(&s, "FileID").Error; err != nil {
+			log.WithError(err).Errorln("Failed to retrieve source file data entry for the question: ", q)
+			continue
+		}
 		fileName, err := s.DownloadTo(manager, dest)
 		if err != nil {
-			log.Error(err)
+			log.WithError(err).Errorln("Failed to download the file: ", s)
 			continue
 		}
 		log.Infof("Processing %q", fileName)
-		err = q.ImportFile(fileName, color, verbose)
-		if err != nil {
-			log.Errorf(
-				"Failed to import %q for the question %#v: %s", fileName, q, Db.Error)
+
+		if err := q.ImportFile(fileName, color, verbose); err != nil {
+			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, q)
 			continue
 		}
 		q.IsProcessed = true
-		Db.Save(&q)
-		if Db.Error != nil {
-			log.Errorf(
-				"Failed update question entry %#v for %q: %s", q, fileName, Db.Error.Error())
+
+		if err := Db.Save(&q).Error; err != nil {
+			log.WithError(err).Errorf("Failed update question entry %#v for %q.", q, fileName)
 			continue
 		}
 		fileCount++
 	}
-	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
-	if len(rows) != fileCount {
-		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
+	log.WithField("filecount", fileCount).
+		Infof("Downloaded and loaded %d Excel files.", fileCount)
+	if missedCount := len(rows) - fileCount; missedCount > 0 {
+		log.WithField("missed", missedCount).
+			Infof("Failed to download and load %d file(s)", missedCount)
 	}
 	return nil
 }

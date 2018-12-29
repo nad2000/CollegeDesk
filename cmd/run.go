@@ -106,14 +106,13 @@ func HandleAnswers(manager s3.FileManager) error {
 
 	rows, err := model.RowsToProcess()
 	if err != nil {
-		log.Fatalf("Failed to retrieve list of source files to process: %s", err.Error())
+		log.WithError(err).Fatalf("Failed to retrieve list of source files to process.")
 	}
 	var fileCount int
 	for _, r := range rows {
 		var a model.Answer
-		err = Db.First(&a, r.StudentAnswerID).Error
-		if err != nil {
-			log.Error(err)
+		if err := Db.First(&a, r.StudentAnswerID).Error; err != nil {
+			log.WithError(err).Error("Failded to retrieve the answer entry with ID: ", r.StudentAnswerID)
 			continue
 		}
 		destinationName := path.Join(dest, r.FileName)
@@ -123,19 +122,21 @@ func HandleAnswers(manager s3.FileManager) error {
 		fileName, err := manager.Download(
 			r.FileName, r.S3BucketName, r.S3Key, destinationName)
 		if err != nil {
-			log.Errorf(
-				"Failed to retrieve file %q from %q into %q: %s",
-				r.S3Key, r.S3BucketName, destinationName, err.Error())
+			log.WithError(err).Errorf(
+				"Failed to retrieve file %q from %q into %q",
+				r.S3Key, r.S3BucketName, destinationName)
 			continue
 		}
 		log.Infof("Processing %q", fileName)
-		model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID)
-
-		fileCount++
+		if _, err := model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID); err != nil {
+			log.WithError(err).Errorln("Failed to process file: ", fileName)
+		} else {
+			fileCount++
+		}
 	}
 	log.Infof("Downloaded and loaded %d Excel files.", fileCount)
-	if len(rows) != fileCount {
-		log.Infof("Failed to download and load %d file(s)", len(rows)-fileCount)
+	if missed := len(rows) - fileCount; missed > 0 {
+		log.WithField("missed", missed).Infof("Failed to download and load %d file(s)", missed)
 	}
 	return nil
 }
