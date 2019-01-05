@@ -758,7 +758,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 							WorksheetID:     ws.ID,
 							Range:           colName,
 							Formula:         f.Operator,
-							RelativeFormula: f.Value,
+							RelativeFormula: f.RelativeFormula(),
 							FilterID:        NewNullInt64(f.ID),
 						})
 					}
@@ -801,7 +801,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 							WorksheetID:     ws.ID,
 							Range:           colName,
 							Formula:         f.Operator,
-							RelativeFormula: f.Value,
+							RelativeFormula: f.RelativeFormula(),
 							FilterID:        NewNullInt64(f.ID),
 						})
 					}
@@ -816,7 +816,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				WorksheetID:     ws.ID,
 				Range:           colName,
 				Formula:         filter.Operator,
-				RelativeFormula: filter.Value,
+				RelativeFormula: filter.RelativeFormula(),
 				FilterID:        NewNullInt64(filter.ID),
 			})
 			for _, dgi := range fc.Filters.DateGroupItem {
@@ -2063,6 +2063,14 @@ type Filter struct {
 // TableName overrides default table name for the model
 func (Filter) TableName() string {
 	return "Filters"
+}
+
+// RelativeFormula gets the value that should be inserted into the linked Block:
+func (f *Filter) RelativeFormula() (rf string) {
+	if f.Value != "" {
+		rf = "(" + f.Operator + "," + f.Value + ")"
+	}
+	return
 }
 
 // DateGroupItem - data group
