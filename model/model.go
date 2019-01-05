@@ -2206,11 +2206,10 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 		Or("was_autocommented IS NULL").Find(&answers)
 	for _, a := range answers {
 		for _, w := range a.Worksheets {
-			for _, c := range w.Cells {
+			for i, c := range w.Cells {
 				if w.IsPlagiarised {
 					Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
-					c.CommentID = NewNullInt64(isPlagiarisedCommentID)
-					Db.Save(&c)
+					w.Cells[i].CommentID = NewNullInt64(isPlagiarisedCommentID)
 
 				} else if c.AutoEvaluation != nil {
 					if c.AutoEvaluation.IsValueCorrect {
@@ -2226,8 +2225,7 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 					}
 					Db.Create(&comment)
 					Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
-					c.CommentID = NewNullInt64(comment.ID)
-					Db.Save(&c)
+					w.Cells[i].CommentID = NewNullInt64(comment.ID)
 				}
 			}
 			a.WasAutocommented = true

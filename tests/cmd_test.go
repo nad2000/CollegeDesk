@@ -606,10 +606,11 @@ func testFullCycle(t *testing.T) {
 	for _, r := range []struct {
 		questionFileName, anserFileName, cr, ts string
 		uid                                     int
+		isPlagiarised                           bool
 	}{
-		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951},
-		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952},
-		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953},
+		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
+		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952, true},
+		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953, true},
 	} {
 
 		qf := model.Source{
@@ -647,13 +648,30 @@ func testFullCycle(t *testing.T) {
 			SourceID:      af.ID,
 		})
 		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		// Test if is marked plagiarised:
+		{
+			var ws model.Worksheet
+			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
+			if ws.IsPlagiarised != r.isPlagiarised {
+				t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+			}
+		}
 	}
 
-	// var ws model.Worksheet
-	// db.Where("workbook_file_name = ?", fileName).First(&ws)
-	// if !ws.IsPlagiarised {
-	// 	t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
-	// }
+	// Auto-commenting
+	db.LogMode(true)
+	var cells []model.Cell
+	db.Find(&cells)
+	for i, c := range cells {
+		switch i % 3 {
+		case 0:
+			db.Create(&model.AutoEvaluation{IsValueCorrect: false, CellID: c.ID})
+		case 1:
+			db.Create(&model.AutoEvaluation{IsValueCorrect: true, CellID: c.ID})
+		}
+	}
+	model.AutoCommentAnswerCells(12345)
+	db.LogMode(false)
 }
 
 func testPOI(t *testing.T) {
