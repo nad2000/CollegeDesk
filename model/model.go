@@ -747,8 +747,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 						Db.Create(f)
 						ws.AddAuxBlock(&Block{
 							Range:           colName,
-							Formula:         f.Operator,
-							RelativeFormula: f.RelativeFormula(),
+							RelativeFormula: f.Formula(),
 							FilterID:        NewNullInt64(f.ID),
 						})
 					}
@@ -788,10 +787,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					if i > 0 {
 						Db.Create(f)
 						ws.AddAuxBlock(&Block{
-							Range:           colName,
-							Formula:         f.Operator,
-							RelativeFormula: f.RelativeFormula(),
-							FilterID:        NewNullInt64(f.ID),
+							Range:    colName,
+							Formula:  f.Formula(),
+							FilterID: NewNullInt64(f.ID),
 						})
 					}
 				}
@@ -802,10 +800,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Db.LogMode(true)
 			Db.Create(&filter)
 			ws.AddAuxBlock(&Block{
-				Range:           colName,
-				Formula:         filter.Operator,
-				RelativeFormula: filter.RelativeFormula(),
-				FilterID:        NewNullInt64(filter.ID),
+				Range:    colName,
+				Formula:  filter.Formula(),
+				FilterID: NewNullInt64(filter.ID),
 			})
 			for _, dgi := range fc.Filters.DateGroupItem {
 				item := DateGroupItem{
@@ -2062,8 +2059,8 @@ func (Filter) TableName() string {
 	return "Filters"
 }
 
-// RelativeFormula gets the value that should be inserted into the linked Block:
-func (f *Filter) RelativeFormula() (rf string) {
+// Formula gets the value that should be inserted into the linked Block:
+func (f *Filter) Formula() (rf string) {
 	if f.Value != "" {
 		rf = "(" + f.Operator + "," + f.Value + ")"
 	}
