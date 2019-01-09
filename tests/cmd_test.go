@@ -659,7 +659,6 @@ func testFullCycle(t *testing.T) {
 	}
 
 	// Auto-commenting
-	db.LogMode(true)
 	var cells []model.Cell
 	db.Find(&cells)
 	for i, c := range cells {
@@ -671,7 +670,16 @@ func testFullCycle(t *testing.T) {
 		}
 	}
 	model.AutoCommentAnswerCells(12345)
-	db.LogMode(false)
+
+	var count int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&count).Error; err != nil {
+		t.Error(err)
+	}
+	if expected := len(cells) * 2 / 3; count != expected {
+		t.Errorf(
+			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
+			expected, count)
+	}
 }
 
 func testPOI(t *testing.T) {
