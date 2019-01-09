@@ -669,16 +669,20 @@ func testFullCycle(t *testing.T) {
 			db.Create(&model.AutoEvaluation{IsValueCorrect: true, CellID: c.ID})
 		}
 	}
-	model.AutoCommentAnswerCells(12345)
-
-	var count int
-	if err := db.Model(&model.AutoEvaluation{}).Count(&count).Error; err != nil {
+	var count_before int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&count_before).Error; err != nil {
 		t.Error(err)
 	}
-	if expected := len(cells) * 2 / 3; count != expected {
+	model.AutoCommentAnswerCells(12345)
+
+	var count_after int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&count_after).Error; err != nil {
+		t.Error(err)
+	}
+	if count_after != count_before {
 		t.Errorf(
 			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
-			expected, count)
+			count_before, count_after)
 	}
 }
 
