@@ -374,8 +374,8 @@ type Answer struct {
 	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
-	WasCommentProcessed uint8         `gorm:"type:tinyint;default:0"`
-	WasXLProcessed      uint8         `gorm:"type:tinyint;default:0"`
+	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
+	WasXLProcessed      uint8         `gorm:"type:tinyint(1);default:0"`
 	WasAutocommented    bool
 	AnswerComments      []AnswerComment `gorm:"ForeignKey:AnswerID"`
 }
@@ -1512,7 +1512,7 @@ func (MySQLQuestion) TableName() string {
 type Comment struct {
 	ID              int                   `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
 	Text            string                `gorm:"column:CommentText"`
-	Marks           sql.NullFloat64       `gorm:"column:Marks;type:float"`
+	Marks           float64               `gorm:"column:Marks;type:float"`
 	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelCommentID"`
 	AnswerComments  []AnswerComment       `gorm:"ForeignKey:CommentID"`
 }
@@ -2201,11 +2201,15 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 		Db.Create(&Comment{ID: isPlagiarisedCommentID})
 	}
 
-	Db.Preload("Worksheets").
+	err := Db.Preload("Worksheets").
 		Preload("Worksheets.Cells").
 		Preload("Worksheets.Cells.AutoEvaluation").
 		Where("was_autocommented = ?", 0).
-		Or("was_autocommented IS NULL").Find(&answers)
+		Or("was_autocommented IS NULL").Find(&answers).Error
+	if err != nil {
+		log.WithError(err).Errorln("Failed to retrieve the answers to autocomment...")
+		return
+	}
 	for _, a := range answers {
 		for _, w := range a.Worksheets {
 			for i, c := range w.Cells {
@@ -2217,12 +2221,12 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 					if c.AutoEvaluation.IsValueCorrect {
 						comment = Comment{
 							Text:  "Answer is correct",
-							Marks: sql.NullFloat64{Float64: 1.0, Valid: true},
+							Marks: 1.0,
 						}
 					} else {
 						comment = Comment{
 							Text:  "Answer is wrong",
-							Marks: sql.NullFloat64{Float64: 0.0, Valid: true},
+							Marks: 0.0,
 						}
 					}
 					Db.Create(&comment)
