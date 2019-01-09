@@ -1425,10 +1425,10 @@ type Cell struct {
 	Formula        string
 	Value          string `gorm:"size:2000"`
 	Comment        Comment
-	CommentID      sql.NullInt64 `gorm:"column:CommentID;type:int"`
-	Row            int           `gorm:"index"`
-	Col            int           `gorm:"index"`
-	AutoEvaluation *AutoEvaluation
+	CommentID      sql.NullInt64   `gorm:"column:CommentID;type:int"`
+	Row            int             `gorm:"index"`
+	Col            int             `gorm:"index"`
+	AutoEvaluation *AutoEvaluation `gorm:"save_associations:false"`
 }
 
 // TableName overrides default table name for the model
