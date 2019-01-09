@@ -625,20 +625,13 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 					}
 					for _, p := range properties {
 						block := Block{
-							WorksheetID: ws.ID,
-							Range:       p.Name,
-							Formula:     p.Value,
+							Range:   p.Name,
+							Formula: p.Value,
 							RelativeFormula: CellAddress(
 								drawing.FromRow+propCount, drawing.ToCol+2),
 							ChartID: chartID,
 						}
-						Db.Create(&block)
-						Db.Create(&Cell{
-							Block:       block,
-							WorksheetID: ws.ID,
-							Range:       block.Range,
-							Formula:     block.Formula,
-						})
+						ws.AddAuxBlock(&block)
 						propCount++
 					}
 				}
@@ -703,9 +696,8 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				IconID:       sc.IconId,
 			}
 			Db.Create(&sorting)
-			Db.Create(&Block{
-				WorksheetID: ws.ID,
-				Range:       sc.Ref,
+			ws.AddAuxBlock(&Block{
+				Range: sc.Ref,
 				Formula: joinStr(",",
 					sorting.Method,
 					sorting.Type,
@@ -725,10 +717,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Range:       af.Ref,
 		}
 		Db.Create(&ds)
-		Db.Create(&Block{
-			WorksheetID: ws.ID,
-			Range:       "FilterSource",
-			Formula:     af.Ref,
+		ws.AddAuxBlock(&Block{
+			Range:   "FilterSource",
+			Formula: af.Ref,
 		})
 
 		for _, fc := range af.FilterColumn {
@@ -757,11 +748,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					f.Value = ff.Val
 					if i > 0 {
 						Db.Create(f)
-						Db.Create(&Block{
-							WorksheetID:     ws.ID,
+						ws.AddAuxBlock(&Block{
 							Range:           colName,
-							Formula:         f.Operator,
-							RelativeFormula: f.Value,
+							RelativeFormula: f.Formula(),
 							FilterID:        NewNullInt64(f.ID),
 						})
 					}
@@ -800,12 +789,10 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					f.Value = cf.Val
 					if i > 0 {
 						Db.Create(f)
-						Db.Create(&Block{
-							WorksheetID:     ws.ID,
-							Range:           colName,
-							Formula:         f.Operator,
-							RelativeFormula: f.Value,
-							FilterID:        NewNullInt64(f.ID),
+						ws.AddAuxBlock(&Block{
+							Range:    colName,
+							Formula:  f.Formula(),
+							FilterID: NewNullInt64(f.ID),
 						})
 					}
 				}
@@ -814,12 +801,10 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				filter.Value = fc.DynamicFilter.Val
 			}
 			Db.Create(&filter)
-			Db.Create(&Block{
-				WorksheetID:     ws.ID,
-				Range:           colName,
-				Formula:         filter.Operator,
-				RelativeFormula: filter.Value,
-				FilterID:        NewNullInt64(filter.ID),
+			ws.AddAuxBlock(&Block{
+				Range:    colName,
+				Formula:  filter.Formula(),
+				FilterID: NewNullInt64(filter.ID),
 			})
 			for _, dgi := range fc.Filters.DateGroupItem {
 				item := DateGroupItem{
@@ -840,8 +825,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				case "day":
 					date = dgi.Year + "/" + dgi.Month + "/" + dgi.Day
 				}
-				Db.Create(&Block{
-					WorksheetID:     ws.ID,
+				ws.AddAuxBlock(&Block{
 					Range:           colName,
 					Formula:         item.Grouping,
 					RelativeFormula: date,
@@ -861,10 +845,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Range:       pcd.CacheSource.WorksheetSource.Ref,
 		}
 		Db.Create(&ds)
-		Db.Create(&Block{
-			WorksheetID: ws.ID,
-			Range:       "PivotSource",
-			Formula:     ds.Range,
+		ws.AddAuxBlock(&Block{
+			Range:   "PivotSource",
+			Formula: ds.Range,
 		})
 		log.Info(ptd.XMLName)
 		if ptd.PivotFields.Count >= "0" {
@@ -921,11 +904,10 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				}
 
 				Db.Create(&rec)
-				Db.Create(&Block{
-					WorksheetID: ws.ID,
-					Range:       blockCellRange,
-					Formula:     label,
-					PivotID:     NewNullInt64(rec.ID),
+				ws.AddAuxBlock(&Block{
+					Range:   blockCellRange,
+					Formula: label,
+					PivotID: NewNullInt64(rec.ID),
 				})
 			}
 		}
@@ -938,8 +920,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Range:       cf.Sqref,
 		}
 		Db.Create(&ds)
-		Db.Create(&Block{
-			WorksheetID:  ws.ID,
+		ws.AddAuxBlock(&Block{
 			Range:        "CFSource",
 			Formula:      ds.Range,
 			DataSourceID: NewNullInt64(ds.ID),
@@ -996,8 +977,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				Formula3:     formula3,
 			}
 			Db.Create(&rec)
-			Db.Create(&Block{
-				WorksheetID:  ws.ID,
+			ws.AddAuxBlock(&Block{
 				Range:        rec.Type,
 				Formula:      joinStr(",", operator, formula1, formula2, formula3),
 				DataSourceID: NewNullInt64(ds.ID),
@@ -1039,6 +1019,20 @@ type Worksheet struct {
 // TableName overrides default table name for the model
 func (Worksheet) TableName() string {
 	return "WorkSheets"
+}
+
+// AddAuxBlock creates a block with an auxilary cell entry
+// related to the whorksheet data entry.
+func (ws *Worksheet) AddAuxBlock(b *Block) {
+	b.WorksheetID = ws.ID
+	Db.Create(b)
+	c := Cell{
+		BlockID:     b.ID,
+		WorksheetID: b.WorksheetID,
+		Range:       b.Range,
+		Formula:     b.Formula,
+	}
+	Db.Create(&c)
 }
 
 // BlockCommentRow - a block comment row
@@ -2091,6 +2085,14 @@ type Filter struct {
 // TableName overrides default table name for the model
 func (Filter) TableName() string {
 	return "Filters"
+}
+
+// Formula gets the value that should be inserted into the linked Block:
+func (f *Filter) Formula() (rf string) {
+	if f.Value != "" {
+		rf = "(" + f.Operator + "," + f.Value + ")"
+	}
+	return
 }
 
 // DateGroupItem - data group

@@ -67,7 +67,7 @@ func NewManagerWithCredentials(accessKeyID, secretAccessKey, region string) Mana
 	m := Manager{}
 	sess, err := newAwsSession(accessKeyID, secretAccessKey, region)
 	if err != nil {
-		log.Errorln("Failed to connect to AWS: ", err.Error())
+		log.WithError(err).Errorln("Failed to connect to AWS.")
 	}
 	m.s3Downloader = s3manager.NewDownloader(sess)
 	m.s3Uploader = s3manager.NewUploader(sess)
