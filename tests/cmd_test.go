@@ -186,6 +186,7 @@ func deleteData() {
 	}
 	for _, m := range []interface{}{
 		&model.XLQTransformation{},
+		&model.StudentAssignment{},
 		&model.Cell{},
 		&model.Block{},
 		&model.Chart{},
@@ -193,6 +194,7 @@ func deleteData() {
 		&model.AnswerComment{},
 		&model.QuestionExcelData{},
 		&model.QuestionAssignment{},
+		&model.Assignment{},
 		&model.Worksheet{},
 		&model.Workbook{},
 		&model.Question{},
@@ -611,6 +613,11 @@ func TestProcessing(t *testing.T) {
 
 func testFullCycle(t *testing.T) {
 
+	assignment := model.Assignment{
+		Title: "Full Cycel Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
 	for _, r := range []struct {
 		questionFileName, anserFileName, cr, ts string
 		uid                                     int
@@ -639,13 +646,19 @@ func testFullCycle(t *testing.T) {
 			t.Error(err)
 		}
 		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+		sa := model.StudentAssignment{
+			UserID:       r.uid,
+			AssignmentID: assignment.ID,
+		}
+		db.Create(&sa)
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
 		db.Create(&af)
 		a := model.Answer{
-			SourceID:       model.NewNullInt64(af.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-30 12:42"),
+			SourceID:            model.NewNullInt64(af.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-30 12:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
 		db.Create(&model.XLQTransformation{
@@ -676,20 +689,20 @@ func testFullCycle(t *testing.T) {
 			db.Create(&model.AutoEvaluation{IsValueCorrect: true, CellID: c.ID})
 		}
 	}
-	var count_before int
-	if err := db.Model(&model.AutoEvaluation{}).Count(&count_before).Error; err != nil {
+	var countBefore int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
 		t.Error(err)
 	}
 	model.AutoCommentAnswerCells(12345)
 
-	var count_after int
-	if err := db.Model(&model.AutoEvaluation{}).Count(&count_after).Error; err != nil {
+	var countAfter int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
 		t.Error(err)
 	}
-	if count_after != count_before {
+	if countAfter != countBefore {
 		t.Errorf(
 			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
-			count_before, count_after)
+			countBefore, countAfter)
 	}
 }
 
