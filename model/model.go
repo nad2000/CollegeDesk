@@ -364,7 +364,7 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 type Answer struct {
 	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
 	Assignment          Assignment
-	AssignmentID        int           `gorm:"column:StudentAssignmentID"`
+	StudentAssignmentID int           `gorm:"column:StudentAssignmentID"`
 	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
 	Marks               float64       `gorm:"column:Marks;type:float"`
@@ -404,6 +404,20 @@ type Assignment struct {
 // TableName overrides default table name for the model
 func (Assignment) TableName() string {
 	return "CourseAssignments"
+}
+
+// StudentAssignment - stuendent assigment
+type StudentAssignment struct {
+	ID           int `gorm:"column:StudentAssignmentID;primary_key:true;AUTO_INCREMENT"`
+	UserID       int `gorm:"column:UserID;type:int"`
+	User         User
+	AssignmentID int `gorm:"column:AssignmentID"`
+	Assignment   Assignment
+}
+
+// TableName overrides default table name for the model
+func (StudentAssignment) TableName() string {
+	return "StudentAssignments"
 }
 
 // Workbook - Excel file / workbook
@@ -1591,6 +1605,7 @@ func SetDb() {
 	Db.AutoMigrate(&Comment{})
 	Db.AutoMigrate(&BlockCommentMapping{})
 	Db.AutoMigrate(&Assignment{})
+	Db.AutoMigrate(&StudentAssignment{})
 	Db.AutoMigrate(&QuestionAssignment{})
 	Db.AutoMigrate(&AnswerComment{})
 	Db.AutoMigrate(&XLQTransformation{})
@@ -1620,8 +1635,10 @@ func SetDb() {
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
-		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		// Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
+		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
+		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -2167,8 +2184,8 @@ type XLQTransformation struct {
 	UserID        int       `gorm:"column:UserID;not null;index"`
 	Question      Question
 	QuestionID    int `gorm:"column:QuestionID;not null;index"`
-	Source        Source
-	SourceID      int `gorm:"column:FileID;not null;index"`
+	// Source        Source
+	// SourceID      int `gorm:"column:FileID;not null;index"`
 }
 
 // TableName overrides default table name for the model
@@ -2244,16 +2261,24 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 // in SpreadsheetTransformationTable (NB! the worksheets should be already imported)
 func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 	var transformations []XLQTransformation
-	Db.Joins(`JOIN StudentAnswers AS a 
-		ON a.QuestionID = XLQTransformation.QuestionID
-			AND a.FileID = XLQTransformation.FileID`).
-		Joins("JOIN WorkSheets AS s ON s.StudentAnswerID = a.StudentAnswerID").
+	err := Db.
+		Joins("JOIN StudentAssignments AS sa ON sa.UserID = XLQTransformation.UserID").
+		Joins(`JOIN StudentAnswers AS a ON 
+			a.QuestionID = XLQTransformation.QuestionID AND 
+			a.StudentAssignmentID = sa.StudentAssignmentID`).
+		Joins("JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID").
 		Preload("Question").
 		Preload("Question.Answers").
 		Preload("Question.Answers.Worksheets").
 		// Where("s.is_plagiarised IS NULL").
 		Where("a.StudentAnswerID = ?", wb.AnswerID).
-		Find(&transformations)
+		Find(&transformations).Error
+	if err != nil {
+		log.WithError(err).Errorln(
+			"Failed to get XLQTransformation entries for the workbook: ",
+			*wb)
+		return
+	}
 
 	for _, t := range transformations {
 		keyValue := t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)

@@ -230,10 +230,19 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	//db.LogMode(true)
 	for _, uid := range []int{4951, 4952, 4953} {
 		db.Create(&model.User{ID: uid})
 	}
+	assignment := model.Assignment{
+		Title: "Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{
+		UserID:       4951,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -253,10 +262,15 @@ func createTestDB() *gorm.DB {
 			WasCompared:      true,
 		}
 		db.Create(&q)
+		db.Create(&model.QuestionAssignment{
+			QuestionID:   q.ID,
+			AssignmentID: assignment.ID,
+		})
 		db.Create(&model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2017-01-01 14:42"),
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			StudentAssignmentID: sa.ID,
+			SubmissionTime:      *parseTime("2017-01-01 14:42"),
 		})
 		if fn == "Sample-poi-file.xlsx" {
 			rwb := model.Workbook{IsReference: true}
@@ -280,7 +294,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
-				SourceID:      f.ID,
+				// SourceID:      f.ID,
 			})
 		}
 	}
@@ -289,7 +303,6 @@ func createTestDB() *gorm.DB {
 	db.Create(&ignore)
 	db.Create(&model.Answer{SourceID: model.NewNullInt64(ignore.ID), SubmissionTime: *parseTime("2017-01-01 14:42")})
 
-	//db.LogMode(true)
 	var fileID int
 	db.DB().QueryRow("SELECT MAX(FileID)+1 AS FileID FROM FileSources").Scan(&fileID)
 	for i := fileID + 1; i < fileID+10; i++ {
@@ -414,7 +427,6 @@ func testHandleNotcolored(t *testing.T) {
 		db.Create(&f)
 		a := model.Answer{
 			SourceID:       model.NewNullInt64(f.ID),
-			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
 		}
@@ -454,7 +466,6 @@ func testHandleNotcolored(t *testing.T) {
 	db.Create(&f)
 	a = model.Answer{
 		SourceID:       model.NewNullInt64(f.ID),
-		AssignmentID:   assignment.ID,
 		QuestionID:     model.NewNullInt64(q.ID),
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
@@ -498,7 +509,6 @@ func testHandleNotcoloredQ3(t *testing.T) {
 	} {
 		a = model.Answer{
 			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
-			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-30 12:42"),
 		}
@@ -565,7 +575,6 @@ func testHandleAnswers(t *testing.T) {
 		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
 	}
 	// Auto-commenting
-	db.LogMode(true)
 	var cells []model.Cell
 	db.Find(&cells)
 	for i, c := range cells {
@@ -574,7 +583,6 @@ func testHandleAnswers(t *testing.T) {
 		}
 	}
 	model.AutoCommentAnswerCells(12345)
-	db.LogMode(false)
 }
 
 func TestProcessing(t *testing.T) {
@@ -645,7 +653,6 @@ func testFullCycle(t *testing.T) {
 			UserID:        r.uid,
 			TimeStamp:     *parseTime(r.ts),
 			QuestionID:    q.ID,
-			SourceID:      af.ID,
 		})
 		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
 		// Test if is marked plagiarised:
@@ -705,6 +712,16 @@ func testPOI(t *testing.T) {
 	if err := db.Create(&q).Error; err != nil {
 		t.Error(err)
 	}
+	assignment := model.Assignment{
+		Title: "Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{
+		UserID:       4951,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
 	q.ImportFile(fileName, "FFFFFF00", true)
 
 	// Answer
@@ -712,9 +729,10 @@ func testPOI(t *testing.T) {
 	f := model.Source{FileName: fileName, S3BucketName: "studentanswers"}
 	db.Create(&f)
 	a := model.Answer{
-		Source:         model.Source{FileName: fileName, S3BucketName: "studentanswers"},
-		QuestionID:     model.NewNullInt64(q.ID),
-		SubmissionTime: *parseTime("2018-09-30 12:42"),
+		Source:              model.Source{FileName: fileName, S3BucketName: "studentanswers"},
+		QuestionID:          model.NewNullInt64(q.ID),
+		SubmissionTime:      *parseTime("2018-09-30 12:42"),
+		StudentAssignmentID: sa.ID,
 	}
 	db.Create(&a)
 	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2088")
@@ -723,7 +741,6 @@ func testPOI(t *testing.T) {
 		UserID:        4951,
 		TimeStamp:     ts,
 		QuestionID:    q.ID,
-		SourceID:      a.Source.ID,
 	})
 	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 
@@ -849,7 +866,6 @@ func testCWA175(t *testing.T) {
 		{"CWA175-student2.xlsx", 3},
 		{"CWA175-student3.xlsx", 7},
 	} {
-		// db.LogMode(false)
 		answer := model.Answer{
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
 			Assignment:     assignment,
@@ -866,7 +882,6 @@ func testCWA175(t *testing.T) {
 
 		var wb model.Workbook
 
-		// db.LogMode(true)
 		if err := db.Preload("Worksheets").Preload("Worksheets.Blocks").First(&wb, "StudentAnswerID = ?", answer.ID).Error; err != nil {
 			t.Error(err)
 		}
@@ -1013,7 +1028,6 @@ func testCorruptedFiles(t *testing.T) {
 		db.Create(&f)
 		a := model.Answer{
 			SourceID:       model.NewNullInt64(f.ID),
-			AssignmentID:   assignment.ID,
 			QuestionID:     model.NewNullInt64(q.ID),
 			SubmissionTime: *parseTime("2018-09-14 14:42"),
 		}
@@ -1133,7 +1147,6 @@ func TestCommenting(t *testing.T) {
 	db = createTestDB()
 	defer db.Close()
 
-	//db.LogMode(true)
 	db.Exec(`
 		INSERT INTO WorkBooks(file_name, StudentAnswerID)
 		SELECT FileName, StudentAnswerID
@@ -1208,7 +1221,7 @@ func TestCommenting(t *testing.T) {
 		}
 		db.Create(&f)
 		answer := model.Answer{
-			AssignmentID:   assignment.ID,
+			// AssignmentID:   assignment.ID,
 			SourceID:       model.NewNullInt64(f.ID),
 			QuestionID:     model.NewNullInt64(question.ID),
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
@@ -1430,7 +1443,6 @@ func testGetCommentRows(t *testing.T) {
 }
 
 func testQueries(t *testing.T) {
-	// db.LogMode(true)
 	var book model.Workbook
 	db.First(&book, "file_name LIKE ?", "%commenting.test.xlsx")
 	if book.FileName != "commenting.test.xlsx" {
@@ -1452,7 +1464,6 @@ func testComments(t *testing.T) {
 
 	outputName := utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
-	// db.LogMode(true)
 	cmd.AddComments("commenting.test.xlsx", outputName)
 
 	// xlFile, err := xlsx.OpenFile(outputName)
@@ -1506,7 +1517,7 @@ func testCellComments(t *testing.T) {
 	}
 	db.Create(&question)
 	answer := model.Answer{
-		AssignmentID:   assignment.ID,
+		// AssignmentID:   assignment.ID,
 		SourceID:       model.NewNullInt64(f.ID),
 		QuestionID:     model.NewNullInt64(question.ID),
 		SubmissionTime: *parseTime("2017-01-01 14:42"),
@@ -1585,8 +1596,6 @@ func testCellComments(t *testing.T) {
 	db.Create(&model.BlockCommentMapping{Block: block, Comment: comments[2]})
 	outputName := utils.TempFileName("", ".xlsx")
 	t.Log("OUTPUT:", outputName)
-	// db.LogMode(true)
-	// log.SetLevel(log.DebugLevel)
 	if err := cmd.AddCommentsToFile(int(book.AnswerID.Int64), fileName, outputName, true); err != nil {
 		log.Errorln(err)
 	}
@@ -1594,7 +1603,6 @@ func testCellComments(t *testing.T) {
 
 func testRowsToComment(t *testing.T) {
 
-	// db.LogMode(true)
 	rows, err := model.RowsToComment(-1)
 	if err != nil {
 		t.Fatal(err)
