@@ -1,3 +1,4 @@
+// Package model it the core of the system for accessing DB.
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/worksheet.go; zek -e <../assets/sheet.xml >>xlsx/worksheet.go"
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/shared_strings.go; zek -e <../assets/sharedStrings.xml >>xlsx/shared_strings.go"
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/pivot_table.go; zek -e <../assets/pivotTable.xml >>xlsx/pivot_table.go"

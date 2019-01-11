@@ -574,7 +574,7 @@ func testHandleAnswers(t *testing.T) {
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
 	// if !ws.IsPlagiarised.Bool {
 	if !ws.IsPlagiarised {
-		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
 	}
 	// Auto-commenting
 	var cells []model.Cell
@@ -626,6 +626,7 @@ func testFullCycle(t *testing.T) {
 		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
 		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952, true},
 		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953, true},
+		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", -1, true}, // "missing download"
 	} {
 
 		qf := model.Source{
@@ -661,19 +662,32 @@ func testFullCycle(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		db.Create(&model.XLQTransformation{
-			CellReference: r.cr,
-			UserID:        r.uid,
-			TimeStamp:     *parseTime(r.ts),
-			QuestionID:    q.ID,
-		})
+		if r.uid > 0 {
+			db.Create(&model.XLQTransformation{
+				CellReference: r.cr,
+				UserID:        r.uid,
+				TimeStamp:     *parseTime(r.ts),
+				QuestionID:    q.ID,
+			})
+			// Create extar entries for  non-pagiarised examples
+			if !r.isPlagiarised {
+				for i := 1; i < 10; i++ {
+					db.Create(&model.XLQTransformation{
+						CellReference: "A" + strconv.Itoa(i),
+						UserID:        r.uid,
+						TimeStamp:     *parseTime(r.ts),
+						QuestionID:    q.ID,
+					})
+				}
+			}
+		}
 		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
 		// Test if is marked plagiarised:
 		{
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get markeds as plagiarised.", ws)
+				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
 			}
 		}
 	}
@@ -760,7 +774,7 @@ func testPOI(t *testing.T) {
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", fileName).First(&ws)
 	if !ws.IsPlagiarised {
-		t.Errorf("Expected that %#v will get markeds as plagiarised.", ws)
+		t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
 	}
 }
 

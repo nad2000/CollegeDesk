@@ -377,7 +377,8 @@ type Answer struct {
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
 	WasXLProcessed      uint8         `gorm:"type:tinyint(1);default:0"`
 	WasAutocommented    bool
-	AnswerComments      []AnswerComment `gorm:"ForeignKey:AnswerID"`
+	AnswerComments      []AnswerComment     `gorm:"ForeignKey:AnswerID"`
+	XLQTransformations  []XLQTransformation `gorm:"ForeignKey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -2261,33 +2262,65 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 // in SpreadsheetTransformationTable (NB! the worksheets should be already imported)
 func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 	var transformations []XLQTransformation
-	err := Db.
+	var worksheets []Worksheet
+	Db.LogMode(true)
+	err := Db.Model(wb).Related(&worksheets).Error
+	if err != nil {
+		log.WithError(err).Errorln("Failed to get the worksheet enties for the workbook: ", *wb)
+		return
+	}
+	err = Db.
 		Joins("JOIN StudentAssignments AS sa ON sa.UserID = XLQTransformation.UserID").
-		Joins(`JOIN StudentAnswers AS a ON 
-			a.QuestionID = XLQTransformation.QuestionID AND 
+		Joins(`JOIN StudentAnswers AS a ON
+			a.QuestionID = XLQTransformation.QuestionID AND
 			a.StudentAssignmentID = sa.StudentAssignmentID`).
 		Joins("JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID").
-		Preload("Question").
-		Preload("Question.Answers").
-		Preload("Question.Answers.Worksheets").
 		// Where("s.is_plagiarised IS NULL").
 		Where("a.StudentAnswerID = ?", wb.AnswerID).
 		Find(&transformations).Error
 	if err != nil {
-		log.WithError(err).Errorln(
-			"Failed to get XLQTransformation entries for the workbook: ",
-			*wb)
+		log.WithError(err).Errorln("Failed to get entries for the workbook: ", *wb)
 		return
 	}
 
-	for _, t := range transformations {
-		keyValue := t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
-		for _, a := range t.Question.Answers {
-			for _, ws := range a.Worksheets {
-				value := file.GetCellValue(ws.Name, t.CellReference)
-				ws.IsPlagiarised = (value != keyValue) // sql.NullBool{Valid: true, Bool: (value == keyValue)}
-				Db.Save(&ws)
+	if len(transformations) == 0 {
+		// The student appears not to have downloaded the question file
+		if VerboseLevel > 0 {
+			log.Warnf(
+				"No transformation found for the workbook (ID: %d), answer (ID: %v), the answer marked as plagiarised.",
+				wb.ID, wb.AnswerID)
+		}
+		for _, ws := range worksheets {
+			ws.IsPlagiarised = true
+			Db.Save(&ws)
+		}
+	} else {
+		// List of all keys. In case there were multiple downloads
+		keys := make(map[string]string)
+		for _, t := range transformations {
+			keys[t.CellReference] = t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+		}
+		for _, ws := range worksheets {
+			for r, k := range keys {
+				value := file.GetCellValue(ws.Name, r)
+				if value == k {
+					ws.IsPlagiarised = false
+					goto MATCH
+				}
+				if VerboseLevel > 0 {
+					log.Infof("No match found for %q at %q, expected: %q", value, r, k)
+				}
 			}
+			if VerboseLevel > 0 {
+				log.Infof(
+					"No match found for the workbook (ID: %d), answer (ID: %v), the answer marked as plagiarised.",
+					wb.ID, wb.AnswerID)
+				log.Infof("No match found among %v", transformations)
+			}
+			ws.IsPlagiarised = true
+		MATCH:
+			Db.Save(&ws)
 		}
 	}
+	Db.LogMode(false)
 }
