@@ -2263,7 +2263,6 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 	var transformations []XLQTransformation
 	var worksheets []Worksheet
-	Db.LogMode(true)
 	err := Db.Model(wb).Related(&worksheets).Error
 	if err != nil {
 		log.WithError(err).Errorln("Failed to get the worksheet enties for the workbook: ", *wb)
@@ -2322,5 +2321,4 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 			Db.Save(&ws)
 		}
 	}
-	Db.LogMode(false)
 }
