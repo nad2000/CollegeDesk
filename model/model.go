@@ -764,9 +764,9 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					if i > 0 {
 						Db.Create(f)
 						ws.AddAuxBlock(&Block{
-							Range:           colName,
-							RelativeFormula: f.Formula(),
-							FilterID:        NewNullInt64(f.ID),
+							Range:    colName,
+							Formula:  f.Formula(),
+							FilterID: NewNullInt64(f.ID),
 						})
 					}
 				}
