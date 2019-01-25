@@ -31,6 +31,7 @@ jobs:
       # - go build -v
       # - go build -v -o $(basename $PWD) main.go
       - run: go install extract-blocks/extract-blocks
+      - run: cd vendor/github.com/rakyll/gotest/; go install .
       - save_cache:
           key: v1-pkg-cache
           paths:
@@ -42,7 +43,7 @@ jobs:
             extract-blocks run -t -v tests/demo.xlsx
             extract-blocks run -t -v tests/test_floats.xlsx
             extract-blocks comment -t -v tests/commenting.test.xlsx
-            go test -v -short ./...
+            gotest -v -short ./...
       - run:
           name: Upload the buid
           # BB_AUTH_STRING=<bb_user_name>:<APP Password>
