@@ -1431,19 +1431,26 @@ func (b *Block) IsInside(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID             int
-	Block          Block `gorm:"ForeignKey:BlockID"`
-	BlockID        int   `gorm:"index"`
-	Worksheet      Worksheet
-	WorksheetID    int    `gorm:"index"`
-	Range          string `gorm:"column:cell_range"`
-	Formula        string
-	Value          string `gorm:"size:2000"`
-	Comment        Comment
-	CommentID      sql.NullInt64   `gorm:"column:CommentID;type:int"`
-	Row            int             `gorm:"index"`
-	Col            int             `gorm:"index"`
-	AutoEvaluation *AutoEvaluation `gorm:"save_associations:false"`
+	ID                    int
+	Block                 Block `gorm:"ForeignKey:BlockID"`
+	BlockID               int   `gorm:"index"`
+	Worksheet             Worksheet
+	WorksheetID           int    `gorm:"index"`
+	Range                 string `gorm:"column:cell_range"`
+	Formula               string
+	Value                 string `gorm:"size:2000"`
+	Comment               Comment
+	CommentID             sql.NullInt64   `gorm:"column:CommentID;type:int"`
+	Row                   int             `gorm:"index"`
+	Col                   int             `gorm:"index"`
+	AutoEvaluation        *AutoEvaluation `gorm:"save_associations:false"`
+	Fill, Font            bool
+	Borders, Alignments   string
+	CellFormat, MergedRef string
+	BorderID              int
+	Border                *Border
+	AlignmentID           int
+	Alignment             *Alignment
 }
 
 // TableName overrides default table name for the model
@@ -1576,6 +1583,27 @@ func (QuestionAssignment) TableName() string {
 	return "QuestionAssignmentMapping"
 }
 
+// Border - cell border style definition
+type Border struct {
+	Left, Right, Top, Bottom, Diagonal string
+}
+
+// TableName overrides default table name for the model
+func (Border) TableName() string {
+	return "borders"
+}
+
+// Alignment - cell alignment style definitions
+type Alignment struct {
+	Horizontal, Vertical string
+	WrapText             bool
+}
+
+// TableName overrides default table name for the model
+func (Alignment) TableName() string {
+	return "alignments"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -1589,6 +1617,8 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
+	Db.AutoMigrate(&Border{})
+	Db.AutoMigrate(&Alignment{})
 	Db.AutoMigrate(&User{})
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
@@ -1617,6 +1647,8 @@ func SetDb() {
 		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("assignment_id", "assignments(id)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("border_id", "borders(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
