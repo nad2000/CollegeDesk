@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// StyleSheet was generated 2019-02-12 00:21:04 by rcir178 on rcir178-Latitude-E7470.
+// StyleSheet was generated 2019-02-12 10:03:18 by rcir178 on rcir178-Latitude-E7470.
 type StyleSheet struct {
 	XMLName xml.Name `xml:"styleSheet"`
 	Text    string   `xml:",chardata"`
@@ -93,12 +93,12 @@ type StyleSheet struct {
 			FontId            string `xml:"fontId,attr"`
 			FillId            string `xml:"fillId,attr"`
 			BorderId          string `xml:"borderId,attr"`
-			ApplyNumberFormat string `xml:"applyNumberFormat,attr"`
+			ApplyFont         string `xml:"applyFont,attr"`
+			ApplyFill         string `xml:"applyFill,attr"`
 			ApplyBorder       string `xml:"applyBorder,attr"`
 			ApplyAlignment    string `xml:"applyAlignment,attr"`
 			ApplyProtection   string `xml:"applyProtection,attr"`
-			ApplyFont         string `xml:"applyFont,attr"`
-			ApplyFill         string `xml:"applyFill,attr"`
+			ApplyNumberFormat string `xml:"applyNumberFormat,attr"`
 			Alignment         struct {
 				Text         string `xml:",chardata"`
 				Horizontal   string `xml:"horizontal,attr"`
@@ -124,19 +124,19 @@ type StyleSheet struct {
 			FontId            string `xml:"fontId,attr"`
 			FillId            string `xml:"fillId,attr"`
 			BorderId          string `xml:"borderId,attr"`
-			ApplyNumberFormat string `xml:"applyNumberFormat,attr"`
-			ApplyBorder       string `xml:"applyBorder,attr"`
-			ApplyAlignment    string `xml:"applyAlignment,attr"`
-			ApplyProtection   string `xml:"applyProtection,attr"`
 			XfId              string `xml:"xfId,attr"`
+			ApplyBorder       string `xml:"applyBorder,attr"`
 			ApplyFont         string `xml:"applyFont,attr"`
 			ApplyFill         string `xml:"applyFill,attr"`
+			ApplyAlignment    string `xml:"applyAlignment,attr"`
+			ApplyNumberFormat string `xml:"applyNumberFormat,attr"`
+			ApplyProtection   string `xml:"applyProtection,attr"`
 			Alignment         struct {
 				Text         string `xml:",chardata"`
 				Horizontal   string `xml:"horizontal,attr"`
 				Vertical     string `xml:"vertical,attr"`
-				TextRotation string `xml:"textRotation,attr"`
 				WrapText     string `xml:"wrapText,attr"`
+				TextRotation string `xml:"textRotation,attr"`
 				Indent       string `xml:"indent,attr"`
 				ShrinkToFit  string `xml:"shrinkToFit,attr"`
 			} `xml:"alignment"`
