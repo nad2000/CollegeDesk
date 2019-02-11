@@ -1517,6 +1517,7 @@ type MySQLQuestion struct {
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
+	IsFormatting       bool
 }
 
 // TableName overrides default table name for the model
@@ -1643,7 +1644,7 @@ func SetDb() {
 		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
-		Db.Model(&Cell{}).AddForeignKey("assignment_id", "assignments(id)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("alignment_id", "alignments(id)", "CASCADE", "CASCADE")
 		Db.Model(&Cell{}).AddForeignKey("border_id", "borders(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
