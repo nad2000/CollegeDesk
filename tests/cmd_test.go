@@ -213,6 +213,46 @@ func TestDemoFile(t *testing.T) {
 	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
 }
 
+func TestFormattingImport(t *testing.T) {
+	db, _ = model.OpenDb(url)
+	defer db.Close()
+	deleteData()
+	var fileName = "Formatting Test File.xlsx"
+
+	refWB := model.Workbook{IsReference: true}
+	db.FirstOrCreate(&refWB, refWB)
+	refWS := model.Worksheet{IsReference: true, WorkbookID: refWB.ID}
+	db.FirstOrCreate(&refWS, refWS)
+	refBlock := model.Block{
+		WorksheetID: refWS.ID,
+		IsReference: true,
+		TRow:        1,
+		BRow:        13,
+		LCol:        1,
+		RCol:        10,
+		Range:       "B2:K14",
+	}
+	db.FirstOrCreate(&refBlock, refBlock)
+	q := model.Question{
+		QuestionType:      "ShortAnswer",
+		QuestionSequence:  0,
+		QuestionText:      "DUMMY",
+		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
+		MaxScore:          999.99,
+		IsFormatting:      true,
+		ReferenceID:       model.NewNullInt64(refWB.ID),
+	}
+	db.FirstOrCreate(&q, q)
+	a := model.Answer{
+		ShortAnswer:    fileName,
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+		QuestionID:     model.NewNullInt64(q.ID),
+	}
+	db.FirstOrCreate(&a, a)
+
+	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
+}
+
 func deleteData() {
 
 	if db == nil || db.DB() == nil {
@@ -242,6 +282,8 @@ func deleteData() {
 		&model.PivotTable{},
 		&model.DataSource{},
 		&model.User{},
+		&model.Alignment{},
+		&model.Border{},
 	} {
 		err := db.Delete(m).Error
 		if err != nil {
