@@ -1,148 +1,170 @@
 package xlsx; import "encoding/xml"
-// Worksheet was generated 2019-02-09 05:00:47 by rcir178 on rcir178-Latitude-E7470.
-type Worksheet struct {
-	XMLName   xml.Name `xml:"worksheet"`
-	Text      string   `xml:",chardata"`
-	Xmlns     string   `xml:"xmlns,attr"`
-	R         string   `xml:"r,attr"`
-	Mc        string   `xml:"mc,attr"`
-	X14ac     string   `xml:"x14ac,attr"`
-	Ignorable string   `xml:"Ignorable,attr"`
-	SortState []struct {
-		Text          string `xml:",chardata"`
-		Ref           string `xml:"ref,attr"`
-		ColumnSort    string `xml:"columnSort,attr"`
-		SortCondition []struct {
+// StyleSheet was generated 2019-02-11 11:15:05 by rcir178 on rcir178-Latitude-E7470.
+type StyleSheet struct {
+	XMLName xml.Name `xml:"styleSheet"`
+	Text    string   `xml:",chardata"`
+	Xmlns   string   `xml:"xmlns,attr"`
+	NumFmts struct {
+		Text   string `xml:",chardata"`
+		Count  string `xml:"count,attr"`
+		NumFmt struct {
 			Text       string `xml:",chardata"`
-			SortBy     string `xml:"sortBy,attr"`
-			Ref        string `xml:"ref,attr"`
-			DxfId      string `xml:"dxfId,attr"`
-			Descending string `xml:"descending,attr"`
-			CustomList string `xml:"customList,attr"`
-			IconSet    string `xml:"iconSet,attr"`
-			IconId     string `xml:"iconId,attr"`
-		} `xml:"sortCondition"`
-	} `xml:"sortState"`
-	AutoFilter []struct {
-		Text         string `xml:",chardata"`
-		Ref          string `xml:"ref,attr"`
-		FilterColumn []struct {
-			Text          string `xml:",chardata"`
-			ColId         string `xml:"colId,attr"`
-			CustomFilters struct {
-				Text         string `xml:",chardata"`
-				And          string `xml:"and,attr"`
-				CustomFilter []struct {
-					Text     string `xml:",chardata"`
-					Val      string `xml:"val,attr"`
-					Operator string `xml:"operator,attr"`
-				} `xml:"customFilter"`
-			} `xml:"customFilters"`
-			Filters struct {
-				Text   string `xml:",chardata"`
-				Filter []struct {
-					Text string `xml:",chardata"`
-					Val  string `xml:"val,attr"`
-				} `xml:"filter"`
-				DateGroupItem []struct {
-					Text             string `xml:",chardata"`
-					Year             string `xml:"year,attr"`
-					DateTimeGrouping string `xml:"dateTimeGrouping,attr"`
-					Month            string `xml:"month,attr"`
-					Day              string `xml:"day,attr"`
-					Hour             string `xml:"hour,attr"`
-					Minute           string `xml:"minute,attr"`
-					Second           string `xml:"second,attr"`
-				} `xml:"dateGroupItem"`
-			} `xml:"filters"`
-			Top10 struct {
-				Text      string `xml:",chardata"`
-				Val       string `xml:"val,attr"`
-				FilterVal string `xml:"filterVal,attr"`
-				Top       string `xml:"top,attr"`
-			} `xml:"top10"`
-			DynamicFilter struct {
+			NumFmtId   string `xml:"numFmtId,attr"`
+			FormatCode string `xml:"formatCode,attr"`
+		} `xml:"numFmt"`
+	} `xml:"numFmts"`
+	Fonts struct {
+		Text  string `xml:",chardata"`
+		Count string `xml:"count,attr"`
+		Font  []struct {
+			Text string `xml:",chardata"`
+			Sz   struct {
 				Text string `xml:",chardata"`
-				Type string `xml:"type,attr"`
 				Val  string `xml:"val,attr"`
-			} `xml:"dynamicFilter"`
-			ColorFilter struct {
-				Text  string `xml:",chardata"`
-				DxfId string `xml:"dxfId,attr"`
-			} `xml:"colorFilter"`
-		} `xml:"filterColumn"`
-	} `xml:"autoFilter"`
-	ConditionalFormatting []struct {
+			} `xml:"sz"`
+			Name struct {
+				Text string `xml:",chardata"`
+				Val  string `xml:"val,attr"`
+			} `xml:"name"`
+			Family struct {
+				Text string `xml:",chardata"`
+				Val  string `xml:"val,attr"`
+			} `xml:"family"`
+			Charset struct {
+				Text string `xml:",chardata"`
+				Val  string `xml:"val,attr"`
+			} `xml:"charset"`
+			B struct {
+				Text string `xml:",chardata"`
+				Val  string `xml:"val,attr"`
+			} `xml:"b"`
+			Color struct {
+				Text string `xml:",chardata"`
+				Rgb  string `xml:"rgb,attr"`
+			} `xml:"color"`
+		} `xml:"font"`
+	} `xml:"fonts"`
+	Fills struct {
+		Text  string `xml:",chardata"`
+		Count string `xml:"count,attr"`
+		Fill  []struct {
+			Text        string `xml:",chardata"`
+			PatternFill struct {
+				Text        string `xml:",chardata"`
+				PatternType string `xml:"patternType,attr"`
+			} `xml:"patternFill"`
+		} `xml:"fill"`
+	} `xml:"fills"`
+	Borders struct {
 		Text   string `xml:",chardata"`
-		Sqref  string `xml:"sqref,attr"`
-		CfRule []struct {
+		Count  string `xml:"count,attr"`
+		Border []struct {
 			Text         string `xml:",chardata"`
-			Type         string `xml:"type,attr"`
-			DxfId        string `xml:"dxfId,attr"`
-			Priority     string `xml:"priority,attr"`
-			Operator     string `xml:"operator,attr"`
-			AttrText     string `xml:"text,attr"`
-			TimePeriod   string `xml:"timePeriod,attr"`
-			AboveAverage string `xml:"aboveAverage,attr"`
-			Percent      string `xml:"percent,attr"`
-			Bottom       string `xml:"bottom,attr"`
-			Rank         string `xml:"rank,attr"`
-			Formula      []struct {
-				Text string `xml:",chardata"` // 10, 20, 10, 20, 84, 99, 3...
-			} `xml:"formula"`
-			DataBar struct {
+			DiagonalUp   string `xml:"diagonalUp,attr"`
+			DiagonalDown string `xml:"diagonalDown,attr"`
+			Left         struct {
+				Text  string `xml:",chardata"`
+				Style string `xml:"style,attr"`
+			} `xml:"left"`
+			Right struct {
+				Text  string `xml:",chardata"`
+				Style string `xml:"style,attr"`
+			} `xml:"right"`
+			Top struct {
+				Text  string `xml:",chardata"`
+				Style string `xml:"style,attr"`
+			} `xml:"top"`
+			Bottom struct {
+				Text  string `xml:",chardata"`
+				Style string `xml:"style,attr"`
+			} `xml:"bottom"`
+			Diagonal struct {
+				Text  string `xml:",chardata"`
+				Style string `xml:"style,attr"`
+			} `xml:"diagonal"`
+		} `xml:"border"`
+	} `xml:"borders"`
+	CellStyleXfs struct {
+		Text  string `xml:",chardata"`
+		Count string `xml:"count,attr"`
+		Xf    []struct {
+			Text            string `xml:",chardata"`
+			NumFmtId        string `xml:"numFmtId,attr"`
+			FontId          string `xml:"fontId,attr"`
+			FillId          string `xml:"fillId,attr"`
+			BorderId        string `xml:"borderId,attr"`
+			ApplyFont       string `xml:"applyFont,attr"`
+			ApplyBorder     string `xml:"applyBorder,attr"`
+			ApplyAlignment  string `xml:"applyAlignment,attr"`
+			ApplyProtection string `xml:"applyProtection,attr"`
+			ApplyFill       string `xml:"applyFill,attr"`
+			Alignment       struct {
+				Text         string `xml:",chardata"`
+				Horizontal   string `xml:"horizontal,attr"`
+				Vertical     string `xml:"vertical,attr"`
+				TextRotation string `xml:"textRotation,attr"`
+				WrapText     string `xml:"wrapText,attr"`
+				Indent       string `xml:"indent,attr"`
+				ShrinkToFit  string `xml:"shrinkToFit,attr"`
+			} `xml:"alignment"`
+			Protection struct {
+				Text   string `xml:",chardata"`
+				Locked string `xml:"locked,attr"`
+				Hidden string `xml:"hidden,attr"`
+			} `xml:"protection"`
+		} `xml:"xf"`
+	} `xml:"cellStyleXfs"`
+	CellXfs struct {
+		Text  string `xml:",chardata"`
+		Count string `xml:"count,attr"`
+		Xf    []struct {
+			Text            string `xml:",chardata"`
+			NumFmtId        string `xml:"numFmtId,attr"`
+			FontId          string `xml:"fontId,attr"`
+			FillId          string `xml:"fillId,attr"`
+			BorderId        string `xml:"borderId,attr"`
+			XfId            string `xml:"xfId,attr"`
+			ApplyFont       string `xml:"applyFont,attr"`
+			ApplyBorder     string `xml:"applyBorder,attr"`
+			ApplyAlignment  string `xml:"applyAlignment,attr"`
+			ApplyProtection string `xml:"applyProtection,attr"`
+			ApplyFill       string `xml:"applyFill,attr"`
+			Alignment       struct {
+				Text         string `xml:",chardata"`
+				Horizontal   string `xml:"horizontal,attr"`
+				Vertical     string `xml:"vertical,attr"`
+				TextRotation string `xml:"textRotation,attr"`
+				WrapText     string `xml:"wrapText,attr"`
+				Indent       string `xml:"indent,attr"`
+				ShrinkToFit  string `xml:"shrinkToFit,attr"`
+			} `xml:"alignment"`
+			Protection struct {
+				Text   string `xml:",chardata"`
+				Locked string `xml:"locked,attr"`
+				Hidden string `xml:"hidden,attr"`
+			} `xml:"protection"`
+		} `xml:"xf"`
+	} `xml:"cellXfs"`
+	CellStyles struct {
+		Text      string `xml:",chardata"`
+		Count     string `xml:"count,attr"`
+		CellStyle []struct {
+			Text          string `xml:",chardata"`
+			Name          string `xml:"name,attr"`
+			XfId          string `xml:"xfId,attr"`
+			BuiltinId     string `xml:"builtinId,attr"`
+			CustomBuiltin string `xml:"customBuiltin,attr"`
+		} `xml:"cellStyle"`
+	} `xml:"cellStyles"`
+	Colors struct {
+		Text          string `xml:",chardata"`
+		IndexedColors struct {
+			Text     string `xml:",chardata"`
+			RgbColor []struct {
 				Text string `xml:",chardata"`
-				Cfvo []struct {
-					Text string `xml:",chardata"`
-					Type string `xml:"type,attr"`
-				} `xml:"cfvo"`
-				Color struct {
-					Text string `xml:",chardata"`
-					Rgb  string `xml:"rgb,attr"`
-				} `xml:"color"`
-			} `xml:"dataBar"`
-			ExtLst struct {
-				Text string `xml:",chardata"`
-				Ext  struct {
-					Text string `xml:",chardata"`
-					X14  string `xml:"x14,attr"`
-					URI  string `xml:"uri,attr"`
-					ID   struct {
-						Text string `xml:",chardata"` // {4D3A9FBE-0C2F-4905-AB07-...
-					} `xml:"id"`
-				} `xml:"ext"`
-			} `xml:"extLst"`
-			ColorScale struct {
-				Text string `xml:",chardata"`
-				Cfvo []struct {
-					Text string `xml:",chardata"`
-					Type string `xml:"type,attr"`
-					Val  string `xml:"val,attr"`
-				} `xml:"cfvo"`
-				Color []struct {
-					Text string `xml:",chardata"`
-					Rgb  string `xml:"rgb,attr"`
-				} `xml:"color"`
-			} `xml:"colorScale"`
-			IconSet struct {
-				Text    string `xml:",chardata"`
-				IconSet string `xml:"iconSet,attr"`
-				Cfvo    []struct {
-					Text string `xml:",chardata"`
-					Type string `xml:"type,attr"`
-					Val  string `xml:"val,attr"`
-				} `xml:"cfvo"`
-			} `xml:"iconSet"`
-		} `xml:"cfRule"`
-	} `xml:"conditionalFormatting"`
-	PageMargins struct {
-		Text   string `xml:",chardata"`
-		Left   string `xml:"left,attr"`
-		Right  string `xml:"right,attr"`
-		Top    string `xml:"top,attr"`
-		Bottom string `xml:"bottom,attr"`
-		Header string `xml:"header,attr"`
-		Footer string `xml:"footer,attr"`
-	} `xml:"pageMargins"`
+				Rgb  string `xml:"rgb,attr"`
+			} `xml:"rgbColor"`
+		} `xml:"indexedColors"`
+	} `xml:"colors"`
 } 
 

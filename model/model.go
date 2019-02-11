@@ -35,7 +35,9 @@ var DebugLevel int
 // DryRun - perform processing without actually updating or changing files
 var DryRun bool
 
-var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+var (
+	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+)
 
 // CellAddress maps a cell coordiantes (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
@@ -128,6 +130,7 @@ type Question struct {
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
+	IsFormatting       bool
 }
 
 // TableName overrides default table name for the model
@@ -1323,7 +1326,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
 // fildWholeWithin finds whole range with the same "relative" formula
 // withing the specific reference block ignoring the filling color.
-func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block) {
+func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bool) {
 	b.BRow, b.RCol = b.TRow, b.LCol
 	for r := b.TRow; r <= rb.BRow; r++ {
 
@@ -1585,6 +1588,7 @@ func (QuestionAssignment) TableName() string {
 
 // Border - cell border style definition
 type Border struct {
+	ID                                 int
 	Left, Right, Top, Bottom, Diagonal string
 }
 
@@ -1595,6 +1599,7 @@ func (Border) TableName() string {
 
 // Alignment - cell alignment style definitions
 type Alignment struct {
+	ID                   int
 	Horizontal, Vertical string
 	WrapText             bool
 }
@@ -1796,7 +1801,7 @@ func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
 }
 
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
-func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
+func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatting bool) (err error) {
 	var (
 		b      Block
 		cell   *xlsx.Cell
@@ -1827,7 +1832,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 					log.Debugf("Created %#v", b)
 				}
 
-				b.findWholeWithin(sheet, rb)
+				b.findWholeWithin(sheet, rb, importFormatting)
 				b.Range = b.Address()
 				Db.Save(b)
 				blocks = append(blocks, b)
@@ -1958,12 +1963,13 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.WithError(err).Errorln("Failed to fetch reference blocks for the question:", q)
 				continue
 			}
+
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
 				if verbose {
 					log.Info("Attempt to use a reference block: ", rb)
 				}
-				err = ws.FindBlocksInside(sheet, rb)
+				err = ws.FindBlocksInside(sheet, rb, q.IsFormatting)
 				if err != nil {
 					log.WithError(err).Errorln("Failed to find the blocks using the reference block: ", rb)
 				}
@@ -2091,6 +2097,91 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	err = Db.Model(&answer).UpdateColumn("was_xl_processed", 1).Error
 	if err != nil {
 		log.WithError(err).Errorln("Failed to update the answer entry.")
+	}
+
+	// Retrieve style sheet data
+	if q.IsFormatting {
+		var ss x.StyleSheet
+		file, err := excelize.OpenFile(fileName)
+		if err != nil {
+			log.WithError(err).Errorln("Failed to open: ", fileName)
+		} else {
+			content, ok := file.XLSX["xl/styles.xml"]
+			if ok {
+				err = xml.Unmarshal(content, &ss)
+				if err != nil {
+					log.WithError(err).Errorln("Failed to load style sheet.")
+				} else {
+
+					rows, err := Db.Raw(
+						`SELECT cell_range, name, c.id
+						FROM Cells AS c JOIN WorkSheets AS ws 
+							ON c.worksheet_id = ws.id
+						WHERE ws.workbook_id = ?`, wb.ID).Rows()
+					if err != nil {
+						log.WithError(err).Errorln("Failed to retrieve the cells.")
+					} else {
+						type C struct {
+							ID   int // cell ID
+							R, N string
+						}
+						cells := make([]C, 0, 10)
+						var r, n string
+						var id int
+						for rows.Next() {
+							rows.Scan(&r, &n, &id)
+							if cellIDRe.MatchString(r) {
+								cells = append(cells, C{id, r, n})
+							}
+						}
+						rows.Close()
+						xfs := ss.CellXfs.Xf
+						borders := ss.Borders.Border
+						for _, c := range cells {
+							s := file.GetCellStyle(c.N, c.R)
+							if s > 0 && s <= len(xfs) {
+								xf := xfs[s-1]
+								var cell Cell
+								Db.First(&cell, c.ID)
+								cell.Fill = (xf.ApplyFill == "1" || xf.ApplyFill == "true")
+								cell.Font = (xf.ApplyFont == "1" || xf.ApplyFont == "true")
+								if xf.ApplyAlignment == "1" || xf.ApplyAlignment == "true" {
+									a := Alignment{
+										Horizontal: xf.Alignment.Horizontal,
+										Vertical:   xf.Alignment.Vertical,
+										WrapText:   (xf.Alignment.WrapText == "1" || xf.Alignment.WrapText == "true"),
+									}
+									Db.Create(&a)
+									cell.AlignmentID = a.ID
+									cell.Alignments = joinStr(",", a.Horizontal, a.Vertical, xf.Alignment.WrapText)
+								}
+								if xf.ApplyBorder == "1" || xf.ApplyBorder == "true" {
+									id, _ := strconv.Atoi(xf.BorderId)
+									if id >= 0 && id < len(borders) {
+										b := borders[id]
+										rec := Border{
+											Left:   b.Left.Style,
+											Right:  b.Right.Style,
+											Top:    b.Top.Style,
+											Bottom: b.Bottom.Style,
+										}
+										if b.DiagonalUp == "1" || b.DiagonalUp == "true" {
+											rec.Diagonal = "up"
+										} else if b.DiagonalDown == "1" || b.DiagonalDown == "true" {
+											rec.Diagonal = "down"
+										}
+										Db.Create(&rec)
+										cell.BorderID = rec.ID
+										cell.Borders = joinStr(",", rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal)
+									}
+								}
+								Db.Save(&cell)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	return
 }

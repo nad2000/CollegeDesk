@@ -1,5 +1,5 @@
 package xlsx; import "encoding/xml"
-// PivotCacheDefinition was generated 2019-02-09 05:00:47 by rcir178 on rcir178-Latitude-E7470.
+// PivotCacheDefinition was generated 2019-02-11 11:15:05 by rcir178 on rcir178-Latitude-E7470.
 type PivotCacheDefinition struct {
 	XMLName               xml.Name `xml:"pivotCacheDefinition"`
 	Text                  string   `xml:",chardata"`

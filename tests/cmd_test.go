@@ -176,6 +176,41 @@ func TestDemoFile(t *testing.T) {
 	if expected := 84; count != expected {
 		t.Errorf("Expected %d cells, got: %d", expected, count)
 	}
+
+	// With references
+	refWB := model.Workbook{IsReference: true}
+	db.FirstOrCreate(&refWB, refWB)
+	refWS := model.Worksheet{IsReference: true, WorkbookID: refWB.ID}
+	db.FirstOrCreate(&refWS, refWS)
+	refBlock := model.Block{
+		WorksheetID: refWS.ID,
+		IsReference: true,
+		TRow:        14,
+		BRow:        32,
+		LCol:        11,
+		RCol:        16,
+		Range:       "L15:Q33",
+	}
+	_ = refBlock
+	db.FirstOrCreate(&refBlock, refBlock)
+	q = model.Question{
+		QuestionType:      "ShortAnswer",
+		QuestionSequence:  0,
+		QuestionText:      "DUMMY",
+		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
+		MaxScore:          999.99,
+		IsFormatting:      true,
+		ReferenceID:       model.NewNullInt64(refWB.ID),
+	}
+	db.FirstOrCreate(&q, q)
+	a = model.Answer{
+		ShortAnswer:    fileName,
+		SubmissionTime: *parseTime("2017-01-01 14:42"),
+		QuestionID:     model.NewNullInt64(q.ID),
+	}
+	db.FirstOrCreate(&a, a)
+
+	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
 }
 
 func deleteData() {
@@ -262,6 +297,7 @@ func createTestDB() *gorm.DB {
 			MaxScore:         9999.99,
 			AuthorUserID:     123456789,
 			WasCompared:      true,
+			IsFormatting:     true,
 		}
 		db.Create(&q)
 		db.Create(&model.QuestionAssignment{
@@ -329,6 +365,7 @@ func createTestDB() *gorm.DB {
 			MaxScore:         9999.99,
 			AuthorUserID:     123456789,
 			WasCompared:      true,
+			IsFormatting:     true,
 		})
 
 	}
@@ -377,6 +414,7 @@ func testImportFile(t *testing.T) {
 		AuthorUserID:     123456789,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "question.xlsx"},
+		IsFormatting:     true,
 	}
 	db.Create(&q)
 	q.ImportFile("question.xlsx", "FFFFFF00", true)
@@ -449,6 +487,7 @@ func testHandleNotcolored(t *testing.T) {
 		MaxScore:         9999.99,
 		AuthorUserID:     123456789,
 		WasCompared:      true,
+		IsFormatting:     true,
 	}
 	db.Create(&q)
 	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
@@ -489,6 +528,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		AuthorUserID:     123456789,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "Q3 Compounding1.xlsx"},
+		IsFormatting:     true,
 	}
 	db.Create(&q)
 	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
@@ -642,6 +682,7 @@ func testFullCycle(t *testing.T) {
 			MaxScore:     1010.88,
 			AuthorUserID: 123456789,
 			WasCompared:  false,
+			IsFormatting: true,
 		}
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
@@ -734,6 +775,7 @@ func testPOI(t *testing.T) {
 		MaxScore:     1010.88,
 		AuthorUserID: 123456789,
 		WasCompared:  true,
+		IsFormatting: true,
 	}
 
 	if err := db.Create(&q).Error; err != nil {
@@ -812,7 +854,10 @@ func testFindBlocksInside(t *testing.T) {
 				Assignment: model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
 				Marks:      98.7654,
 				Source:     source,
-				Question:   model.Question{QuestionType: "FileUpload", Source: source, MaxScore: 98.76453},
+				Question: model.Question{
+					QuestionType: "FileUpload", Source: source, MaxScore: 98.76453,
+					IsFormatting: true,
+				},
 			},
 		},
 	}
@@ -827,7 +872,7 @@ func testFindBlocksInside(t *testing.T) {
 		RCol:        3,
 		BRow:        19,
 		IsReference: true,
-	})
+	}, true)
 	var blocks []model.Block
 	db.Model(&ws).Related(&blocks)
 	if expected, got := 4, len(blocks); expected != got {
@@ -847,7 +892,7 @@ func testFindBlocksInside(t *testing.T) {
 		IsReference: true,
 	}
 	db.Create(&block)
-	ws.FindBlocksInside(sheet, block)
+	ws.FindBlocksInside(sheet, block, true)
 	db.Model(&ws).Related(&blocks)
 	if expected, got := 8, len(blocks); expected != got {
 		for _, b := range blocks {
@@ -872,7 +917,8 @@ func testCWA175(t *testing.T) {
 	}
 	db.Create(&ws)
 	q := model.Question{
-		ReferenceID: model.NewNullInt64(wb.ID),
+		ReferenceID:  model.NewNullInt64(wb.ID),
+		IsFormatting: true,
 	}
 	db.Create(&q)
 	rb := model.Block{
@@ -953,6 +999,7 @@ func testHandleQuestions(t *testing.T) {
 			MaxScore:     8888.88,
 			AuthorUserID: 123456789,
 			WasCompared:  true,
+			IsFormatting: true,
 		})
 		if result.Error != nil {
 			t.Error(result.Error)
@@ -1018,6 +1065,7 @@ func testImportQuestionFile(t *testing.T) {
 		MaxScore:     1010.88,
 		AuthorUserID: 123456789,
 		WasCompared:  true,
+		IsFormatting: true,
 	}
 	result = db.Create(&q)
 	if result.Error != nil {
@@ -1035,6 +1083,7 @@ func testCorruptedFiles(t *testing.T) {
 		MaxScore:         7777.77,
 		AuthorUserID:     987654321,
 		WasCompared:      true,
+		IsFormatting:     true,
 	}
 	db.Create(&q)
 	assignment := model.Assignment{
@@ -1541,6 +1590,7 @@ func testCellComments(t *testing.T) {
 		MaxScore:     8888.88,
 		AuthorUserID: 123456789,
 		WasCompared:  true,
+		IsFormatting: true,
 	}
 	db.Create(&question)
 	answer := model.Answer{
