@@ -1,17 +1,19 @@
-![Excelize](./excelize.png "Excelize")
+<p align="center"><img width="650" src="./excelize.png" alt="Excelize logo"></p>
+
+<p align="center">
+    <a href="https://travis-ci.org/360EntSecGroup-Skylar/excelize"><img src="https://travis-ci.org/360EntSecGroup-Skylar/excelize.svg?branch=master" alt="Build Status"></a>
+    <a href="https://codecov.io/gh/360EntSecGroup-Skylar/excelize"><img src="https://codecov.io/gh/360EntSecGroup-Skylar/excelize/branch/master/graph/badge.svg" alt="Code Coverage"></a>
+    <a href="https://goreportcard.com/report/github.com/360EntSecGroup-Skylar/excelize"><img src="https://goreportcard.com/badge/github.com/360EntSecGroup-Skylar/excelize" alt="Go Report Card"></a>
+    <a href="https://godoc.org/github.com/360EntSecGroup-Skylar/excelize"><img src="https://godoc.org/github.com/360EntSecGroup-Skylar/excelize?status.svg" alt="GoDoc"></a>
+    <a href="https://opensource.org/licenses/BSD-3-Clause"><img src="https://img.shields.io/badge/license-bsd-orange.svg" alt="Licenses"></a>
+    <a href="https://www.paypal.me/xuri"><img src="https://img.shields.io/badge/Donate-PayPal-green.svg" alt="Donate"></a>
+</p>
 
 # Excelize
 
-[![Build Status](https://travis-ci.org/360EntSecGroup-Skylar/excelize.svg?branch=master)](https://travis-ci.org/360EntSecGroup-Skylar/excelize)
-[![Code Coverage](https://codecov.io/gh/360EntSecGroup-Skylar/excelize/branch/master/graph/badge.svg)](https://codecov.io/gh/360EntSecGroup-Skylar/excelize)
-[![Go Report Card](https://goreportcard.com/badge/github.com/360EntSecGroup-Skylar/excelize)](https://goreportcard.com/report/github.com/360EntSecGroup-Skylar/excelize)
-[![GoDoc](https://godoc.org/github.com/360EntSecGroup-Skylar/excelize?status.svg)](https://godoc.org/github.com/360EntSecGroup-Skylar/excelize)
-[![Licenses](https://img.shields.io/badge/license-bsd-orange.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.me/xuri)
-
 ## 简介
 
-Excelize 是 Go 语言编写的用于操作 Office Excel 文档类库，基于 ECMA-376 Office OpenXML 标准。可以使用它来读取、写入由 Microsoft Excel™ 2007 及以上版本创建的 XLSX 文档。相比较其他的开源类库，Excelize 支持写入原本带有图片(表)、透视表和切片器等复杂样式的文档，还支持向 Excel 文档中插入图片与图表，并且在保存后不会丢失文档原有样式，可以应用于各类报表系统中。使用本类库要求使用的 Go 语言为 1.8 或更高版本，完整的 API 使用文档请访问 [godoc.org](https://godoc.org/github.com/360EntSecGroup-Skylar/excelize) 或查看 [参考文档](https://xuri.me/excelize/)。
+Excelize 是 Go 语言编写的用于操作 Office Excel 文档类库，基于 ECMA-376 Office OpenXML 标准。可以使用它来读取、写入由 Microsoft Excel&trade; 2007 及以上版本创建的 XLSX 文档。相比较其他的开源类库，Excelize 支持写入原本带有图片(表)、透视表和切片器等复杂样式的文档，还支持向 Excel 文档中插入图片与图表，并且在保存后不会丢失文档原有样式，可以应用于各类报表系统中。使用本类库要求使用的 Go 语言为 1.8 或更高版本，完整的 API 使用文档请访问 [godoc.org](https://godoc.org/github.com/360EntSecGroup-Skylar/excelize) 或查看 [参考文档](https://xuri.me/excelize/)。
 
 ## 快速上手
 
@@ -88,7 +90,7 @@ func main() {
 
 使用 Excelize 生成图表十分简单，仅需几行代码。您可以根据工作表中的已有数据构建图表，或向工作表中添加数据并创建图表。
 
-![Excelize](./test/images/chart.png "Excelize")
+<p align="center"><img width="650" src="./test/images/chart.png" alt="Excelize"></p>
 
 ```go
 package main
@@ -166,10 +168,12 @@ func main() {
 
 欢迎您为此项目贡献代码，提出建议或问题、修复 Bug 以及参与讨论对新功能的想法。 XML 符合标准： [part 1 of the 5th edition of the ECMA-376 Standard for Office Open XML](http://www.ecma-international.org/publications/standards/Ecma-376.htm)。
 
-## 致谢
-
-本类库中部分 XML 结构体的定义参考了开源项目：[tealeg/xlsx](https://github.com/tealeg/xlsx).
-
 ## 开源许可
 
 本项目遵循 BSD 3-Clause 开源许可协议，访问 [https://opensource.org/licenses/BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause) 查看许可协议文件。
+
+Excel 徽标是 [Microsoft Corporation](https://aka.ms/trademarks-usage) 的商标，项目的图片是一种改编。
+
+本类库中部分 XML 结构体的定义参考了开源项目：[tealeg/xlsx](https://github.com/tealeg/xlsx)，遵循 [BSD 3-Clause License](https://github.com/tealeg/xlsx/blob/master/LICENSE) 开源许可协议。
+
+gopher.{ai,svg,png} 由 [Takuya Ueda](https://twitter.com/tenntenn) 创作，遵循 [Creative Commons 3.0 Attributions license](http://creativecommons.org/licenses/by/3.0/) 创作共用授权条款。

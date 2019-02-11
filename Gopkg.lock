@@ -10,7 +10,7 @@
   version = "v1.3.0"
 
 [[projects]]
-  digest = "1:0bb5bd453a0bbdb46d4dd48463c6bb0985d36d37bbde09e7e4162b8bc8700959"
+  digest = "1:2eba044aceea595aa846473d8d99d1584136b744da23e961b4af966a96e42826"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -51,8 +51,8 @@
     "service/sts",
   ]
   pruneopts = "UT"
-  revision = "3503f7b53173f227ff96dc247983360cc7cb8463"
-  version = "v1.16.25"
+  revision = "a86c8123483bed64c20a08cddc5155e8e8c89dcb"
+  version = "v1.16.31"
 
 [[projects]]
   digest = "1:865079840386857c809b72ce300be7580cb50d3d3129ce11bf9aa6ca2bc1934a"
@@ -181,11 +181,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:78bbb1ba5b7c3f2ed0ea1eab57bdd3859aec7e177811563edc41198a760b06af"
+  digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
   name = "github.com/mitchellh/go-homedir"
   packages = ["."]
   pruneopts = "UT"
-  revision = "ae18d6b8b3205b561c79e8e5f69bff09736185f4"
+  revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
 
 [[projects]]
   digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
@@ -205,11 +205,11 @@
 
 [[projects]]
   branch = "issues/238"
-  digest = "1:c1e6c244ded047ba0357877e80532ae3085735fe55ffcf9d2b7d47a91ed2f11b"
+  digest = "1:5d49f1ba18169b01f120b735eb61a3ea3de1405f87772e4f9c1d3168aa88d5c7"
   name = "github.com/nad2000/excelize"
   packages = ["."]
   pruneopts = "UT"
-  revision = "cb1b3ce9bb90fe5a32246cfa0667c1d80e5383b1"
+  revision = "031a2f4ca4a3b873b271aa8f7d46d0442c422720"
 
 [[projects]]
   branch = "cell-comment-reading"
@@ -236,15 +236,15 @@
   revision = "86f0749cd8ccdc08f2edb69f170ad6f06393455d"
 
 [[projects]]
-  digest = "1:d707dbc1330c0ed177d4642d6ae102d5e2c847ebd0eb84562d0dc4f024531cfc"
+  digest = "1:3e39bafd6c2f4bf3c76c3bfd16a2e09e016510ad5db90dc02b88e2f565d6d595"
   name = "github.com/spf13/afero"
   packages = [
     ".",
     "mem",
   ]
   pruneopts = "UT"
-  revision = "a5d6946387efe7d64d09dcba68cdd523dc1273a3"
-  version = "v1.2.0"
+  revision = "f4711e4db9e9a1d3887343acb72b2bbfc2f686f5"
+  version = "v1.2.1"
 
 [[projects]]
   digest = "1:08d65904057412fc0270fc4812a1c90c594186819243160dc779a402d4b6d0bc"
@@ -288,22 +288,22 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:38f553aff0273ad6f367cb0a0f8b6eecbaef8dc6cb8b50e57b6a81c1d5b1e332"
+  digest = "1:fde12c4da6237363bf36b81b59aa36a43d28061167ec4acb0d41fc49464e28b9"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
   pruneopts = "UT"
-  revision = "057139ce5d2bdbe6fe73c53679e24e9cf007f637"
+  revision = "193df9c0f06f8bb35fba505183eaf0acc0136505"
 
 [[projects]]
   branch = "master"
-  digest = "1:bb644db32f5bc1e327a0f748ec871edc4dc46f19b4fbbc15bfd95b1460646537"
+  digest = "1:8975c6b66d95adc1cd08820aba7ad6b60b165725a401c4177c0eaa866170bb10"
   name = "golang.org/x/sys"
   packages = [
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "b90733256f2e882e81d52f9126de08df5615afd9"
+  revision = "3b5209105503162ded1863c307ac66fec31120dd"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
