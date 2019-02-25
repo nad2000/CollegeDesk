@@ -1917,7 +1917,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the queestion %s", answerID, q)
 	}
 
-	for orderNum, sheet := range file.Sheets {
+	allSheets := file.Sheets
+	for orderNum, sheet := range allSheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -2104,87 +2105,129 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				if err != nil {
 					log.WithError(err).Errorln("Failed to load style sheet.")
 				} else {
+					xfs := ss.CellXfs.Xf
+					borders := ss.Borders.Border
+					numFmts := ss.NumFmts.NumFmt
+					for orderNum, sheet := range allSheets {
 
-					rows, err := Db.Raw(
-						`SELECT cell_range, name, c.id
-						FROM Cells AS c JOIN WorkSheets AS ws 
-							ON c.worksheet_id = ws.id
-						WHERE ws.workbook_id = ?`, wb.ID).Rows()
-					if err != nil {
-						log.WithError(err).Errorln("Failed to retrieve the cells.")
-					} else {
-						type C struct {
-							ID   int // cell ID
-							R, N string
+						if sheet.Hidden {
+							log.Infof("Skipping hidden worksheet %q", sheet.Name)
+							continue
 						}
-						cells := make([]C, 0, 10)
-						var r, n string
-						var id int
-						for rows.Next() {
-							rows.Scan(&r, &n, &id)
-							if cellIDRe.MatchString(r) {
-								cells = append(cells, C{id, r, n})
+
+						var ws Worksheet
+						err = Db.FirstOrCreate(&ws, Worksheet{
+							Name:             sheet.Name,
+							WorkbookID:       wb.ID,
+							WorkbookFileName: wb.FileName,
+							AnswerID:         NewNullInt64(answerID),
+							OrderNum:         orderNum,
+						}).Error
+						if err != nil {
+							log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
+							continue
+						}
+
+						rows, err := Db.Raw(
+							`SELECT cell_range, c.id
+							FROM Cells AS c JOIN WorkSheets AS ws 
+								ON c.worksheet_id = ws.id
+							WHERE ws.workbook_id = ? AND ws.id = ?`, wb.ID, ws.ID).Rows()
+						if err != nil {
+							log.WithError(err).Errorf("Failed to retrieve the cells for worksheet %q", ws.Name)
+						} else {
+							cells := make(map[string]int)
+							var r string
+							var id int
+							for rows.Next() {
+								rows.Scan(&r, &id)
+								if cellIDRe.MatchString(r) {
+									cells[r] = id
+								}
 							}
-						}
-						rows.Close()
-						xfs := ss.CellXfs.Xf
-						borders := ss.Borders.Border
-						numFmts := ss.NumFmts.NumFmt
-						for _, c := range cells {
-							s := file.GetCellStyle(c.N, c.R)
-							if s > 0 && s <= len(xfs) {
-								xf := xfs[s-1]
-								var cell Cell
-								Db.First(&cell, c.ID)
-								cell.Fill = (xf.FillId != "0" || (xf.ApplyFill != "0" && xf.ApplyFill != "false"))
-								cell.Font = (xf.ApplyFont == "1" || xf.ApplyFont == "true")
+							rows.Close()
 
-								// Alignments:
-								if xf.ApplyAlignment == "1" || xf.ApplyAlignment == "true" {
-									a := Alignment{
-										Horizontal: xf.Alignment.Horizontal,
-										Vertical:   xf.Alignment.Vertical,
-										WrapText:   (xf.Alignment.WrapText == "1" || xf.Alignment.WrapText == "true"),
-									}
-									Db.Create(&a)
-									cell.AlignmentID = NewNullInt64(a.ID)
-									cell.Alignments = joinStr(",", a.Horizontal, a.Vertical, xf.Alignment.WrapText)
-								}
-
-								// Borders:
-								if xf.ApplyBorder == "1" || xf.ApplyBorder == "true" {
-									id, _ := strconv.Atoi(xf.BorderId)
-									if id > 0 && id <= len(borders) {
-										b := borders[id-1]
-										rec := Border{
-											Left:   b.Left.Style,
-											Right:  b.Right.Style,
-											Top:    b.Top.Style,
-											Bottom: b.Bottom.Style,
+							for i, row := range sheet.Rows {
+								for j := range row.Cells {
+									// Cell range:
+									r := CellAddress(i, j)
+									var cell Cell
+									if id, ok := cells[r]; !ok {
+										block := Block{
+											WorksheetID: ws.ID,
+											Range:       r,
+											TRow:        i,
+											BRow:        i,
+											LCol:        j,
+											RCol:        j,
 										}
-										if b.DiagonalUp == "1" || b.DiagonalUp == "true" {
-											rec.Diagonal = "up"
-										} else if b.DiagonalDown == "1" || b.DiagonalDown == "true" {
-											rec.Diagonal = "down"
+										Db.FirstOrCreate(&block, block)
+										cell = Cell{
+											BlockID:     NewNullInt64(block.ID),
+											WorksheetID: ws.ID,
+											Range:       r,
+											Row:         i,
+											Col:         j,
 										}
-										Db.Create(&rec)
-										cell.BorderID = NewNullInt64(rec.ID)
-										cell.Borders = joinStr(",", rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal)
-									}
-								}
-
-								// Cell format:
-								if (xf.ApplyNumberFormat != "0" && xf.ApplyNumberFormat != "false") || xf.NumFmtId != "0" {
-									id, _ := strconv.Atoi(xf.NumFmtId)
-									if id > 0 && id <= len(numFmts) {
-										cell.CellFormat = numFmts[id-1].FormatCode
+										Db.FirstOrCreate(&cell, cell)
 									} else {
-										cell.CellFormat = "ID: " + xf.NumFmtId
+										Db.First(&cell, id)
 									}
-								}
 
-								Db.Save(&cell)
-							}
+									s := file.GetCellStyle(sheet.Name, r)
+									if s > 0 && s <= len(xfs) {
+										xf := xfs[s-1]
+										cell.Fill = (xf.FillId != "0" || (xf.ApplyFill != "0" && xf.ApplyFill != "false"))
+										cell.Font = (xf.ApplyFont == "1" || xf.ApplyFont == "true")
+
+										// Alignments:
+										if xf.ApplyAlignment == "1" || xf.ApplyAlignment == "true" {
+											a := Alignment{
+												Horizontal: xf.Alignment.Horizontal,
+												Vertical:   xf.Alignment.Vertical,
+												WrapText:   (xf.Alignment.WrapText == "1" || xf.Alignment.WrapText == "true"),
+											}
+											Db.Create(&a)
+											cell.AlignmentID = NewNullInt64(a.ID)
+											cell.Alignments = joinStr(",", a.Horizontal, a.Vertical, xf.Alignment.WrapText)
+										}
+
+										// Borders:
+										if xf.ApplyBorder == "1" || xf.ApplyBorder == "true" {
+											id, _ := strconv.Atoi(xf.BorderId)
+											if id > 0 && id <= len(borders) {
+												b := borders[id-1]
+												rec := Border{
+													Left:   b.Left.Style,
+													Right:  b.Right.Style,
+													Top:    b.Top.Style,
+													Bottom: b.Bottom.Style,
+												}
+												if b.DiagonalUp == "1" || b.DiagonalUp == "true" {
+													rec.Diagonal = "up"
+												} else if b.DiagonalDown == "1" || b.DiagonalDown == "true" {
+													rec.Diagonal = "down"
+												}
+												Db.Create(&rec)
+												cell.BorderID = NewNullInt64(rec.ID)
+												cell.Borders = joinStr(",", rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal)
+											}
+										}
+
+										// Cell format:
+										if (xf.ApplyNumberFormat != "0" && xf.ApplyNumberFormat != "false") || xf.NumFmtId != "0" {
+											id, _ := strconv.Atoi(xf.NumFmtId)
+											if id > 0 && id <= len(numFmts) {
+												cell.CellFormat = numFmts[id-1].FormatCode
+											} else {
+												cell.CellFormat = "ID: " + xf.NumFmtId
+											}
+										}
+
+										Db.Save(&cell)
+									}
+								} // Cells
+							} // Rows
 						}
 					}
 				}
