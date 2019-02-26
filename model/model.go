@@ -2116,23 +2116,23 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 						}
 
 						var ws Worksheet
-						err = Db.FirstOrCreate(&ws, Worksheet{
-							Name:             sheet.Name,
-							WorkbookID:       wb.ID,
-							WorkbookFileName: wb.FileName,
-							AnswerID:         NewNullInt64(answerID),
-							OrderNum:         orderNum,
-						}).Error
+						err = Db.
+							Where("workbook_id = ? AND name = ?", wb.ID, sheet.Name).
+							Attrs(Worksheet{
+								Name:             sheet.Name,
+								WorkbookID:       wb.ID,
+								WorkbookFileName: wb.FileName,
+								AnswerID:         NewNullInt64(answerID),
+								OrderNum:         orderNum,
+							}).
+							FirstOrCreate(&ws).Error
 						if err != nil {
 							log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
 							continue
 						}
 
-						rows, err := Db.Raw(
-							`SELECT cell_range, c.id
-							FROM Cells AS c JOIN WorkSheets AS ws 
-								ON c.worksheet_id = ws.id
-							WHERE ws.workbook_id = ? AND ws.id = ?`, wb.ID, ws.ID).Rows()
+						rows, err := Db.Raw(`SELECT cell_range, c.id
+							FROM Cells AS c WHERE c.worksheet_id = ?`, ws.ID).Rows()
 						if err != nil {
 							log.WithError(err).Errorf("Failed to retrieve the cells for worksheet %q", ws.Name)
 						} else {
@@ -2161,7 +2161,11 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 											LCol:        j,
 											RCol:        j,
 										}
-										Db.FirstOrCreate(&block, block)
+										Db.Where(`worksheet_id = ?
+												AND (BlockCellRange = ? OR BlockCellRange = ?)`,
+											ws.ID, r, r+":"+r).
+											Attrs(block).
+											FirstOrCreate(&block)
 										cell = Cell{
 											BlockID:     NewNullInt64(block.ID),
 											WorksheetID: ws.ID,

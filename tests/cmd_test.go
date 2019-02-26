@@ -221,7 +221,7 @@ func TestFormattingImport(t *testing.T) {
 
 	refWB := model.Workbook{IsReference: true}
 	db.FirstOrCreate(&refWB, refWB)
-	refWS := model.Worksheet{IsReference: true, WorkbookID: refWB.ID}
+	refWS := model.Worksheet{IsReference: true, WorkbookID: refWB.ID, Idx: 1}
 	db.FirstOrCreate(&refWS, refWS)
 	refBlock := model.Block{
 		WorksheetID: refWS.ID,
@@ -587,9 +587,9 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		fn                     string
 		blockCount, emptyCount int
 	}{
-		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 99},
-		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 98},
-		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 97},
+		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 330},
+		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 328},
+		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 326},
 	} {
 		a = model.Answer{
 			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
@@ -977,9 +977,9 @@ func testCWA175(t *testing.T) {
 		fn       string
 		expected int
 	}{
-		{"CWA175-student1.xlsx", 1},
-		{"CWA175-student2.xlsx", 3},
-		{"CWA175-student3.xlsx", 7},
+		{"CWA175-student1.xlsx", 58},
+		{"CWA175-student2.xlsx", 29},
+		{"CWA175-student3.xlsx", 38},
 	} {
 		answer := model.Answer{
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
