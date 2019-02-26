@@ -587,9 +587,9 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		fn                     string
 		blockCount, emptyCount int
 	}{
-		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 330},
-		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 328},
-		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 326},
+		{"Answer stud 1 Q3 Compounding1.xlsx", 1, 231},
+		{"Answer stud 2 Q3 Compounding1.xlsx", 2, 230},
+		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 229},
 	} {
 		a = model.Answer{
 			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
@@ -978,8 +978,8 @@ func testCWA175(t *testing.T) {
 		expected int
 	}{
 		{"CWA175-student1.xlsx", 58},
-		{"CWA175-student2.xlsx", 29},
-		{"CWA175-student3.xlsx", 38},
+		{"CWA175-student2.xlsx", 27},
+		{"CWA175-student3.xlsx", 31},
 	} {
 		answer := model.Answer{
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
