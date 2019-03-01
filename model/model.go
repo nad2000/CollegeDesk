@@ -1279,21 +1279,19 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					relFormula := RelativeFormula(i, j, cell.Formula())
 					if relFormula == b.RelativeFormula {
 						cellID := CellAddress(i, j)
-						if value := cellValue(cell); value != "" {
-							c := Cell{
-								BlockID:     NewNullInt64(b.ID),
-								WorksheetID: b.WorksheetID,
-								Formula:     cell.Formula(),
-								Value:       value,
-								Range:       cellID,
-							}
-							if DebugLevel > 1 {
-								log.Debugf("Inserting %#v", c)
-							}
+						c := Cell{
+							BlockID:     NewNullInt64(b.ID),
+							WorksheetID: b.WorksheetID,
+							Formula:     cell.Formula(),
+							Value:       cellValue(cell),
+							Range:       cellID,
+						}
+						if DebugLevel > 1 {
+							log.Debugf("Inserting %#v", c)
+						}
 
-							if err := Db.Create(&c).Error; err != nil {
-								log.WithError(err).Error("Failed to create a cell: ", c)
-							}
+						if err := Db.Create(&c).Error; err != nil {
+							log.WithError(err).Error("Failed to create a cell: ", c)
 						}
 					}
 				}
@@ -1352,17 +1350,15 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 	for r := b.TRow; r <= b.BRow; r++ {
 		for c := b.LCol; c <= b.RCol; c++ {
 			cell := sheet.Cell(r, c)
-			if value := cellValue(cell); value != "" {
-				err := Db.Create(&Cell{
-					BlockID:     NewNullInt64(b.ID),
-					WorksheetID: b.WorksheetID,
-					Formula:     cell.Formula(),
-					Value:       value,
-					Range:       CellAddress(r, c),
-				}).Error
-				if err != nil {
-					log.WithError(err).Error("Failed to create a cell.")
-				}
+			err := Db.Create(&Cell{
+				BlockID:     NewNullInt64(b.ID),
+				WorksheetID: b.WorksheetID,
+				Formula:     cell.Formula(),
+				Value:       cellValue(cell),
+				Range:       CellAddress(r, c),
+			}).Error
+			if err != nil {
+				log.WithError(err).Error("Failed to create a cell.")
 			}
 		}
 	}
@@ -1781,14 +1777,22 @@ func (bl *blockList) wasFound(r, c int) bool {
 // createEmptyCellBlock - create a block consisting of a single cell
 func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
 	address := CellAddress(r, c)
-	address += ":" + address
-	return Db.Create(&Block{
+	block := Block{
 		WorksheetID: ws.ID,
-		Range:       address,
+		Range:       address + ":" + address,
 		TRow:        r,
 		LCol:        c,
 		BRow:        r,
 		RCol:        c,
+	}
+	if err := Db.Create(&block).Error; err != nil {
+		return nil
+	}
+	return Db.Create(&Cell{
+		BlockID: NewNullInt64(block.ID),
+		Row:     r,
+		Col:     c,
+		Range:   address,
 	}).Error
 }
 
@@ -1918,6 +1922,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	allSheets := file.Sheets
+	wbReferences := make(map[string][]Block)
 	for orderNum, sheet := range allSheets {
 
 		if sheet.Hidden {
@@ -1943,6 +1948,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
 			}
 		}
+		wbReferences[sheet.Name] = references
 
 		// Attempt to use reference blocks for the answer if it's given:
 		if q.ReferenceID.Valid {
@@ -2147,8 +2153,24 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 							}
 							rows.Close()
 
+							references := wbReferences[sheet.Name]
+
 							for i, row := range sheet.Rows {
-								for j := range row.Cells {
+								for j, c := range row.Cells {
+									if references == nil {
+										if c.GetStyle().Fill.FgColor != color {
+											continue // skip the cell
+										}
+									} else {
+										for _, r := range references {
+											if r.IsInside(i, j) {
+												goto CELL
+
+											}
+										}
+										continue // skip the cell
+									}
+								CELL:
 									// Cell range:
 									r := CellAddress(i, j)
 									var cell Cell
