@@ -2,6 +2,7 @@ package tests
 
 import (
 	"extract-blocks/model"
+	"strconv"
 	"testing"
 
 	"github.com/nad2000/excelize"
@@ -30,7 +31,7 @@ func TestFilters(t *testing.T) {
 	file, _ := excelize.OpenFile("Filter ALL TYPES.xlsx")
 	t.Logf("%+v", file.WorkBook.Sheets)
 	for _, sheet := range file.WorkBook.Sheets.Sheet {
-		name := "xl/worksheets/sheet" + sheet.SheetID + ".xml"
+		name := "xl/worksheets/sheet" + strconv.Itoa(sheet.SheetID) + ".xml"
 		s := model.UnmarshalWorksheet(file.XLSX[name])
 		t.Log(s.AutoFilter)
 	}

@@ -35,7 +35,9 @@ var DebugLevel int
 // DryRun - perform processing without actually updating or changing files
 var DryRun bool
 
-var cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+var (
+	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+)
 
 // CellAddress maps a cell coordiantes (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
@@ -128,6 +130,7 @@ type Question struct {
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
+	IsFormatting       bool
 }
 
 // TableName overrides default table name for the model
@@ -249,7 +252,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 		for i, row := range sheet.Rows {
 			for j, cell := range row.Cells {
 
-				if blocks.wasFound(i, j) {
+				if blocks.includes(i, j) {
 					continue
 				}
 				style := cell.GetStyle()
@@ -476,21 +479,12 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 			AnswerID:   wb.AnswerID,
 			WorkbookID: wb.ID,
 		})
-		authors := comments.Authors
-		for _, c := range comments.CommentList.Comment {
-			var a string
-			if len(authors) > 0 && c.AuthorID >= 0 && c.AuthorID < len(authors) {
-				a = strings.Split(authors[c.AuthorID].Author, ":")[0]
-			}
-			for _, t := range c.Text.R {
-				if a != "" && !strings.HasPrefix(t.T, a) {
-					log.Debugf("*** [%s] %s: %s", c.Ref, a, t.T)
-					var cell Cell
-					result := Db.First(&cell, "worksheet_id = ? AND range = ?", ws.ID, c.Ref)
-					if !result.RecordNotFound() {
-						Db.Model(&cell).UpdateColumn("comment", t.T)
-					}
-				}
+		for _, c := range comments {
+			log.Debugf("*** [%s] %s: %s", c.Ref, c.Author, c.Text)
+			var cell Cell
+			result := Db.First(&cell, "worksheet_id = ? AND range = ?", ws.ID, c.Ref)
+			if !result.RecordNotFound() {
+				Db.Model(&cell).UpdateColumn("comment", c.Text)
 			}
 
 		}
@@ -1042,7 +1036,7 @@ func (ws *Worksheet) AddAuxBlock(b *Block) {
 	b.WorksheetID = ws.ID
 	Db.Create(b)
 	c := Cell{
-		BlockID:     b.ID,
+		BlockID:     NewNullInt64(b.ID),
 		WorksheetID: b.WorksheetID,
 		Range:       b.Range,
 		Formula:     b.Formula,
@@ -1285,21 +1279,19 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 					relFormula := RelativeFormula(i, j, cell.Formula())
 					if relFormula == b.RelativeFormula {
 						cellID := CellAddress(i, j)
-						if value := cellValue(cell); value != "" {
-							c := Cell{
-								BlockID:     b.ID,
-								WorksheetID: b.WorksheetID,
-								Formula:     cell.Formula(),
-								Value:       value,
-								Range:       cellID,
-							}
-							if DebugLevel > 1 {
-								log.Debugf("Inserting %#v", c)
-							}
+						c := Cell{
+							BlockID:     NewNullInt64(b.ID),
+							WorksheetID: b.WorksheetID,
+							Formula:     cell.Formula(),
+							Value:       cellValue(cell),
+							Range:       cellID,
+						}
+						if DebugLevel > 1 {
+							log.Debugf("Inserting %#v", c)
+						}
 
-							if err := Db.Create(&c).Error; err != nil {
-								log.WithError(err).Error("Failed to create a cell: ", c)
-							}
+						if err := Db.Create(&c).Error; err != nil {
+							log.WithError(err).Error("Failed to create a cell: ", c)
 						}
 					}
 				}
@@ -1323,7 +1315,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 
 // fildWholeWithin finds whole range with the same "relative" formula
 // withing the specific reference block ignoring the filling color.
-func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block) {
+func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bool) {
 	b.BRow, b.RCol = b.TRow, b.LCol
 	for r := b.TRow; r <= rb.BRow; r++ {
 
@@ -1358,17 +1350,15 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block) {
 	for r := b.TRow; r <= b.BRow; r++ {
 		for c := b.LCol; c <= b.RCol; c++ {
 			cell := sheet.Cell(r, c)
-			if value := cellValue(cell); value != "" {
-				err := Db.Create(&Cell{
-					BlockID:     b.ID,
-					WorksheetID: b.WorksheetID,
-					Formula:     cell.Formula(),
-					Value:       value,
-					Range:       CellAddress(r, c),
-				}).Error
-				if err != nil {
-					log.WithError(err).Error("Failed to create a cell.")
-				}
+			err := Db.Create(&Cell{
+				BlockID:     NewNullInt64(b.ID),
+				WorksheetID: b.WorksheetID,
+				Formula:     cell.Formula(),
+				Value:       cellValue(cell),
+				Range:       CellAddress(r, c),
+			}).Error
+			if err != nil {
+				log.WithError(err).Error("Failed to create a cell.")
 			}
 		}
 	}
@@ -1431,19 +1421,26 @@ func (b *Block) IsInside(r, c int) bool {
 
 // Cell - a sigle cell of the block
 type Cell struct {
-	ID             int
-	Block          Block `gorm:"ForeignKey:BlockID"`
-	BlockID        int   `gorm:"index"`
-	Worksheet      Worksheet
-	WorksheetID    int    `gorm:"index"`
-	Range          string `gorm:"column:cell_range"`
-	Formula        string
-	Value          string `gorm:"size:2000"`
-	Comment        Comment
-	CommentID      sql.NullInt64   `gorm:"column:CommentID;type:int"`
-	Row            int             `gorm:"index"`
-	Col            int             `gorm:"index"`
-	AutoEvaluation *AutoEvaluation `gorm:"save_associations:false"`
+	ID                    int
+	Block                 Block         `gorm:"ForeignKey:BlockID"`
+	BlockID               sql.NullInt64 `gorm:"index;type:int"`
+	Worksheet             Worksheet
+	WorksheetID           int    `gorm:"index"`
+	Range                 string `gorm:"column:cell_range"`
+	Formula               string
+	Value                 string `gorm:"size:2000"`
+	Comment               Comment
+	CommentID             sql.NullInt64   `gorm:"column:CommentID;type:int"`
+	Row                   int             `gorm:"index"`
+	Col                   int             `gorm:"index"`
+	AutoEvaluation        *AutoEvaluation `gorm:"save_associations:false"`
+	Fill, Font            bool
+	Borders, Alignments   string
+	CellFormat, MergedRef string
+	BorderID              sql.NullInt64 `gorm:"index;type:int"`
+	Border                *Border
+	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
+	Alignment             *Alignment
 }
 
 // TableName overrides default table name for the model
@@ -1516,6 +1513,7 @@ type MySQLQuestion struct {
 	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
+	IsFormatting       bool
 }
 
 // TableName overrides default table name for the model
@@ -1576,6 +1574,29 @@ func (QuestionAssignment) TableName() string {
 	return "QuestionAssignmentMapping"
 }
 
+// Border - cell border style definition
+type Border struct {
+	ID                                 int
+	Left, Right, Top, Bottom, Diagonal string
+}
+
+// TableName overrides default table name for the model
+func (Border) TableName() string {
+	return "borders"
+}
+
+// Alignment - cell alignment style definitions
+type Alignment struct {
+	ID                   int
+	Horizontal, Vertical string
+	WrapText             bool
+}
+
+// TableName overrides default table name for the model
+func (Alignment) TableName() string {
+	return "alignments"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -1589,6 +1610,8 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
+	Db.AutoMigrate(&Border{})
+	Db.AutoMigrate(&Alignment{})
 	Db.AutoMigrate(&User{})
 	Db.AutoMigrate(&QuestionExcelData{})
 	Db.AutoMigrate(&Answer{})
@@ -1617,6 +1640,8 @@ func SetDb() {
 		Db.Model(&Worksheet{}).AddForeignKey("StudentAnswerID", "StudentAnswers(StudentAnswerID)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Cells...")
 		Db.Model(&Cell{}).AddForeignKey("block_id", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("alignment_id", "alignments(id)", "CASCADE", "CASCADE")
+		Db.Model(&Cell{}).AddForeignKey("border_id", "borders(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Blocks...")
 		Db.Model(&Block{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		log.Debug("Adding a constraint to Worksheets -> Workbooks...")
@@ -1738,9 +1763,12 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 
 type blockList []Block
 
-// wasFound tests if the range containing the cell
-// coordinates hhas been already found.
-func (bl *blockList) wasFound(r, c int) bool {
+// includes tests if the range containing the cell
+// coordinates has been already found.
+func (bl *blockList) includes(r, c int) bool {
+	if *bl == nil {
+		return false
+	}
 	for _, b := range *bl {
 		if b.IsInside(r, c) {
 			return true
@@ -1750,21 +1778,31 @@ func (bl *blockList) wasFound(r, c int) bool {
 }
 
 // createEmptyCellBlock - create a block consisting of a single cell
-func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
+func (ws *Worksheet) createEmptyCellBlock(sheet *xlsx.Sheet, r, c int) (err error) {
 	address := CellAddress(r, c)
-	address += ":" + address
-	return Db.Create(&Block{
+	block := Block{
 		WorksheetID: ws.ID,
-		Range:       address,
+		Range:       address + ":" + address,
 		TRow:        r,
 		LCol:        c,
 		BRow:        r,
 		RCol:        c,
+	}
+	if err := Db.Create(&block).Error; err != nil {
+		return nil
+	}
+	return Db.Create(&Cell{
+		BlockID:     NewNullInt64(block.ID),
+		WorksheetID: ws.ID,
+		Row:         r,
+		Col:         c,
+		Range:       address,
+		Value:       cellValue(sheet.Cell(r, c)),
 	}).Error
 }
 
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
-func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
+func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatting bool) (err error) {
 	var (
 		b      Block
 		cell   *xlsx.Cell
@@ -1774,7 +1812,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 	for r := rb.TRow; r <= rb.BRow; r++ {
 		for c := rb.LCol; c <= rb.RCol; c++ {
 
-			if blocks.wasFound(r, c) {
+			if blocks.includes(r, c) {
 				continue
 			}
 
@@ -1795,7 +1833,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 					log.Debugf("Created %#v", b)
 				}
 
-				b.findWholeWithin(sheet, rb)
+				b.findWholeWithin(sheet, rb, importFormatting)
 				b.Range = b.Address()
 				Db.Save(b)
 				blocks = append(blocks, b)
@@ -1804,8 +1842,8 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block) (err error) {
 	}
 	for r := rb.TRow; r <= rb.BRow; r++ {
 		for c := rb.LCol; c <= rb.RCol; c++ {
-			if !blocks.wasFound(r, c) {
-				ws.createEmptyCellBlock(r, c)
+			if !blocks.includes(r, c) {
+				ws.createEmptyCellBlock(sheet, r, c)
 			}
 		}
 	}
@@ -1888,7 +1926,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the queestion %s", answerID, q)
 	}
 
-	for orderNum, sheet := range file.Sheets {
+	allSheets := file.Sheets
+	wbReferences := make(map[string]blockList)
+	for orderNum, sheet := range allSheets {
 
 		if sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
@@ -1913,6 +1953,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
 			}
 		}
+		wbReferences[sheet.Name] = references
 
 		// Attempt to use reference blocks for the answer if it's given:
 		if q.ReferenceID.Valid {
@@ -1926,12 +1967,13 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.WithError(err).Errorln("Failed to fetch reference blocks for the question:", q)
 				continue
 			}
+
 			// Attempt to use reference blocks for the answer:
 			for _, rb := range references {
 				if verbose {
 					log.Info("Attempt to use a reference block: ", rb)
 				}
-				err = ws.FindBlocksInside(sheet, rb)
+				err = ws.FindBlocksInside(sheet, rb, q.IsFormatting)
 				if err != nil {
 					log.WithError(err).Errorln("Failed to find the blocks using the reference block: ", rb)
 				}
@@ -1944,7 +1986,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			for i, row := range sheet.Rows {
 				for j, cell := range row.Cells {
 
-					if blocks.wasFound(i, j) {
+					if blocks.includes(i, j) {
 						continue
 					}
 					style := cell.GetStyle()
@@ -2059,6 +2101,176 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	err = Db.Model(&answer).UpdateColumn("was_xl_processed", 1).Error
 	if err != nil {
 		log.WithError(err).Errorln("Failed to update the answer entry.")
+	}
+
+	// Retrieve style sheet data
+	if q.IsFormatting {
+		var ss x.StyleSheet
+		file, err := excelize.OpenFile(fileName)
+		if err != nil {
+			log.WithError(err).Errorln("Failed to open: ", fileName)
+		} else {
+			content, ok := file.XLSX["xl/styles.xml"]
+			if ok {
+				err = xml.Unmarshal(content, &ss)
+				if err != nil {
+					log.WithError(err).Errorln("Failed to load style sheet.")
+				} else {
+					xfs := ss.CellXfs.Xf
+					borders := ss.Borders.Border
+					numFmts := ss.NumFmts.NumFmt
+					for orderNum, sheet := range allSheets {
+
+						if sheet.Hidden {
+							log.Infof("Skipping hidden worksheet %q", sheet.Name)
+							continue
+						}
+
+						var ws Worksheet
+						err = Db.
+							Where("workbook_id = ? AND name = ?", wb.ID, sheet.Name).
+							Attrs(Worksheet{
+								Name:             sheet.Name,
+								WorkbookID:       wb.ID,
+								WorkbookFileName: wb.FileName,
+								AnswerID:         NewNullInt64(answerID),
+								OrderNum:         orderNum,
+							}).
+							FirstOrCreate(&ws).Error
+						if err != nil {
+							log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
+							continue
+						}
+
+						rows, err := Db.Raw(`SELECT cell_range, c.id
+							FROM Cells AS c WHERE c.worksheet_id = ?`, ws.ID).Rows()
+						if err != nil {
+							log.WithError(err).Errorf("Failed to retrieve the cells for worksheet %q", ws.Name)
+						} else {
+							cells := make(map[string]int)
+							var r string
+							var id int
+							for rows.Next() {
+								rows.Scan(&r, &id)
+								if cellIDRe.MatchString(r) {
+									cells[r] = id
+								}
+							}
+							rows.Close()
+
+							references := wbReferences[sheet.Name]
+
+							for i, row := range sheet.Rows {
+								for j, c := range row.Cells {
+									if references == nil {
+										if c.GetStyle().Fill.FgColor != color {
+											continue // skip the cell
+										}
+									} else if !references.includes(i, j) {
+										continue
+									}
+
+									// Cell range:
+									r := CellAddress(i, j)
+									var cell Cell
+									if id, ok := cells[r]; !ok {
+										block := Block{
+											WorksheetID: ws.ID,
+											Range:       r,
+											TRow:        i,
+											BRow:        i,
+											LCol:        j,
+											RCol:        j,
+										}
+										Db.Where(`worksheet_id = ?
+												AND (BlockCellRange = ? OR BlockCellRange = ?)`,
+											ws.ID, r, r+":"+r).
+											Attrs(block).
+											FirstOrCreate(&block)
+										cell = Cell{
+											BlockID:     NewNullInt64(block.ID),
+											WorksheetID: ws.ID,
+											Range:       r,
+											Row:         i,
+											Col:         j,
+										}
+										Db.FirstOrCreate(&cell, cell)
+									} else {
+										Db.First(&cell, id)
+									}
+
+									s := file.GetCellStyle(sheet.Name, r)
+									if s > 0 && s <= len(xfs) {
+										xf := xfs[s-1]
+										cell.Fill = (xf.FillId != "0" || (xf.ApplyFill != "0" && xf.ApplyFill != "false"))
+										cell.Font = (xf.ApplyFont == "1" || xf.ApplyFont == "true")
+
+										// Alignments:
+										if xf.ApplyAlignment == "1" || xf.ApplyAlignment == "true" {
+											a := Alignment{
+												Horizontal: xf.Alignment.Horizontal,
+												Vertical:   xf.Alignment.Vertical,
+												WrapText:   (xf.Alignment.WrapText == "1" || xf.Alignment.WrapText == "true"),
+											}
+											Db.Create(&a)
+											cell.AlignmentID = NewNullInt64(a.ID)
+											cell.Alignments = joinStr(",", a.Horizontal, a.Vertical, xf.Alignment.WrapText)
+										}
+
+										// Borders:
+										if xf.ApplyBorder == "1" || xf.ApplyBorder == "true" {
+											id, _ := strconv.Atoi(xf.BorderId)
+											if id > 0 && id <= len(borders) {
+												b := borders[id-1]
+												rec := Border{
+													Left:   b.Left.Style,
+													Right:  b.Right.Style,
+													Top:    b.Top.Style,
+													Bottom: b.Bottom.Style,
+												}
+												if b.DiagonalUp == "1" || b.DiagonalUp == "true" {
+													rec.Diagonal = "up"
+												} else if b.DiagonalDown == "1" || b.DiagonalDown == "true" {
+													rec.Diagonal = "down"
+												}
+												Db.Create(&rec)
+												cell.BorderID = NewNullInt64(rec.ID)
+												cell.Borders = joinStr(",", rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal)
+											}
+										}
+
+										// Cell format:
+										if (xf.ApplyNumberFormat != "0" && xf.ApplyNumberFormat != "false") || xf.NumFmtId != "0" {
+											id, _ := strconv.Atoi(xf.NumFmtId)
+											if id > 0 && id <= len(numFmts) {
+												cell.CellFormat = numFmts[id-1].FormatCode
+											} else {
+												cell.CellFormat = "ID: " + xf.NumFmtId
+											}
+										}
+
+										Db.Save(&cell)
+									}
+								} // Cells
+							} // Rows
+						}
+					}
+				}
+			}
+		}
+		// Merged refs:
+		var sheets []Worksheet
+		Db.Where("workbook_id = ?", wb.ID).Find(&sheets)
+		for _, ws := range sheets {
+			for _, mc := range file.GetMergeCells(ws.Name) {
+				ranges := strings.Split(mc[0], ":")
+				if err := Db.Model(&Cell{}).
+					Where("worksheet_id = ? AND cell_range = ?", ws.ID, ranges[0]).
+					Update("merged_ref", mc[0]).Error; err != nil {
+					log.WithError(err).Errorln("Failed to update the cell.")
+				}
+			}
+		}
 	}
 	return
 }

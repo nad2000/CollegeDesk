@@ -284,6 +284,7 @@ func TestScatterChartUnmarshaling(t *testing.T) {
 }
 
 func TestAutoFilterUnmarshaling(t *testing.T) {
-	sheet := UnmarshalWorksheet([]byte(worksheet1))
-	dumpStruct(t, sheet)
+	// sheet :=
+	UnmarshalWorksheet([]byte(worksheet1))
+	// dumpStruct(t, sheet)
 }

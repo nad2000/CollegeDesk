@@ -3,6 +3,7 @@
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/shared_strings.go; zek -e <../assets/sharedStrings.xml >>xlsx/shared_strings.go"
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/pivot_table.go; zek -e <../assets/pivotTable.xml >>xlsx/pivot_table.go"
 //go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/pivot_cache_definition.go; zek -e <../assets/pivotCacheDefinition.xml >>xlsx/pivot_cache_definition.go"
+//go:generate sh -c "echo 'package xlsx; import \"encoding/xml\"' >xlsx/style_sheet.go; zek -e <../assets/styles.xml >>xlsx/style_sheet.go"
 package model
 
 import (
