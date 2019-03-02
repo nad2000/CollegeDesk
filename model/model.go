@@ -131,6 +131,7 @@ type Question struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
+	IsRubricCreatead   bool
 }
 
 // TableName overrides default table name for the model
@@ -1514,6 +1515,7 @@ type MySQLQuestion struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
+	IsRubricCreatead   bool
 }
 
 // TableName overrides default table name for the model
@@ -1597,6 +1599,27 @@ func (Alignment) TableName() string {
 	return "alignments"
 }
 
+// Rubric ...
+type Rubric struct {
+	ID         int
+	TotalMarks sql.NullFloat64
+	Item1      sql.NullFloat64
+	Item2      sql.NullFloat64
+	Item3      sql.NullFloat64
+	Item4      sql.NullFloat64
+	Item5      sql.NullFloat64
+	NumCell    int
+	Block      *Block
+	BlockID    int `gorm:"column:ExcelBlockID;index;not null"`
+	Question   *Question
+	QuestionID int `gorm:"column:QuestionID;index;not null"`
+}
+
+// TableName overrides default table name for the model
+func (Rubric) TableName() string {
+	return "Rubrics"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -1634,6 +1657,7 @@ func SetDb() {
 	Db.AutoMigrate(&AnswerComment{})
 	Db.AutoMigrate(&XLQTransformation{})
 	Db.AutoMigrate(&AutoEvaluation{})
+	Db.AutoMigrate(&Rubric{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1665,6 +1689,8 @@ func SetDb() {
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
+		Db.Model(&Rubric{}).AddForeignKey("ExcelBlockID", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 	}
 }
 
