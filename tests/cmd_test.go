@@ -250,7 +250,7 @@ func TestFormattingImport(t *testing.T) {
 	}
 	db.FirstOrCreate(&a, a)
 
-	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 }
 
 func deleteData() {

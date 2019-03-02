@@ -252,7 +252,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 		for i, row := range sheet.Rows {
 			for j, cell := range row.Cells {
 
-				if blocks.wasFound(i, j) {
+				if blocks.includes(i, j) {
 					continue
 				}
 				style := cell.GetStyle()
@@ -1763,9 +1763,12 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 
 type blockList []Block
 
-// wasFound tests if the range containing the cell
-// coordinates hhas been already found.
-func (bl *blockList) wasFound(r, c int) bool {
+// includes tests if the range containing the cell
+// coordinates has been already found.
+func (bl *blockList) includes(r, c int) bool {
+	if *bl == nil {
+		return false
+	}
 	for _, b := range *bl {
 		if b.IsInside(r, c) {
 			return true
@@ -1775,7 +1778,7 @@ func (bl *blockList) wasFound(r, c int) bool {
 }
 
 // createEmptyCellBlock - create a block consisting of a single cell
-func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
+func (ws *Worksheet) createEmptyCellBlock(sheet *xlsx.Sheet, r, c int) (err error) {
 	address := CellAddress(r, c)
 	block := Block{
 		WorksheetID: ws.ID,
@@ -1789,10 +1792,12 @@ func (ws *Worksheet) createEmptyCellBlock(r, c int) (err error) {
 		return nil
 	}
 	return Db.Create(&Cell{
-		BlockID: NewNullInt64(block.ID),
-		Row:     r,
-		Col:     c,
-		Range:   address,
+		BlockID:     NewNullInt64(block.ID),
+		WorksheetID: ws.ID,
+		Row:         r,
+		Col:         c,
+		Range:       address,
+		Value:       cellValue(sheet.Cell(r, c)),
 	}).Error
 }
 
@@ -1807,7 +1812,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 	for r := rb.TRow; r <= rb.BRow; r++ {
 		for c := rb.LCol; c <= rb.RCol; c++ {
 
-			if blocks.wasFound(r, c) {
+			if blocks.includes(r, c) {
 				continue
 			}
 
@@ -1837,8 +1842,8 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 	}
 	for r := rb.TRow; r <= rb.BRow; r++ {
 		for c := rb.LCol; c <= rb.RCol; c++ {
-			if !blocks.wasFound(r, c) {
-				ws.createEmptyCellBlock(r, c)
+			if !blocks.includes(r, c) {
+				ws.createEmptyCellBlock(sheet, r, c)
 			}
 		}
 	}
@@ -1922,7 +1927,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	allSheets := file.Sheets
-	wbReferences := make(map[string][]Block)
+	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
 		if sheet.Hidden {
@@ -1981,7 +1986,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			for i, row := range sheet.Rows {
 				for j, cell := range row.Cells {
 
-					if blocks.wasFound(i, j) {
+					if blocks.includes(i, j) {
 						continue
 					}
 					style := cell.GetStyle()
@@ -2161,16 +2166,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 										if c.GetStyle().Fill.FgColor != color {
 											continue // skip the cell
 										}
-									} else {
-										for _, r := range references {
-											if r.IsInside(i, j) {
-												goto CELL
-
-											}
-										}
-										continue // skip the cell
+									} else if !references.includes(i, j) {
+										continue
 									}
-								CELL:
+
 									// Cell range:
 									r := CellAddress(i, j)
 									var cell Cell
