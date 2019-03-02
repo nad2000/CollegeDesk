@@ -131,7 +131,7 @@ type Question struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
-	IsRubricCreatead   bool
+	IsRubricCreated    bool
 }
 
 // TableName overrides default table name for the model
@@ -1515,7 +1515,7 @@ type MySQLQuestion struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
-	IsRubricCreatead   bool
+	IsRubricCreated    bool
 }
 
 // TableName overrides default table name for the model
@@ -1608,6 +1608,7 @@ type Rubric struct {
 	Item3      sql.NullFloat64
 	Item4      sql.NullFloat64
 	Item5      sql.NullFloat64
+	Range      string `gorm:"column:block_cell_range"`
 	NumCell    int
 	Block      *Block
 	BlockID    int `gorm:"column:ExcelBlockID;index;not null"`
@@ -2296,6 +2297,29 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					log.WithError(err).Errorln("Failed to update the cell.")
 				}
 			}
+		}
+	}
+	// Rubrics
+	{
+		if err := Db.Exec(`
+INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+SELECT
+    q.QuestionID, b.ExcelBlockID, b.BlockCellRange, (b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+FROM "Users" AS u
+	JOIN StudentAssignments AS sa ON sa.UserID = u.UserID
+	JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+	JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id 
+	JOIN Questions AS q ON q.QuestionID = a.QuestionID
+WHERE q.is_rubric_created = 0 AND u.UserID = 10000
+`).Error; err != nil {
+			log.WithError(err).Errorln("Failed to insert rubrics for UserID=1000.")
+		}
+		if err := Db.Exec(`
+UPDATE Questions SET is_rubric_created = 1
+WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
+`).Error; err != nil {
+			log.WithError(err).Errorln("Failed to update question entries.")
 		}
 	}
 	return

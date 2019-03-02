@@ -243,14 +243,32 @@ func TestFormattingImport(t *testing.T) {
 		ReferenceID:       model.NewNullInt64(refWB.ID),
 	}
 	db.FirstOrCreate(&q, q)
+	db.Create(&model.User{ID: 10000})
+	assignment := model.Assignment{
+		Title: "Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{
+		UserID:       10000,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
+	// answer
 	a := model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2017-01-01 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, a)
 
 	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	var count int
+	db.Model(&model.Rubric{}).Count(&count)
+	if expected := 116; count != expected {
+		t.Errorf("Expected %d rubric entries, got: %d", expected, count)
+	}
 }
 
 func deleteData() {
@@ -309,7 +327,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{4951, 4952, 4953} {
+	for _, uid := range []int{4951, 4952, 4953, 10000} {
 		db.Create(&model.User{ID: uid})
 	}
 	assignment := model.Assignment{
