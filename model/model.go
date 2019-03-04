@@ -2518,6 +2518,30 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 			Db.Save(&a)
 		}
 	}
+	// ...
+	{
+		Db.Exec(`
+SELECT * FROM (
+    SELECT a.QuestionID, b.ExcelBlockID , b.BlockCellRange, c.id, c.cell_range
+    FROM StudentAssignments AS sa
+        JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+        JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+        JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+    WHERE sa.UserID <> 10000 AND a.was_autocommented = 0) AS ua -- user answers
+LEFT JOIN (
+    SELECT a.QuestionID, b.ExcelBlockID , b.BlockCellRange, c.id, c.cell_range
+    FROM StudentAssignments AS sa
+        JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+        JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+        JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+    WHERE sa.UserID = 10000) AS ma -- model answer
+ON ma.QuestionID = ua.QuestionID AND
+    ma.BlockCellRange = ua.BlockCellRange AND
+    ma.cell_range = ua.cell_range
+`)
+	}
 }
 
 // MatchPlagiarismKeys reads plagiarism key and match with the one stored
