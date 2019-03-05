@@ -1451,9 +1451,11 @@ func (Cell) TableName() string {
 
 // AutoEvaluation - ...
 type AutoEvaluation struct {
-	ValueResult    string `gorm:"column:ValueResult;type:varchar(255);not_null;default '0'"`
-	CellID         int    `gorm:"index"`
-	IsValueCorrect bool   `gorm:"column:IsValueCorrect"`
+	ValueResult      string `gorm:"column:ValueResult;type:varchar(255);not_null;default '0'"`
+	CellID           int    `gorm:"index;unique"`
+	IsValueCorrect   bool   `gorm:"column:IsValueCorrect"`
+	IsFormulaCorrect bool   `gorm:"column:IsFormulaCorrect"`
+	IsHardcoded      bool
 }
 
 // TableName overrides default table name for the model
@@ -2467,7 +2469,7 @@ func (User) TableName() string {
 }
 
 // AutoCommentAnswerCells adds automatic comment to the student answer cells
-func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
+func AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID int) {
 
 	var (
 		answers []Answer
@@ -2481,66 +2483,81 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 		Db.Create(&Comment{ID: isPlagiarisedCommentID})
 	}
 
-	err := Db.Preload("Worksheets").
-		Preload("Worksheets.Cells").
-		Preload("Worksheets.Cells.AutoEvaluation").
-		Where("was_autocommented = ?", 0).
-		Or("was_autocommented IS NULL").Find(&answers).Error
+	err := Db.Where("was_autocommented = ?", 0).Or("was_autocommented IS NULL").Find(&answers).Error
 	if err != nil {
 		log.WithError(err).Errorln("Failed to retrieve the answers to autocomment...")
 		return
 	}
 	for _, a := range answers {
-		for _, w := range a.Worksheets {
-			for i, c := range w.Cells {
-				if w.IsPlagiarised {
-					Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
-					w.Cells[i].CommentID = NewNullInt64(isPlagiarisedCommentID)
-
-				} else if c.AutoEvaluation != nil {
-					if c.AutoEvaluation.IsValueCorrect {
-						comment = Comment{
-							Text:  "Answer is correct",
-							Marks: 1.0,
-						}
-					} else {
-						comment = Comment{
-							Text:  "Answer is wrong",
-							Marks: 0.0,
-						}
-					}
-					Db.Create(&comment)
-					Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
-					w.Cells[i].CommentID = NewNullInt64(comment.ID)
-				}
-			}
-			a.WasAutocommented = true
-			Db.Save(&a)
+		type Result struct {
+			ID                                                                 int
+			Range                                                              string
+			Formula                                                            string
+			IsFormulaCorrect, IsValueCorrect, IsHardcoded, IsCorrectCellBlocks bool
 		}
-	}
-	// ...
-	{
-		Db.Exec(`
-SELECT * FROM (
-    SELECT a.QuestionID, b.ExcelBlockID , b.BlockCellRange, c.id, c.cell_range
-    FROM StudentAssignments AS sa
-        JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
-        JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
-        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-        JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-    WHERE sa.UserID <> 10000 AND a.was_autocommented = 0) AS ua -- user answers
-LEFT JOIN (
-    SELECT a.QuestionID, b.ExcelBlockID , b.BlockCellRange, c.id, c.cell_range
-    FROM StudentAssignments AS sa
-        JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
-        JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
-        JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-        JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-    WHERE sa.UserID = 10000) AS ma -- model answer
-ON ma.QuestionID = ua.QuestionID AND
-    ma.BlockCellRange = ua.BlockCellRange AND
-    ma.cell_range = ua.cell_range
-`)
+		rows, err := Db.Raw(`
+SELECT
+    c.id, 
+    c.cell_range,
+    c.Formula,
+    ae.IsFormulaCorrect,
+    ae.IsValueCorrect,
+    ae.is_hardcoded,
+    (b.BlockCellRange = mb.BlockCellRange) AS IsCorrectCellBlocks
+FROM StudentAssignments AS sa
+    JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+    JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+    JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+    LEFT JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+    -- Model answers
+    LEFT JOIN StudentAssignments AS msa ON msa.UserID = 10000 
+    LEFT JOIN StudentAnswers AS ma ON ma.StudentAssignmentID = msa.StudentAssignmentID AND ma.QuestionID = a.QuestionID
+    LEFT JOIN WorkSheets AS mws ON mws.StudentAnswerID = ma.StudentAnswerID
+    LEFT JOIN ExcelBlocks AS mb ON mb.worksheet_id = mws.id
+    LEFT JOIN Cells AS mc ON mc.block_id = mb.ExcelBlockID AND mc.cell_range = c.cell_range
+WHERE sa.UserID <> 10000 
+    AND a.was_autocommented = 0 
+    AND a.StudentAnswerID = ?
+`, a.ID).Rows()
+		if err != nil {
+			log.WithError(err).Errorln("Failed to retrieve autoevaluation data")
+			continue
+		}
+
+		var results []Result
+		for rows.Next() {
+			var r Result
+			Db.ScanRows(rows, &r)
+			results = append(results, r)
+		}
+		rows.Close()
+
+		for _, r := range results {
+			log.Infoln(r)
+			// if w.IsPlagiarised {
+			// 	Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
+			// 	w.Cells[i].CommentID = NewNullInt64(isPlagiarisedCommentID)
+
+			// } else if c.AutoEvaluation != nil {
+			// 	if c.AutoEvaluation.IsValueCorrect {
+			// 		comment = Comment{
+			// 			Text:  "Answer is correct",
+			// 			Marks: 1.0,
+			// 		}
+			// 	} else {
+			// 		comment = Comment{
+			// 			Text:  "Answer is wrong",
+			// 			Marks: 0.0,
+			// 		}
+			// 	}
+			// 	Db.Create(&comment)
+			// 	Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
+			// 	w.Cells[i].CommentID = NewNullInt64(comment.ID)
+			// }
+		}
+		// a.WasAutocommented = true
+		// Db.Save(&a)
 	}
 }
 

@@ -684,7 +684,7 @@ func testHandleAnswers(t *testing.T) {
 			db.Create(&model.AutoEvaluation{IsValueCorrect: i%2 == 0, CellID: c.ID})
 		}
 	}
-	model.AutoCommentAnswerCells(12345)
+	model.AutoCommentAnswerCells(12345, 10000)
 }
 
 func TestProcessing(t *testing.T) {
@@ -808,7 +808,7 @@ func testFullCycle(t *testing.T) {
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
 		t.Error(err)
 	}
-	model.AutoCommentAnswerCells(12345)
+	model.AutoCommentAnswerCells(12345, 10000)
 
 	var countAfter int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {

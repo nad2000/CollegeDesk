@@ -64,7 +64,7 @@ Then
 			Db.LogMode(true)
 		}
 
-		model.AutoCommentAnswerCells(isPlagiarisedCommentID)
+		model.AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID)
 	},
 }
 
