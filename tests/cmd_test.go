@@ -340,6 +340,11 @@ func createTestDB() *gorm.DB {
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&sa)
+	msa := model.StudentAssignment{
+		UserID:       10000,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&msa)
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -370,6 +375,12 @@ func createTestDB() *gorm.DB {
 			StudentAssignmentID: sa.ID,
 			SubmissionTime:      *parseTime("2017-01-01 14:42"),
 		})
+		db.Create(&model.Answer{
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			StudentAssignmentID: msa.ID,
+			SubmissionTime:      *parseTime("2017-01-01 14:42"),
+		})
 		if fn == "Sample-poi-file.xlsx" {
 			rwb := model.Workbook{IsReference: true}
 			db.Create(&rwb)
@@ -393,6 +404,15 @@ func createTestDB() *gorm.DB {
 				TimeStamp:     t,
 				QuestionID:    q.ID,
 				// SourceID:      f.ID,
+			})
+		}
+		if fn == "partial.xlsx" {
+			t, _ := time.Parse(time.UnixDate, "Thu Dec 22 12:06:10 UTC 2018")
+			db.Create(&model.XLQTransformation{
+				CellReference: "A1",
+				UserID:        4951,
+				TimeStamp:     t,
+				QuestionID:    q.ID,
 			})
 		}
 	}
@@ -672,7 +692,6 @@ func testHandleAnswers(t *testing.T) {
 	}
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
-	// if !ws.IsPlagiarised.Bool {
 	if !ws.IsPlagiarised {
 		t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
 	}
@@ -680,9 +699,17 @@ func testHandleAnswers(t *testing.T) {
 	var cells []model.Cell
 	db.Find(&cells)
 	for i, c := range cells {
-		if i%5 <= 1 {
-			db.Create(&model.AutoEvaluation{IsValueCorrect: i%2 == 0, CellID: c.ID})
+		var ae model.AutoEvaluation
+		if err := db.FirstOrCreate(&ae, model.AutoEvaluation{
+			IsValueCorrect:   i%2 == 0,
+			IsFormulaCorrect: i%3 == 0,
+			IsHardcoded:      i%4 == 0,
+			CellID:           c.ID,
+		}).Error; err != nil {
+			t.Error(err)
+			return
 		}
+
 	}
 	model.AutoCommentAnswerCells(12345, 10000)
 }

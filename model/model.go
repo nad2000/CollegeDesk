@@ -1291,7 +1291,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 							log.Debugf("Inserting %#v", c)
 						}
 
-						if err := Db.Create(&c).Error; err != nil {
+						if err := Db.FirstOrCreate(&c, c).Error; err != nil {
 							log.WithError(err).Error("Failed to create a cell: ", c)
 						}
 					}
@@ -2490,20 +2490,25 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID int) {
 	}
 	for _, a := range answers {
 		type Result struct {
-			ID                                                                 int
-			Range                                                              string
-			Formula                                                            string
-			IsFormulaCorrect, IsValueCorrect, IsHardcoded, IsCorrectCellBlocks bool
+			ID                                            int
+			Range, Formula                                string
+			IsPlagiarised                                 bool
+			HasAutoEvaluation                             bool
+			IsFormulaCorrect, IsValueCorrect, IsHardcoded bool
+			IsCorrectCellBlocks                           bool
 		}
+		Db.LogMode(true)
 		rows, err := Db.Raw(`
 SELECT
-    c.id, 
-    c.cell_range,
-    c.Formula,
-    ae.IsFormulaCorrect,
-    ae.IsValueCorrect,
+    c.id,
+    c.cell_range AS "range",
+    c.Formula AS formula,
+	ws.is_plagiarised,
+    (ae.cell_id IS NOT NULL) AS has_auto_evaluation,
+    ae.IsFormulaCorrect AS is_formula_correct,
+    ae.IsValueCorrect AS is_value_correct,
     ae.is_hardcoded,
-    (b.BlockCellRange = mb.BlockCellRange) AS IsCorrectCellBlocks
+	(CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) AS is_correct_cell_blocks
 FROM StudentAssignments AS sa
     JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
     JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
@@ -2511,21 +2516,32 @@ FROM StudentAssignments AS sa
     JOIN Cells AS c ON c.block_id = b.ExcelBlockID
     LEFT JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
     -- Model answers
-    LEFT JOIN StudentAssignments AS msa ON msa.UserID = 10000 
-    LEFT JOIN StudentAnswers AS ma ON ma.StudentAssignmentID = msa.StudentAssignmentID AND ma.QuestionID = a.QuestionID
-    LEFT JOIN WorkSheets AS mws ON mws.StudentAnswerID = ma.StudentAnswerID
-    LEFT JOIN ExcelBlocks AS mb ON mb.worksheet_id = mws.id
-    LEFT JOIN Cells AS mc ON mc.block_id = mb.ExcelBlockID AND mc.cell_range = c.cell_range
-WHERE sa.UserID <> 10000 
-    AND a.was_autocommented = 0 
-    AND a.StudentAnswerID = ?
-`, a.ID).Rows()
+	LEFT JOIN (
+		SELECT
+			c.id,
+			c.cell_range,
+			c.Formula,
+			b.BlockCellRange,
+			a.QuestionID,
+			ws.idx
+		FROM StudentAssignments AS sa
+			JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+			JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+			JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+		WHERE sa.UserID = ? AND a.QuestionID = ?) AS ma
+		ON ma.idx = ws.idx AND ma.cell_range = c.cell_range
+	WHERE sa.UserID <> ?
+		AND a.QuestionID = ?
+		AND a.was_autocommented = 0
+		AND a.StudentAnswerID = ?
+`, modelAnswerUserID, a.QuestionID, modelAnswerUserID, a.QuestionID, a.ID).Rows()
 		if err != nil {
 			log.WithError(err).Errorln("Failed to retrieve autoevaluation data")
 			continue
 		}
 
-		var results []Result
+		var results = []Result{}
 		for rows.Next() {
 			var r Result
 			Db.ScanRows(rows, &r)
@@ -2534,30 +2550,57 @@ WHERE sa.UserID <> 10000
 		rows.Close()
 
 		for _, r := range results {
-			log.Infoln(r)
-			// if w.IsPlagiarised {
-			// 	Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
-			// 	w.Cells[i].CommentID = NewNullInt64(isPlagiarisedCommentID)
-
-			// } else if c.AutoEvaluation != nil {
-			// 	if c.AutoEvaluation.IsValueCorrect {
-			// 		comment = Comment{
-			// 			Text:  "Answer is correct",
-			// 			Marks: 1.0,
-			// 		}
-			// 	} else {
-			// 		comment = Comment{
-			// 			Text:  "Answer is wrong",
-			// 			Marks: 0.0,
-			// 		}
-			// 	}
-			// 	Db.Create(&comment)
-			// 	Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
-			// 	w.Cells[i].CommentID = NewNullInt64(comment.ID)
-			// }
+			if r.HasAutoEvaluation {
+				log.Infoln(r)
+			}
+			if r.IsPlagiarised {
+				var ac AnswerComment
+				Db.FirstOrCreate(&ac, AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
+				if err := Db.Model(&Cell{}).Where("id = ?", r.ID).UpdateColumn("comment_id", isPlagiarisedCommentID).Error; err != nil {
+					log.WithError(err).Errorln("Filed to update the cell record")
+				}
+			} else {
+				var comments string
+				if r.Formula == "" {
+					comments = "You have entered a value where a formula is expected; "
+				}
+				if r.IsCorrectCellBlocks {
+					comments += "You have made correct cell blocks"
+				} else {
+					comments += "You have made in-correct cell blocks"
+				}
+				if r.HasAutoEvaluation {
+					if !r.IsFormulaCorrect {
+						comments += "; Your cell formula is wrong"
+					}
+					if !r.IsValueCorrect {
+						comments += "; Your cell value is wrong"
+					}
+					if r.IsHardcoded {
+						comments += "; You have hard coded some parts of the formula"
+					}
+				}
+				if comments != "" {
+					comment = Comment{
+						Text:  comments,
+						Marks: 0.0,
+					}
+				} else {
+					comment = Comment{
+						Text:  "Answer is correct",
+						Marks: 1.0,
+					}
+				}
+				Db.FirstOrCreate(&comment, comment)
+				var ac AnswerComment
+				Db.FirstOrCreate(&ac, AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
+				if err := Db.Model(&Cell{}).Where("id = ?", r.ID).UpdateColumn("comment_id", comment.ID).Error; err != nil {
+					log.WithError(err).Errorln("Filed to update the cell record")
+				}
+			}
 		}
-		// a.WasAutocommented = true
-		// Db.Save(&a)
+		a.WasAutocommented = true
+		Db.Save(&a)
 	}
 }
 
