@@ -662,8 +662,8 @@ func testRowsToProcess(t *testing.T) {
 			t.Errorf("Expected only .xlsx extensions, got %q", r.FileName)
 		}
 	}
-	if len(rows) != len(testFileNames) {
-		t.Errorf("Expected %d rows, got %d", len(testFileNames), len(rows))
+	if expected, got := len(testFileNames)*2, len(rows); got != expected {
+		t.Errorf("Expected %d rows, got %d", expected, got)
 	}
 
 }
@@ -712,20 +712,14 @@ func testHandleAnswers(t *testing.T) {
 	// Add marking data:
 	db.Exec("UPDATE Rubrics SET item1=1./id, item2=1./id, item3=1./id, item4=1./id, item5=1./id")
 	// Auto-commenting
-	var cells []model.Cell
-	db.Find(&cells)
-	for i, c := range cells {
-		var ae model.AutoEvaluation
-		if err := db.FirstOrCreate(&ae, model.AutoEvaluation{
-			IsValueCorrect:   i%2 == 0,
-			IsFormulaCorrect: i%3 == 0,
-			IsHardcoded:      i%4 == 0,
-			CellID:           c.ID,
-		}).Error; err != nil {
-			t.Error(err)
-			return
-		}
-
+	if err := db.Exec(`
+INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
+FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+WHERE ae.cell_id IS NULL
+`).Error; err != nil {
+		t.Error(err)
+		return
 	}
 	model.AutoCommentAnswerCells(12345, 10000)
 }
