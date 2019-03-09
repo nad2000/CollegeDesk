@@ -39,7 +39,7 @@ var (
 	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 )
 
-// CellAddress maps a cell coordiantes (row, column) to its address
+// CellAddress maps a cell coordinates (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
 }
@@ -214,7 +214,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 			return
 		}
 		if DebugLevel > 1 {
-			log.Debugf("Ceated workbook entry %#v", wb)
+			log.Debugf("Created workbook entry %#v", wb)
 		}
 	}
 
@@ -299,7 +299,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 			}
 		}
 		if len(blocks) == 0 {
-			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+			log.Warningf("No block found in the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
 			if len(sheetFillColors) > 0 {
 				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
 			}
@@ -314,7 +314,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 	return
 }
 
-// QuestionExcelData - extracted celles from question Workbooks
+// QuestionExcelData - extracted cells from question Workbooks
 type QuestionExcelData struct {
 	ID         int    `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
 	SheetName  string `gorm:"column:SheetName"`
@@ -433,7 +433,7 @@ type Workbook struct {
 	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
 	Answer      Answer        `gorm:"foreignkey:AnswerID"`
 	Worksheets  []Worksheet   // `gorm:"foreignkey:WorkbookID"`
-	IsReference bool          // the workbook is used for referencing the expected bloks
+	IsReference bool          // the workbook is used for referencing the expected blocks
 }
 
 // TableName overrides default table name for the model
@@ -556,7 +556,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 				log.Fatalf("Failed to create worksheet entry %#v: %s", ws, err.Error())
 			}
 			if DebugLevel > 1 {
-				log.Debugf("Ceated workbook entry %#v", wb)
+				log.Debugf("Created workbook entry %#v", wb)
 			}
 		}
 		ws.Idx = sheetIdx
@@ -568,7 +568,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 	}
 }
 
-// ImportCharts - import charts for the wroksheet
+// ImportCharts - import charts for the worksheet
 func (ws *Worksheet) ImportCharts(file *excelize.File) {
 
 	name := "xl/worksheets/_rels/sheet" + strconv.Itoa(ws.Idx) + ".xml.rels"
@@ -694,7 +694,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			if sc.Descending == "1" {
 				st = "descending"
 			} else {
-				st = "assending"
+				st = "ascending"
 			}
 			sorting := Sorting{
 				DataSourceID: ds.ID,
@@ -1420,7 +1420,7 @@ func (b *Block) IsInside(r, c int) bool {
 		c <= b.RCol)
 }
 
-// Cell - a sigle cell of the block
+// Cell - a single cell of the block
 type Cell struct {
 	ID                    int
 	Block                 Block         `gorm:"ForeignKey:BlockID"`
@@ -1931,7 +1931,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				return
 			}
 			if DebugLevel > 1 {
-				log.Debugf("Ceated workbook entry %#v", wb)
+				log.Debugf("Created workbook entry %#v", wb)
 			}
 		}
 	} else if err = result.Error; err != nil {
@@ -1952,7 +1952,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		return
 	}
 	if verbose {
-		log.Infof("*** Processing the answer ID: %d for the queestion %s", answerID, q)
+		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
 	allSheets := file.Sheets
@@ -2485,7 +2485,7 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID int) {
 
 	err := Db.Where("was_autocommented = ?", 0).Or("was_autocommented IS NULL").Find(&answers).Error
 	if err != nil {
-		log.WithError(err).Errorln("Failed to retrieve the answers to autocomment...")
+		log.WithError(err).Errorln("Failed to retrieve the answers to auto-comment...")
 		return
 	}
 	for _, a := range answers {
@@ -2496,8 +2496,12 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID int) {
 			HasAutoEvaluation                             bool
 			IsFormulaCorrect, IsValueCorrect, IsHardcoded bool
 			IsCorrectCellBlocks                           bool
+			HasRubric                                     bool
+			Marks                                         float64
 		}
-		Db.LogMode(true)
+		if DebugLevel > 1 {
+			Db.LogMode(true)
+		}
 		rows, err := Db.Raw(`
 SELECT
     c.id,
@@ -2508,12 +2512,18 @@ SELECT
     ae.IsFormulaCorrect AS is_formula_correct,
     ae.IsValueCorrect AS is_value_correct,
     ae.is_hardcoded,
-	(CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) AS is_correct_cell_blocks
+	(CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) AS is_correct_cell_blocks,
+	(r.id IS NOT NULL) AS has_rubric,
+	CASE
+		WHEN c.Formula = '' OR c.Formula IS NULL THEN 0.0
+		ELSE (item1+item2+item3+item4+item5)/r.num_cell
+	END AS marks
 FROM StudentAssignments AS sa
     JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
     JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
     JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
     JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+	LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.ExcelBlockID = b.ExcelBlockID
     LEFT JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
     -- Model answers
 	LEFT JOIN (
@@ -2537,8 +2547,11 @@ FROM StudentAssignments AS sa
 		AND a.StudentAnswerID = ?
 `, modelAnswerUserID, a.QuestionID, modelAnswerUserID, a.QuestionID, a.ID).Rows()
 		if err != nil {
-			log.WithError(err).Errorln("Failed to retrieve autoevaluation data")
+			log.WithError(err).Errorln("Failed to retrieve auto-evaluation data")
 			continue
+		}
+		if DebugLevel > 1 {
+			Db.LogMode(false)
 		}
 
 		var results = []Result{}
@@ -2550,7 +2563,7 @@ FROM StudentAssignments AS sa
 		rows.Close()
 
 		for _, r := range results {
-			if r.HasAutoEvaluation {
+			if DebugLevel > 2 {
 				log.Infoln(r)
 			}
 			if r.IsPlagiarised {
@@ -2580,16 +2593,16 @@ FROM StudentAssignments AS sa
 						comments += "; You have hard coded some parts of the formula"
 					}
 				}
-				if comments != "" {
-					comment = Comment{
-						Text:  comments,
-						Marks: 0.0,
-					}
-				} else {
-					comment = Comment{
-						Text:  "Answer is correct",
-						Marks: 1.0,
-					}
+				if comments == "" {
+					comments = "Answer is correct"
+				}
+				var marks float64
+				if r.Marks > 0.0 {
+					marks = r.Marks
+				}
+				comment = Comment{
+					Text:  comments,
+					Marks: marks,
 				}
 				Db.FirstOrCreate(&comment, comment)
 				var ac AnswerComment
@@ -2611,7 +2624,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 	var worksheets []Worksheet
 	err := Db.Model(wb).Related(&worksheets).Error
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get the worksheet enties for the workbook: ", *wb)
+		log.WithError(err).Errorln("Failed to get the worksheet entries for the workbook: ", *wb)
 		return
 	}
 	err = Db.

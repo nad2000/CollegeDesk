@@ -695,6 +695,22 @@ func testHandleAnswers(t *testing.T) {
 	if !ws.IsPlagiarised {
 		t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
 	}
+	// Add missing rubric entries for all cells
+	if err := db.Exec(`
+		INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+		SELECT
+			a.QuestionID, b.ExcelBlockID, b.BlockCellRange, 
+			(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+		FROM StudentAnswers AS a
+		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+		JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.ExcelBlockID = b.ExcelBlockID
+		WHERE r.id IS NULL`).Error; err != nil {
+		t.Error(err)
+	}
+	// Add marking data:
+	db.Exec("UPDATE Rubrics SET item1=1./id, item2=1./id, item3=1./id, item4=1./id, item5=1./id")
 	// Auto-commenting
 	var cells []model.Cell
 	db.Find(&cells)
