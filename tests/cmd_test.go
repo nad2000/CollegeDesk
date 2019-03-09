@@ -831,15 +831,12 @@ func testFullCycle(t *testing.T) {
 	}
 
 	// Auto-commenting
-	var cells []model.Cell
-	db.Find(&cells)
-	for i, c := range cells {
-		switch i % 3 {
-		case 0:
-			db.Create(&model.AutoEvaluation{IsValueCorrect: false, CellID: c.ID})
-		case 1:
-			db.Create(&model.AutoEvaluation{IsValueCorrect: true, CellID: c.ID})
-		}
+	if err := db.Exec(`
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%3 = 1, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL AND c.id % 3 != 2`).Error; err != nil {
+		t.Error(err)
 	}
 	var countBefore int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
@@ -1782,7 +1779,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 10, len(rows); got != expected {
+	if expected, got := 18, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {
