@@ -705,7 +705,7 @@ func testHandleAnswers(t *testing.T) {
 		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
 		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
 		JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.ExcelBlockID = b.ExcelBlockID
+		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
 		WHERE r.id IS NULL`).Error; err != nil {
 		t.Error(err)
 	}

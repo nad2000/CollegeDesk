@@ -2516,14 +2516,14 @@ SELECT
 	(r.id IS NOT NULL) AS has_rubric,
 	CASE
 		WHEN c.Formula = '' OR c.Formula IS NULL THEN 0.0
-		ELSE (item1+item2+item3+item4+item5)/r.num_cell
+		ELSE (r.item2 * (CASE WHEN ae.is_hardcoded = 1 THEN -0.5 ELSE 0 END) +r.item3 * (CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) +r.item4 * ae.IsFormulaCorrect+r.item5 * ae.IsValueCorrect)/r.num_cell
 	END AS marks
 FROM StudentAssignments AS sa
     JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
     JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
     JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
     JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-	LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.ExcelBlockID = b.ExcelBlockID
+	LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
     LEFT JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
     -- Model answers
 	LEFT JOIN (
@@ -2569,7 +2569,8 @@ FROM StudentAssignments AS sa
 			if r.IsPlagiarised {
 				var ac AnswerComment
 				Db.FirstOrCreate(&ac, AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
-				if err := Db.Model(&Cell{}).Where("id = ?", r.ID).UpdateColumn("comment_id", isPlagiarisedCommentID).Error; err != nil {
+				var cell Cell
+				if err := Db.Model(&cell).Where("id = ?", r.ID).UpdateColumn("CommentID", isPlagiarisedCommentID).Error; err != nil {
 					log.WithError(err).Errorln("Filed to update the cell record")
 				}
 			} else {
@@ -2607,7 +2608,8 @@ FROM StudentAssignments AS sa
 				Db.FirstOrCreate(&comment, comment)
 				var ac AnswerComment
 				Db.FirstOrCreate(&ac, AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
-				if err := Db.Model(&Cell{}).Where("id = ?", r.ID).UpdateColumn("comment_id", comment.ID).Error; err != nil {
+				var cell Cell
+				if err := Db.Model(&cell).Where("id = ?", r.ID).UpdateColumn("CommentID", comment.ID).Error; err != nil {
 					log.WithError(err).Errorln("Filed to update the cell record")
 				}
 			}
