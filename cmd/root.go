@@ -52,6 +52,7 @@ var (
 	verbose                bool
 	verboseLevel           int
 	isPlagiarisedCommentID int
+	modelAnswerUserID      int
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -81,6 +82,7 @@ func getConfig() {
 	force = viper.GetBool("force")
 	dest = viper.GetString("dest")
 	isPlagiarisedCommentID = viper.GetInt("is-plagiarised-comment-id")
+	modelAnswerUserID = viper.GetInt("model-answer-user-id")
 	if !strings.HasPrefix(dest, "/") {
 		dest += "/"
 	}
@@ -122,6 +124,7 @@ func init() {
 	viper.SetDefault("aws-region", "ap-south-1")
 	viper.SetDefault("dest", os.TempDir())
 	viper.SetDefault("is-plagiarised-comment-id", 12345)
+	viper.SetDefault("model-answer-user-id", 10000)
 }
 
 // initConfig reads in config file and ENV variables if set.

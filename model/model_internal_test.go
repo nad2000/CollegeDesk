@@ -30,14 +30,17 @@ func TestModel(t *testing.T) {
 	defer Db.Close()
 	t.Log("DIALECT: ", Db.Dialect().GetName(), Db.Dialect().CurrentDatabase())
 	if Db.Dialect().GetName() == "mysql" {
-		Db.Exec("TRUNCATE TABLE Cells")
+		Db.Exec("TRUNCATE TABLE AutoEvaluation")
+		Db.Exec("DELETE FROM Cells")
 		Db.Exec("TRUNCATE TABLE BlockCommentMapping")
 		Db.Exec("TRUNCATE TABLE StudentAnswerCommentMapping")
 		Db.Exec("TRUNCATE TABLE QuestionAssignmentMapping")
-		Db.Exec("TRUNCATE TABLE CourseAssignments")
 		Db.Exec("TRUNCATE TABLE QuestionExcelData")
+		Db.Exec("TRUNCATE TABLE Rubrics")
 		Db.Exec("DELETE FROM Questions")
 		Db.Exec("DELETE FROM ExcelBlocks")
+		Db.Exec("DELETE FROM StudentAssignments")
+		Db.Exec("DELETE FROM CourseAssignments")
 		Db.Exec("DELETE FROM FileSources")
 		Db.Exec("DELETE FROM WorkSheets")
 		Db.Exec("DELETE FROM WorkBooks")
@@ -112,6 +115,22 @@ func TestModel(t *testing.T) {
 		Preload("Worksheets.Cells").
 		Preload("Worksheets.Cells.AutoEvaluation").
 		Where("was_autocommented = ?", 0).Find(&answers)
+
+	var (
+		blocks    blockList
+		questions []Question
+	)
+	Db.Find(&blocks)
+	Db.Find(&questions)
+	for qi, q := range questions {
+		for bi, b := range blocks {
+			Db.Create(&Rubric{
+				NumCell:    qi*bi + 1,
+				BlockID:    b.ID,
+				QuestionID: q.ID,
+			})
+		}
+	}
 }
 
 func TestNormalizeFloatRepr(t *testing.T) {

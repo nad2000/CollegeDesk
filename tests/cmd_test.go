@@ -243,14 +243,32 @@ func TestFormattingImport(t *testing.T) {
 		ReferenceID:       model.NewNullInt64(refWB.ID),
 	}
 	db.FirstOrCreate(&q, q)
+	db.Create(&model.User{ID: 10000})
+	assignment := model.Assignment{
+		Title: "Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{
+		UserID:       10000,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
+	// answer
 	a := model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2017-01-01 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, a)
 
 	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	var count int
+	db.Model(&model.Rubric{}).Count(&count)
+	if expected := 116; count != expected {
+		t.Errorf("Expected %d rubric entries, got: %d", expected, count)
+	}
 }
 
 func deleteData() {
@@ -309,7 +327,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{4951, 4952, 4953} {
+	for _, uid := range []int{4951, 4952, 4953, 10000} {
 		db.Create(&model.User{ID: uid})
 	}
 	assignment := model.Assignment{
@@ -322,6 +340,11 @@ func createTestDB() *gorm.DB {
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&sa)
+	msa := model.StudentAssignment{
+		UserID:       10000,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&msa)
 
 	for _, fn := range testFileNames {
 		f := model.Source{
@@ -352,6 +375,12 @@ func createTestDB() *gorm.DB {
 			StudentAssignmentID: sa.ID,
 			SubmissionTime:      *parseTime("2017-01-01 14:42"),
 		})
+		db.Create(&model.Answer{
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			StudentAssignmentID: msa.ID,
+			SubmissionTime:      *parseTime("2017-01-01 14:42"),
+		})
 		if fn == "Sample-poi-file.xlsx" {
 			rwb := model.Workbook{IsReference: true}
 			db.Create(&rwb)
@@ -375,6 +404,15 @@ func createTestDB() *gorm.DB {
 				TimeStamp:     t,
 				QuestionID:    q.ID,
 				// SourceID:      f.ID,
+			})
+		}
+		if fn == "partial.xlsx" {
+			t, _ := time.Parse(time.UnixDate, "Thu Dec 22 12:06:10 UTC 2018")
+			db.Create(&model.XLQTransformation{
+				CellReference: "A1",
+				UserID:        4951,
+				TimeStamp:     t,
+				QuestionID:    q.ID,
 			})
 		}
 	}
@@ -624,8 +662,8 @@ func testRowsToProcess(t *testing.T) {
 			t.Errorf("Expected only .xlsx extensions, got %q", r.FileName)
 		}
 	}
-	if len(rows) != len(testFileNames) {
-		t.Errorf("Expected %d rows, got %d", len(testFileNames), len(rows))
+	if expected, got := len(testFileNames)*2, len(rows); got != expected {
+		t.Errorf("Expected %d rows, got %d", expected, got)
 	}
 
 }
@@ -654,19 +692,36 @@ func testHandleAnswers(t *testing.T) {
 	}
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", "Sample-poi-file.xlsx").First(&ws)
-	// if !ws.IsPlagiarised.Bool {
 	if !ws.IsPlagiarised {
 		t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
 	}
-	// Auto-commenting
-	var cells []model.Cell
-	db.Find(&cells)
-	for i, c := range cells {
-		if i%5 <= 1 {
-			db.Create(&model.AutoEvaluation{IsValueCorrect: i%2 == 0, CellID: c.ID})
-		}
+	// Add missing rubric entries for all cells
+	if err := db.Exec(`
+		INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+		SELECT
+			a.QuestionID, b.ExcelBlockID, b.BlockCellRange, 
+			(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+		FROM StudentAnswers AS a
+		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+		JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
+		WHERE r.id IS NULL`).Error; err != nil {
+		t.Error(err)
 	}
-	model.AutoCommentAnswerCells(12345)
+	// Add marking data:
+	db.Exec("UPDATE Rubrics SET item1=1./id, item2=1./id, item3=1./id, item4=1./id, item5=1./id")
+	// Auto-commenting
+	if err := db.Exec(`
+INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
+FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+WHERE ae.cell_id IS NULL
+`).Error; err != nil {
+		t.Error(err)
+		return
+	}
+	model.AutoCommentAnswerCells(12345, 10000)
 }
 
 func TestProcessing(t *testing.T) {
@@ -776,21 +831,18 @@ func testFullCycle(t *testing.T) {
 	}
 
 	// Auto-commenting
-	var cells []model.Cell
-	db.Find(&cells)
-	for i, c := range cells {
-		switch i % 3 {
-		case 0:
-			db.Create(&model.AutoEvaluation{IsValueCorrect: false, CellID: c.ID})
-		case 1:
-			db.Create(&model.AutoEvaluation{IsValueCorrect: true, CellID: c.ID})
-		}
+	if err := db.Exec(`
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%3 = 1, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL AND c.id % 3 != 2`).Error; err != nil {
+		t.Error(err)
 	}
 	var countBefore int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
 		t.Error(err)
 	}
-	model.AutoCommentAnswerCells(12345)
+	model.AutoCommentAnswerCells(12345, 10000)
 
 	var countAfter int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
@@ -1727,7 +1779,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 10, len(rows); got != expected {
+	if expected, got := 18, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {
