@@ -39,7 +39,7 @@ var (
 	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 )
 
-// CellAddress maps a cell coordiantes (row, column) to its address
+// CellAddress maps a cell coordinates (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
 }
@@ -131,6 +131,7 @@ type Question struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
+	IsRubricCreated    bool
 }
 
 // TableName overrides default table name for the model
@@ -213,7 +214,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 			return
 		}
 		if DebugLevel > 1 {
-			log.Debugf("Ceated workbook entry %#v", wb)
+			log.Debugf("Created workbook entry %#v", wb)
 		}
 	}
 
@@ -298,7 +299,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 			}
 		}
 		if len(blocks) == 0 {
-			log.Warningf("No block found ot the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
+			log.Warningf("No block found in the worksheet %q of the workbook %q with color %q", sheet.Name, fileName, color)
 			if len(sheetFillColors) > 0 {
 				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
 			}
@@ -313,7 +314,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 	return
 }
 
-// QuestionExcelData - extracted celles from question Workbooks
+// QuestionExcelData - extracted cells from question Workbooks
 type QuestionExcelData struct {
 	ID         int    `gorm:"column:Id;primary_key:true;AUTO_INCREMENT"`
 	SheetName  string `gorm:"column:SheetName"`
@@ -432,7 +433,7 @@ type Workbook struct {
 	AnswerID    sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
 	Answer      Answer        `gorm:"foreignkey:AnswerID"`
 	Worksheets  []Worksheet   // `gorm:"foreignkey:WorkbookID"`
-	IsReference bool          // the workbook is used for referencing the expected bloks
+	IsReference bool          // the workbook is used for referencing the expected blocks
 }
 
 // TableName overrides default table name for the model
@@ -555,7 +556,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 				log.Fatalf("Failed to create worksheet entry %#v: %s", ws, err.Error())
 			}
 			if DebugLevel > 1 {
-				log.Debugf("Ceated workbook entry %#v", wb)
+				log.Debugf("Created workbook entry %#v", wb)
 			}
 		}
 		ws.Idx = sheetIdx
@@ -567,7 +568,7 @@ func (wb *Workbook) ImportWorksheets(fileName string) {
 	}
 }
 
-// ImportCharts - import charts for the wroksheet
+// ImportCharts - import charts for the worksheet
 func (ws *Worksheet) ImportCharts(file *excelize.File) {
 
 	name := "xl/worksheets/_rels/sheet" + strconv.Itoa(ws.Idx) + ".xml.rels"
@@ -693,7 +694,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			if sc.Descending == "1" {
 				st = "descending"
 			} else {
-				st = "assending"
+				st = "ascending"
 			}
 			sorting := Sorting{
 				DataSourceID: ds.ID,
@@ -1290,7 +1291,7 @@ func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
 							log.Debugf("Inserting %#v", c)
 						}
 
-						if err := Db.Create(&c).Error; err != nil {
+						if err := Db.FirstOrCreate(&c, c).Error; err != nil {
 							log.WithError(err).Error("Failed to create a cell: ", c)
 						}
 					}
@@ -1419,7 +1420,7 @@ func (b *Block) IsInside(r, c int) bool {
 		c <= b.RCol)
 }
 
-// Cell - a sigle cell of the block
+// Cell - a single cell of the block
 type Cell struct {
 	ID                    int
 	Block                 Block         `gorm:"ForeignKey:BlockID"`
@@ -1450,9 +1451,11 @@ func (Cell) TableName() string {
 
 // AutoEvaluation - ...
 type AutoEvaluation struct {
-	ValueResult    string `gorm:"column:ValueResult;type:varchar(255);not_null;default '0'"`
-	CellID         int    `gorm:"index"`
-	IsValueCorrect bool   `gorm:"column:IsValueCorrect"`
+	ValueResult      string `gorm:"column:ValueResult;type:varchar(255);not_null;default '0'"`
+	CellID           int    `gorm:"index;unique"`
+	IsValueCorrect   bool   `gorm:"column:IsValueCorrect"`
+	IsFormulaCorrect bool   `gorm:"column:IsFormulaCorrect"`
+	IsHardcoded      bool
 }
 
 // TableName overrides default table name for the model
@@ -1514,6 +1517,7 @@ type MySQLQuestion struct {
 	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
+	IsRubricCreated    bool
 }
 
 // TableName overrides default table name for the model
@@ -1597,6 +1601,28 @@ func (Alignment) TableName() string {
 	return "alignments"
 }
 
+// Rubric ...
+type Rubric struct {
+	ID         int
+	TotalMarks sql.NullFloat64
+	Item1      sql.NullFloat64
+	Item2      sql.NullFloat64
+	Item3      sql.NullFloat64
+	Item4      sql.NullFloat64
+	Item5      sql.NullFloat64
+	Range      string `gorm:"column:block_cell_range"`
+	NumCell    int
+	Block      *Block
+	BlockID    int `gorm:"column:ExcelBlockID;index;not null"`
+	Question   *Question
+	QuestionID int `gorm:"column:QuestionID;index;not null"`
+}
+
+// TableName overrides default table name for the model
+func (Rubric) TableName() string {
+	return "Rubrics"
+}
+
 // SetDb initializes DB
 func SetDb() {
 	// Migrate the schema
@@ -1634,6 +1660,7 @@ func SetDb() {
 	Db.AutoMigrate(&AnswerComment{})
 	Db.AutoMigrate(&XLQTransformation{})
 	Db.AutoMigrate(&AutoEvaluation{})
+	Db.AutoMigrate(&Rubric{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1665,6 +1692,8 @@ func SetDb() {
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
+		Db.Model(&Rubric{}).AddForeignKey("ExcelBlockID", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
+		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -1902,7 +1931,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				return
 			}
 			if DebugLevel > 1 {
-				log.Debugf("Ceated workbook entry %#v", wb)
+				log.Debugf("Created workbook entry %#v", wb)
 			}
 		}
 	} else if err = result.Error; err != nil {
@@ -1923,7 +1952,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		return
 	}
 	if verbose {
-		log.Infof("*** Processing the answer ID: %d for the queestion %s", answerID, q)
+		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
 	allSheets := file.Sheets
@@ -2272,6 +2301,29 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+	// Rubrics
+	{
+		if err := Db.Exec(`
+INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+SELECT
+    q.QuestionID, b.ExcelBlockID, b.BlockCellRange, (b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+FROM "Users" AS u
+	JOIN StudentAssignments AS sa ON sa.UserID = u.UserID
+	JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+	JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id 
+	JOIN Questions AS q ON q.QuestionID = a.QuestionID
+WHERE q.is_rubric_created = 0 AND u.UserID = 10000
+`).Error; err != nil {
+			log.WithError(err).Errorln("Failed to insert rubrics for UserID=1000.")
+		}
+		if err := Db.Exec(`
+UPDATE Questions SET is_rubric_created = 1
+WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
+`).Error; err != nil {
+			log.WithError(err).Errorln("Failed to update question entries.")
+		}
+	}
 	return
 }
 
@@ -2417,7 +2469,7 @@ func (User) TableName() string {
 }
 
 // AutoCommentAnswerCells adds automatic comment to the student answer cells
-func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
+func AutoCommentAnswerCells(isPlagiarisedCommentID, modelAnswerUserID int) {
 
 	var (
 		answers []Answer
@@ -2431,42 +2483,139 @@ func AutoCommentAnswerCells(isPlagiarisedCommentID int) {
 		Db.Create(&Comment{ID: isPlagiarisedCommentID})
 	}
 
-	err := Db.Preload("Worksheets").
-		Preload("Worksheets.Cells").
-		Preload("Worksheets.Cells.AutoEvaluation").
-		Where("was_autocommented = ?", 0).
-		Or("was_autocommented IS NULL").Find(&answers).Error
+	err := Db.Where("was_autocommented = ?", 0).Or("was_autocommented IS NULL").Find(&answers).Error
 	if err != nil {
-		log.WithError(err).Errorln("Failed to retrieve the answers to autocomment...")
+		log.WithError(err).Errorln("Failed to retrieve the answers to auto-comment...")
 		return
 	}
 	for _, a := range answers {
-		for _, w := range a.Worksheets {
-			for i, c := range w.Cells {
-				if w.IsPlagiarised {
-					Db.Create(&AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
-					w.Cells[i].CommentID = NewNullInt64(isPlagiarisedCommentID)
+		type Result struct {
+			ID                                            int
+			Range, Formula                                string
+			IsPlagiarised                                 bool
+			HasAutoEvaluation                             bool
+			IsFormulaCorrect, IsValueCorrect, IsHardcoded bool
+			IsCorrectCellBlocks                           bool
+			HasRubric                                     bool
+			Marks                                         float64
+		}
+		if DebugLevel > 1 {
+			Db.LogMode(true)
+		}
+		rows, err := Db.Raw(`
+SELECT
+    c.id,
+    c.cell_range AS "range",
+    c.Formula AS formula,
+	ws.is_plagiarised,
+    (ae.cell_id IS NOT NULL) AS has_auto_evaluation,
+    ae.IsFormulaCorrect AS is_formula_correct,
+    ae.IsValueCorrect AS is_value_correct,
+    ae.is_hardcoded,
+	(CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) AS is_correct_cell_blocks,
+	(r.id IS NOT NULL) AS has_rubric,
+	CASE
+		WHEN c.Formula = '' OR c.Formula IS NULL THEN 0.0
+		ELSE (r.item2 * (CASE WHEN ae.is_hardcoded = 1 THEN -0.5 ELSE 0 END) +r.item3 * (CASE WHEN b.BlockCellRange = ma.BlockCellRange THEN 1 ELSE 0 END) +r.item4 * ae.IsFormulaCorrect+r.item5 * ae.IsValueCorrect)/r.num_cell
+	END AS marks
+FROM StudentAssignments AS sa
+    JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+    JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+    JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+    JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+	LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
+    LEFT JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+    -- Model answers
+	LEFT JOIN (
+		SELECT
+			c.id,
+			c.cell_range,
+			c.Formula,
+			b.BlockCellRange,
+			a.QuestionID,
+			ws.idx
+		FROM StudentAssignments AS sa
+			JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
+			JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+			JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+		WHERE sa.UserID = ? AND a.QuestionID = ?) AS ma
+		ON ma.idx = ws.idx AND ma.cell_range = c.cell_range
+	WHERE sa.UserID <> ?
+		AND a.QuestionID = ?
+		AND a.was_autocommented = 0
+		AND a.StudentAnswerID = ?
+`, modelAnswerUserID, a.QuestionID, modelAnswerUserID, a.QuestionID, a.ID).Rows()
+		if err != nil {
+			log.WithError(err).Errorln("Failed to retrieve auto-evaluation data")
+			continue
+		}
+		if DebugLevel > 1 {
+			Db.LogMode(false)
+		}
 
-				} else if c.AutoEvaluation != nil {
-					if c.AutoEvaluation.IsValueCorrect {
-						comment = Comment{
-							Text:  "Answer is correct",
-							Marks: 1.0,
-						}
-					} else {
-						comment = Comment{
-							Text:  "Answer is wrong",
-							Marks: 0.0,
-						}
+		var results = []Result{}
+		for rows.Next() {
+			var r Result
+			Db.ScanRows(rows, &r)
+			results = append(results, r)
+		}
+		rows.Close()
+
+		for _, r := range results {
+			if DebugLevel > 2 {
+				log.Infoln(r)
+			}
+			if r.IsPlagiarised {
+				var ac AnswerComment
+				Db.FirstOrCreate(&ac, AnswerComment{CommentID: isPlagiarisedCommentID, AnswerID: a.ID})
+				var cell Cell
+				if err := Db.Model(&cell).Where("id = ?", r.ID).UpdateColumn("CommentID", isPlagiarisedCommentID).Error; err != nil {
+					log.WithError(err).Errorln("Filed to update the cell record")
+				}
+			} else {
+				var comments string
+				if r.Formula == "" {
+					comments = "You have entered a value where a formula is expected; "
+				}
+				if r.IsCorrectCellBlocks {
+					comments += "You have made correct cell blocks"
+				} else {
+					comments += "You have made in-correct cell blocks"
+				}
+				if r.HasAutoEvaluation {
+					if !r.IsFormulaCorrect {
+						comments += "; Your cell formula is wrong"
 					}
-					Db.Create(&comment)
-					Db.Create(&AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
-					w.Cells[i].CommentID = NewNullInt64(comment.ID)
+					if !r.IsValueCorrect {
+						comments += "; Your cell value is wrong"
+					}
+					if r.IsHardcoded {
+						comments += "; You have hard coded some parts of the formula"
+					}
+				}
+				if comments == "" {
+					comments = "Answer is correct"
+				}
+				var marks float64
+				if r.Marks > 0.0 {
+					marks = r.Marks
+				}
+				comment = Comment{
+					Text:  comments,
+					Marks: marks,
+				}
+				Db.FirstOrCreate(&comment, comment)
+				var ac AnswerComment
+				Db.FirstOrCreate(&ac, AnswerComment{CommentID: comment.ID, AnswerID: a.ID})
+				var cell Cell
+				if err := Db.Model(&cell).Where("id = ?", r.ID).UpdateColumn("CommentID", comment.ID).Error; err != nil {
+					log.WithError(err).Errorln("Filed to update the cell record")
 				}
 			}
-			a.WasAutocommented = true
-			Db.Save(&a)
 		}
+		a.WasAutocommented = true
+		Db.Save(&a)
 	}
 }
 
@@ -2477,7 +2626,7 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 	var worksheets []Worksheet
 	err := Db.Model(wb).Related(&worksheets).Error
 	if err != nil {
-		log.WithError(err).Errorln("Failed to get the worksheet enties for the workbook: ", *wb)
+		log.WithError(err).Errorln("Failed to get the worksheet entries for the workbook: ", *wb)
 		return
 	}
 	err = Db.
