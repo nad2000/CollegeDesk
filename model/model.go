@@ -1060,7 +1060,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	// 	tRow, lCol, bRow, rCol int
 	// )
 
-	rows, err := Db.Raw(`SELECT 
+	rows, err := Db.Raw(`SELECT
 	  b.BlockCellRange,
 	  c.CommentText,
 	  b.t_row, b.l_col, b.b_row, b.r_col
@@ -1244,6 +1244,28 @@ func cellValue(cell *xlsx.Cell) (value string) {
 	return
 }
 
+// remove _xlfn from cell formulas CWA-295
+// convert formulas to POI compatible formulas
+func ChangeFormula(formula string) string{
+	var updatedFormula string
+	updatedFormula = formula
+
+	if(strings.Contains(updatedFormula, "_xlfn.")){
+		updatedFormula = strings.Replace(formula, "_xlfn.", "",-1)
+	}
+
+	if(strings.Contains(updatedFormula, "STDEV.S")){
+		updatedFormula = strings.Replace(updatedFormula, "STDEV.S", "STDEV",-1)
+	}	else if(strings.Contains(updatedFormula, "VAR.S")){
+			updatedFormula = strings.Replace(updatedFormula, "VAR.S", "VAR",-1)
+	}	else if(strings.Contains(updatedFormula, "MODE.SNGL")){
+			updatedFormula = strings.Replace(updatedFormula, "MODE.SNGL", "MODE",-1)
+	}	else if(strings.Contains(updatedFormula, "VAR.P")){
+			updatedFormula = strings.Replace(updatedFormula, "VAR.P", "VARP",-1)
+	}
+
+	return updatedFormula
+}
 // fildWhole finds whole range of the specified color
 // and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {
@@ -1351,10 +1373,12 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 	for r := b.TRow; r <= b.BRow; r++ {
 		for c := b.LCol; c <= b.RCol; c++ {
 			cell := sheet.Cell(r, c)
+			var updatedFormula string
+			updatedFormula = ChangeFormula(cell.Formula())
 			err := Db.Create(&Cell{
 				BlockID:     NewNullInt64(b.ID),
 				WorksheetID: b.WorksheetID,
-				Formula:     cell.Formula(),
+				Formula:     updatedFormula,
 				Value:       cellValue(cell),
 				Range:       CellAddress(r, c),
 			}).Error
@@ -2311,7 +2335,7 @@ FROM "Users" AS u
 	JOIN StudentAssignments AS sa ON sa.UserID = u.UserID
 	JOIN StudentAnswers AS a ON a.StudentAssignmentID = sa.StudentAssignmentID
 	JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
-	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id 
+	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
 	JOIN Questions AS q ON q.QuestionID = a.QuestionID
 WHERE q.is_rubric_created = 0 AND u.UserID = 10000
 `).Error; err != nil {
