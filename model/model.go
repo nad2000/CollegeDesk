@@ -2201,7 +2201,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 
 									s := file.GetCellStyle(sheet.Name, r)
 									if s > 0 && s <= len(xfs) {
-										//xf := xfs[s-1]
 										xf := xfs[s]
 										cell.Fill = (xf.FillId != "0" || (xf.ApplyFill != "0" && xf.ApplyFill != "false"))
 										cell.Font = (xf.ApplyFont == "1" || xf.ApplyFont == "true")
@@ -2215,17 +2214,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 											}
 											Db.Create(&a)
 											cell.AlignmentID = NewNullInt64(a.ID)
-											s := []string{}
-											s = append(s,a.Horizontal, a.Vertical, xf.Alignment.WrapText)
-											cell.Alignments = strings.Join(s,",")
-											//cell.Alignments = joinStr(",", a.Horizontal, a.Vertical, xf.Alignment.WrapText)
+											cell.Alignments = strings.Join([]string{a.Horizontal, a.Vertical, xf.Alignment.WrapText}, ",")
 										}
 
 										// Borders:
 										if xf.ApplyBorder == "1" || xf.ApplyBorder == "true" {
-											id, _ := strconv.Atoi(xf.BorderId)
-											if id > 0 && id <= (len(borders)+1) {
-												//b := borders[id-1]
+											if id, _ := strconv.Atoi(xf.BorderId); id > 0 && id <= (len(borders)+1) {
 												b := borders[id]
 												rec := Border{
 													Left:   b.Left.Style,
@@ -2240,28 +2234,21 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 												}
 												Db.Create(&rec)
 												cell.BorderID = NewNullInt64(rec.ID)
-												s := []string{}
-												s = append(s,rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal)
-												cell.Borders = strings.Join(s,",")
+												cell.Borders = strings.Join([]string{rec.Left, rec.Right, rec.Top, rec.Bottom, rec.Diagonal}, ",")
 											}
 										}
 
 										// Cell format:
 										if (xf.ApplyNumberFormat != "0" && xf.ApplyNumberFormat != "false") || xf.NumFmtId != "0" {
-											id, _ := strconv.Atoi(xf.NumFmtId)
-											var found int
-											found = 0
-											if (id > 0 && (len(numFmts) >= 1)) {
-												for i:= 0; i < len(numFmts); i++ {
-													if(xf.NumFmtId == numFmts[i].NumFmtId){
+											if id, _ := strconv.Atoi(xf.NumFmtId); id > 0 && (len(numFmts) >= 1) {
+												for i := 0; i < len(numFmts); i++ {
+													if xf.NumFmtId == numFmts[i].NumFmtId {
 														cell.CellFormat = numFmts[i].FormatCode
-														found = 1
-														break
+														goto FOUND
 													}
 												}
-												if(found == 0){
-													cell.CellFormat = "ID: " + xf.NumFmtId
-												}
+												cell.CellFormat = "ID: " + xf.NumFmtId
+											FOUND:
 											}
 										}
 
