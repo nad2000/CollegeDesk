@@ -1244,28 +1244,29 @@ func cellValue(cell *xlsx.Cell) (value string) {
 	return
 }
 
-// remove _xlfn from cell formulas CWA-295
+// ChangeFormula removes _xlfn from cell formulas CWA-295
 // convert formulas to POI compatible formulas
-func ChangeFormula(formula string) string{
+func ChangeFormula(formula string) string {
 	var updatedFormula string
 	updatedFormula = formula
 
-	if(strings.Contains(updatedFormula, "_xlfn.")){
-		updatedFormula = strings.Replace(formula, "_xlfn.", "",-1)
+	if strings.Contains(updatedFormula, "_xlfn.") {
+		updatedFormula = strings.Replace(formula, "_xlfn.", "", -1)
 	}
 
-	if(strings.Contains(updatedFormula, "STDEV.S")){
-		updatedFormula = strings.Replace(updatedFormula, "STDEV.S", "STDEV",-1)
-	}	else if(strings.Contains(updatedFormula, "VAR.S")){
-			updatedFormula = strings.Replace(updatedFormula, "VAR.S", "VAR",-1)
-	}	else if(strings.Contains(updatedFormula, "MODE.SNGL")){
-			updatedFormula = strings.Replace(updatedFormula, "MODE.SNGL", "MODE",-1)
-	}	else if(strings.Contains(updatedFormula, "VAR.P")){
-			updatedFormula = strings.Replace(updatedFormula, "VAR.P", "VARP",-1)
+	if strings.Contains(updatedFormula, "STDEV.S") {
+		updatedFormula = strings.Replace(updatedFormula, "STDEV.S", "STDEV", -1)
+	} else if strings.Contains(updatedFormula, "VAR.S") {
+		updatedFormula = strings.Replace(updatedFormula, "VAR.S", "VAR", -1)
+	} else if strings.Contains(updatedFormula, "MODE.SNGL") {
+		updatedFormula = strings.Replace(updatedFormula, "MODE.SNGL", "MODE", -1)
+	} else if strings.Contains(updatedFormula, "VAR.P") {
+		updatedFormula = strings.Replace(updatedFormula, "VAR.P", "VARP", -1)
 	}
 
 	return updatedFormula
 }
+
 // fildWhole finds whole range of the specified color
 // and the same "relative" formula starting with the set top-left cell.
 func (b *Block) findWhole(sheet *xlsx.Sheet, color string) {

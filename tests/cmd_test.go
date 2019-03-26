@@ -750,36 +750,36 @@ func TestProcessing(t *testing.T) {
 }
 
 func testChangeFormula(t *testing.T) {
-	var formula string = "sum(A1:B10)"
+	var formula = "sum(A1:B10)"
 	var updatedFormula string
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "sum(A1:B10)")){
-			t.Errorf("Expected same values: %q, %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "sum(A1:B10)") {
+		t.Errorf("Expected same values: %q, %q", formula, updatedFormula)
 	}
 	formula = "_xlfn.sum(A1:B10)"
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "sum(A1:B10)")){
-			t.Errorf("Expected _xlfn removed from %q but we get %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "sum(A1:B10)") {
+		t.Errorf("Expected _xlfn removed from %q but we get %q", formula, updatedFormula)
 	}
 	formula = "_xlfn.STDEV.S(A1:B10)"
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "STDEV")){
-			t.Errorf("Expected _xlfn removed from %q and also STDEV.S change to STDEV, we get %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "STDEV") {
+		t.Errorf("Expected _xlfn removed from %q and also STDEV.S change to STDEV, we get %q", formula, updatedFormula)
 	}
 	formula = "STDEV.S(A1:B10)"
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "STDEV")){
-			t.Errorf("Expected STDEV.S to change to STDEV in %q but we get %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "STDEV") {
+		t.Errorf("Expected STDEV.S to change to STDEV in %q but we get %q", formula, updatedFormula)
 	}
 	formula = "VAR.S(A1:B10)"
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "VAR")){
-			t.Errorf("Expected VAR.S to change to VAR in %q but we get %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "VAR") {
+		t.Errorf("Expected VAR.S to change to VAR in %q but we get %q", formula, updatedFormula)
 	}
 	formula = "MODE.SNGL(A1:B10)"
 	updatedFormula = model.ChangeFormula(formula)
-	if(!strings.Contains(updatedFormula, "MODE")){
-			t.Errorf("Expected MODE.SNGL to change to MODE in %q but we get %q", formula, updatedFormula)
+	if !strings.Contains(updatedFormula, "MODE") {
+		t.Errorf("Expected MODE.SNGL to change to MODE in %q but we get %q", formula, updatedFormula)
 	}
 }
 
