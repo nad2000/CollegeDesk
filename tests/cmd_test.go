@@ -699,7 +699,7 @@ func testHandleAnswers(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
 		SELECT
-			a.QuestionID, b.ExcelBlockID, b.BlockCellRange, 
+			a.QuestionID, b.ExcelBlockID, b.BlockCellRange,
 			(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
 		FROM StudentAnswers AS a
 		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
@@ -746,6 +746,41 @@ func TestProcessing(t *testing.T) {
 	t.Run("ImportWorksheets", testImportWorksheets)
 	t.Run("POI", testPOI)
 	t.Run("FullCycle", testFullCycle)
+	t.Run("ChangeFormula", testChangeFormula)
+}
+
+func testChangeFormula(t *testing.T) {
+	var formula string = "sum(A1:B10)"
+	var updatedFormula string
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "sum(A1:B10)")){
+			t.Errorf("Expected same values: %q, %q", formula, updatedFormula)
+	}
+	formula = "_xlfn.sum(A1:B10)"
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "sum(A1:B10)")){
+			t.Errorf("Expected _xlfn removed from %q but we get %q", formula, updatedFormula)
+	}
+	formula = "_xlfn.STDEV.S(A1:B10)"
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "STDEV")){
+			t.Errorf("Expected _xlfn removed from %q and also STDEV.S change to STDEV, we get %q", formula, updatedFormula)
+	}
+	formula = "STDEV.S(A1:B10)"
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "STDEV")){
+			t.Errorf("Expected STDEV.S to change to STDEV in %q but we get %q", formula, updatedFormula)
+	}
+	formula = "VAR.S(A1:B10)"
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "VAR")){
+			t.Errorf("Expected VAR.S to change to VAR in %q but we get %q", formula, updatedFormula)
+	}
+	formula = "MODE.SNGL(A1:B10)"
+	updatedFormula = model.ChangeFormula(formula)
+	if(!strings.Contains(updatedFormula, "MODE")){
+			t.Errorf("Expected MODE.SNGL to change to MODE in %q but we get %q", formula, updatedFormula)
+	}
 }
 
 func testFullCycle(t *testing.T) {
