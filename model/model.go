@@ -1247,24 +1247,19 @@ func cellValue(cell *xlsx.Cell) (value string) {
 // ChangeFormula removes _xlfn from cell formulas CWA-295
 // convert formulas to POI compatible formulas
 func ChangeFormula(formula string) string {
-	var updatedFormula string
-	updatedFormula = formula
-
-	if strings.Contains(updatedFormula, "_xlfn.") {
-		updatedFormula = strings.Replace(formula, "_xlfn.", "", -1)
+	switch {
+	case strings.Contains(formula, "_xlfn."):
+		formula = strings.Replace(formula, "_xlfn.", "", -1)
+	case strings.Contains(formula, "STDEV.S"):
+		formula = strings.Replace(formula, "STDEV.S", "STDEV", -1)
+	case strings.Contains(formula, "VAR.S"):
+		formula = strings.Replace(formula, "VAR.S", "VAR", -1)
+	case strings.Contains(formula, "MODE.SNGL"):
+		formula = strings.Replace(formula, "MODE.SNGL", "MODE", -1)
+	case strings.Contains(formula, "VAR.P"):
+		formula = strings.Replace(formula, "VAR.P", "VARP", -1)
 	}
-
-	if strings.Contains(updatedFormula, "STDEV.S") {
-		updatedFormula = strings.Replace(updatedFormula, "STDEV.S", "STDEV", -1)
-	} else if strings.Contains(updatedFormula, "VAR.S") {
-		updatedFormula = strings.Replace(updatedFormula, "VAR.S", "VAR", -1)
-	} else if strings.Contains(updatedFormula, "MODE.SNGL") {
-		updatedFormula = strings.Replace(updatedFormula, "MODE.SNGL", "MODE", -1)
-	} else if strings.Contains(updatedFormula, "VAR.P") {
-		updatedFormula = strings.Replace(updatedFormula, "VAR.P", "VARP", -1)
-	}
-
-	return updatedFormula
+	return formula
 }
 
 // fildWhole finds whole range of the specified color
@@ -1467,6 +1462,7 @@ type Cell struct {
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
 	Alignment             *Alignment
+	Type                  string `gorm:"column:cell_type"`
 }
 
 // TableName overrides default table name for the model
@@ -1686,6 +1682,7 @@ func SetDb() {
 	Db.AutoMigrate(&XLQTransformation{})
 	Db.AutoMigrate(&AutoEvaluation{})
 	Db.AutoMigrate(&Rubric{})
+	Db.AutoMigrate(&DefinedName{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1714,11 +1711,13 @@ func SetDb() {
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		// Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
-		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
+		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
 		Db.Model(&Rubric{}).AddForeignKey("ExcelBlockID", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
 		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		Db.Model(&DefinedName{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -2491,6 +2490,24 @@ type User struct {
 // TableName overrides default table name for the model
 func (User) TableName() string {
 	return "Users"
+}
+
+// DefinedName - defined names
+type DefinedName struct {
+	ID          int
+	Name        string
+	Value       string
+	IsHidden    bool
+	Description string
+	WorksheetID int
+	Worksheet   *Worksheet
+	CellID      int
+	Cell        *Cell
+}
+
+// TableName overrides default table name for the model
+func (DefinedName) TableName() string {
+	return "DefinedNames"
 }
 
 // AutoCommentAnswerCells adds automatic comment to the student answer cells
