@@ -747,6 +747,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("POI", testPOI)
 	t.Run("FullCycle", testFullCycle)
 	t.Run("ChangeFormula", testChangeFormula)
+	t.Run("DefinedNames", testDefinedNames)
 }
 
 func testChangeFormula(t *testing.T) {
@@ -836,6 +837,111 @@ func testFullCycle(t *testing.T) {
 		}
 		db.Create(&a)
 		if r.uid > 0 {
+			db.Create(&model.XLQTransformation{
+				CellReference: r.cr,
+				UserID:        r.uid,
+				TimeStamp:     *parseTime(r.ts),
+				QuestionID:    q.ID,
+			})
+			// Create extar entries for  non-pagiarised examples
+			if !r.isPlagiarised {
+				for i := 1; i < 10; i++ {
+					db.Create(&model.XLQTransformation{
+						CellReference: "A" + strconv.Itoa(i),
+						UserID:        r.uid,
+						TimeStamp:     *parseTime(r.ts),
+						QuestionID:    q.ID,
+					})
+				}
+			}
+		}
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		// Test if is marked plagiarised:
+		{
+			var ws model.Worksheet
+			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
+			if ws.IsPlagiarised != r.isPlagiarised {
+				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+			}
+		}
+	}
+
+	// Auto-commenting
+	if err := db.Exec(`
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%3 = 1, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL AND c.id % 3 != 2`).Error; err != nil {
+		t.Error(err)
+	}
+	var countBefore int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
+		t.Error(err)
+	}
+	model.AutoCommentAnswerCells(12345, 10000)
+
+	var countAfter int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
+		t.Error(err)
+	}
+	if countAfter != countBefore {
+		t.Errorf(
+			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
+			countBefore, countAfter)
+	}
+}
+
+func testDefinedNames(t *testing.T) {
+
+	assignment := model.Assignment{
+		Title: "Full Cycel Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	for _, r := range []struct {
+		questionFileName, anserFileName, cr, ts string
+		uid                                     int
+		isPlagiarised                           bool
+	}{
+		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false},
+		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, false}, // "missing download"
+	} {
+
+		qf := model.Source{
+			FileName:     r.questionFileName,
+			S3BucketName: "studentanswers",
+			S3Key:        r.questionFileName,
+		}
+		db.Create(&qf)
+		q := model.Question{
+			SourceID:     model.NewNullInt64(qf.ID),
+			QuestionType: model.QuestionType("FileUpload"),
+			QuestionText: r.questionFileName,
+			MaxScore:     1010.88,
+			AuthorUserID: 123456789,
+			WasCompared:  false,
+			IsFormatting: true,
+		}
+		if err := db.Create(&q).Error; err != nil {
+			t.Error(err)
+		}
+		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+		sa := model.StudentAssignment{
+			UserID:       r.uid,
+			AssignmentID: assignment.ID,
+		}
+		db.Create(&sa)
+		// answer
+		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
+		db.Create(&af)
+		a := model.Answer{
+			SourceID:            model.NewNullInt64(af.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-30 12:42"),
+			StudentAssignmentID: sa.ID,
+		}
+		db.Create(&a)
+		if r.uid > 0 && r.ts != "" {
 			db.Create(&model.XLQTransformation{
 				CellReference: r.cr,
 				UserID:        r.uid,

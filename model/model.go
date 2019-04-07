@@ -39,6 +39,22 @@ var (
 	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 )
 
+// SolverNames - solver name mapping
+var SolverNames = map[string]string{
+	"solver_opt":  "Set Objective",
+	"solver_adj":  "Changing variable cells",
+	"solver_num":  "number of constraints",
+	"solver_lhs1": "Constraint LHS ",
+	"solver_rel1": "Constraint Relation",
+	"solver_rhs1": "Constraint RHS",
+	"solver_lhs2": "Constraint LHS ",
+	"solver_rel2": "Constraint Relation",
+	"solver_rhs2": "Constraint RHS",
+	"solver_eng":  "Solver Engine",
+	"solver_typ":  "Solver Type ",
+	"solver_val":  "Solver Value",
+}
+
 // CellAddress maps a cell coordinates (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
@@ -1980,6 +1996,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	allSheets := file.Sheets
+	sheetIDs := make([]int, len(allSheets))
 	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
@@ -2007,6 +2024,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 		wbReferences[sheet.Name] = references
+		sheetIDs[orderNum] = ws.ID
 
 		// Attempt to use reference blocks for the answer if it's given:
 		if q.ReferenceID.Valid {
@@ -2348,6 +2366,35 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 			log.WithError(err).Errorln("Failed to update question entries.")
 		}
 	}
+
+	// Import fefined names
+	for _, dn := range file.DefinedNames {
+		var (
+			worksheetID = sheetIDs[dn.LocalSheetID]
+			value       = dn.Data
+			parts       = strings.Split(value, "!")
+			cell        Cell
+		)
+		if len(parts) > 1 {
+			value = parts[1]
+		}
+		var modifiedValue = strings.Replace(value, "$", "", -1)
+		if result := Db.Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).First(&cell); !result.RecordNotFound() {
+			if err := Db.Create(&DefinedName{
+				WorksheetID: worksheetID,
+				Name:        dn.Name,
+				Value:       value,
+				IsHidden:    dn.Hidden,
+				SolverName:  SolverNames[dn.Name],
+				CellID:      cell.ID,
+			}).Error; err != nil {
+				log.WithError(result.Error).Errorf("Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d", dn, worksheetID, modifiedValue, cell.ID)
+			}
+		} else {
+			log.WithError(result.Error).Errorf("Failed to create an error for %#v, worksheet ID: %d, value: %q", dn, worksheetID, modifiedValue)
+		}
+	}
+
 	return
 }
 
@@ -2498,6 +2545,7 @@ type DefinedName struct {
 	Name        string
 	Value       string
 	IsHidden    bool
+	SolverName  string
 	Description string
 	WorksheetID int
 	Worksheet   *Worksheet
