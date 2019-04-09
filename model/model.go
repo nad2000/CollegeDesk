@@ -2368,30 +2368,85 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 	}
 
 	// Import fefined names
-	for _, dn := range file.DefinedNames {
-		var (
-			worksheetID = sheetIDs[dn.LocalSheetID]
-			value       = dn.Data
-			parts       = strings.Split(value, "!")
-			cell        Cell
-		)
-		if len(parts) > 1 {
-			value = parts[1]
-		}
-		var modifiedValue = strings.Replace(value, "$", "", -1)
-		if result := Db.Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).First(&cell); !result.RecordNotFound() {
-			if err := Db.Create(&DefinedName{
-				WorksheetID: worksheetID,
-				Name:        dn.Name,
-				Value:       value,
-				IsHidden:    dn.Hidden,
-				SolverName:  SolverNames[dn.Name],
-				CellID:      cell.ID,
-			}).Error; err != nil {
-				log.WithError(result.Error).Errorf("Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d", dn, worksheetID, modifiedValue, cell.ID)
+	if file.DefinedNames != nil && len(file.DefinedNames) > 0 {
+		var descriptions = make([]string, len(file.DefinedNames))
+		for i, dn := range file.DefinedNames {
+			if strings.HasPrefix(dn.Name, "solver_lhs") || strings.HasPrefix(dn.Name, "solver_rel") || strings.HasPrefix(dn.Name, "solver_rhs") {
+				var (
+					solverNum     = dn.Name[10:11]
+					sheetID       = dn.LocalSheetID
+					lhs, rel, rhs string
+				)
+				for _, dn := range file.DefinedNames[i:len(file.DefinedNames)] {
+					if dn.LocalSheetID != sheetID {
+						continue
+					}
+					if dn.Name == "solver_lhs"+solverNum {
+						lhs = dn.Data
+					}
+					if dn.Name == "solver_rel"+solverNum {
+						switch dn.Data {
+						case "1":
+							rel = " <= "
+						case "3":
+							rel = " >= "
+						default:
+							rel = " = "
+						}
+					}
+					if dn.Name == "solver_rhs"+solverNum {
+						rhs = dn.Data
+					}
+				}
+				descriptions[i] = lhs + rel + rhs
 			}
-		} else {
-			log.WithError(result.Error).Errorf("Failed to create an error for %#v, worksheet ID: %d, value: %q", dn, worksheetID, modifiedValue)
+		}
+		for i, dn := range file.DefinedNames {
+			var (
+				worksheetID = sheetIDs[dn.LocalSheetID]
+				value       = dn.Data
+				parts       = strings.Split(value, "!")
+				cell        Cell
+			)
+			if len(parts) > 1 {
+				value = parts[1]
+			}
+			var modifiedValue = strings.Replace(value, "$", "", -1)
+
+			if cellIDRe.MatchString(modifiedValue) {
+				col, row, err := xlsx.GetCoordsFromCellIDString(modifiedValue)
+				if err != nil {
+					log.WithError(err).Error("Failed to map address ", modifiedValue)
+					continue
+				}
+				if err := Db.
+					Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).
+					Attrs(Cell{
+						WorksheetID: worksheetID,
+						Range:       modifiedValue,
+						Row:         row,
+						Col:         col,
+					}).FirstOrCreate(&cell).Error; err != nil {
+					log.WithError(result.Error).Errorf("Failed to retrieve or create a cell %q", modifiedValue)
+				}
+				if err := Db.Create(&DefinedName{
+					WorksheetID: worksheetID,
+					Name:        dn.Name,
+					Value:       value,
+					IsHidden:    dn.Hidden,
+					SolverName:  SolverNames[dn.Name],
+					CellID:      cell.ID,
+					Description: descriptions[i],
+				}).Error; err != nil {
+					log.WithError(result.Error).Errorf(
+						"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+						dn, worksheetID, modifiedValue, cell.ID)
+				}
+			} else {
+				log.WithError(result.Error).Errorf(
+					"Failed to create an error for %#v, worksheet ID: %d, value: %q",
+					dn, worksheetID, modifiedValue)
+			}
 		}
 	}
 
