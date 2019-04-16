@@ -2367,9 +2367,53 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 		}
 	}
 
-	// Import fefined names
+	// Import defined names
 	if file.DefinedNames != nil && len(file.DefinedNames) > 0 {
-		var descriptions = make([]string, len(file.DefinedNames))
+		var (
+			descriptions = make([]string, len(file.DefinedNames))
+			cells        = make(map[int]Cell)
+		)
+
+		// Map 'solver_opt' to cells:
+		for _, dn := range file.DefinedNames {
+			if dn.Name == "solver_opt" {
+				// solverOpts[dn.LocalSheetID] {
+				var (
+					worksheetID = sheetIDs[dn.LocalSheetID]
+					value       = dn.Data
+					parts       = strings.Split(value, "!")
+					cell        Cell
+				)
+				if len(parts) > 1 {
+					value = parts[1]
+				}
+				var modifiedValue = strings.Replace(value, "$", "", -1)
+
+				if cellIDRe.MatchString(modifiedValue) {
+					col, row, err := xlsx.GetCoordsFromCellIDString(modifiedValue)
+					if err != nil {
+						log.WithError(err).Error("Failed to map address ", modifiedValue)
+						continue
+					}
+					if err := Db.
+						Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).
+						Attrs(Cell{
+							WorksheetID: worksheetID,
+							Range:       modifiedValue,
+							Row:         row,
+							Col:         col,
+						}).FirstOrCreate(&cell).Error; err != nil {
+						log.WithError(result.Error).Errorf(
+							"Failed to retrieve or create a cell %q", modifiedValue)
+					}
+					cells[dn.LocalSheetID] = cell
+				} else {
+					log.WithError(result.Error).Errorf(
+						"Failed to create an error for %#v, worksheet ID: %d, value: %q",
+						dn, worksheetID, modifiedValue)
+				}
+			}
+		}
 		for i, dn := range file.DefinedNames {
 			if strings.HasPrefix(dn.Name, "solver_lhs") || strings.HasPrefix(dn.Name, "solver_rel") || strings.HasPrefix(dn.Name, "solver_rhs") {
 				var (
@@ -2402,50 +2446,25 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 			}
 		}
 		for i, dn := range file.DefinedNames {
-			var (
-				worksheetID = sheetIDs[dn.LocalSheetID]
-				value       = dn.Data
-				parts       = strings.Split(value, "!")
-				cell        Cell
-			)
-			if len(parts) > 1 {
-				value = parts[1]
-			}
-			var modifiedValue = strings.Replace(value, "$", "", -1)
 
-			if cellIDRe.MatchString(modifiedValue) {
-				col, row, err := xlsx.GetCoordsFromCellIDString(modifiedValue)
-				if err != nil {
-					log.WithError(err).Error("Failed to map address ", modifiedValue)
-					continue
-				}
-				if err := Db.
-					Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).
-					Attrs(Cell{
-						WorksheetID: worksheetID,
-						Range:       modifiedValue,
-						Row:         row,
-						Col:         col,
-					}).FirstOrCreate(&cell).Error; err != nil {
-					log.WithError(result.Error).Errorf("Failed to retrieve or create a cell %q", modifiedValue)
-				}
-				if err := Db.Create(&DefinedName{
-					WorksheetID: worksheetID,
-					Name:        dn.Name,
-					Value:       value,
-					IsHidden:    dn.Hidden,
-					SolverName:  SolverNames[dn.Name],
-					CellID:      cell.ID,
-					Description: descriptions[i],
-				}).Error; err != nil {
-					log.WithError(result.Error).Errorf(
-						"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
-						dn, worksheetID, modifiedValue, cell.ID)
-				}
-			} else {
+			cell, ok := cells[dn.LocalSheetID]
+			if !ok {
+				log.Errorf("Missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
+				continue
+			}
+
+			if err := Db.Create(&DefinedName{
+				WorksheetID: cell.WorksheetID,
+				Name:        dn.Name,
+				Value:       dn.Data,
+				IsHidden:    dn.Hidden,
+				SolverName:  SolverNames[dn.Name],
+				CellID:      cell.ID,
+				Description: descriptions[i],
+			}).Error; err != nil {
 				log.WithError(result.Error).Errorf(
-					"Failed to create an error for %#v, worksheet ID: %d, value: %q",
-					dn, worksheetID, modifiedValue)
+					"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+					dn, cell.WorksheetID, dn.Data, cell.ID)
 			}
 		}
 	}

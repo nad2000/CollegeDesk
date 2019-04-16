@@ -902,9 +902,10 @@ func testDefinedNames(t *testing.T) {
 		questionFileName, anserFileName, cr, ts string
 		uid                                     int
 		isPlagiarised                           bool
+		DNCount                                 int
 	}{
-		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false},
-		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, false}, // "missing download"
+		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 33},
+		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, true, 0}, // "missing download"
 	} {
 
 		qf := model.Source{
@@ -961,13 +962,19 @@ func testDefinedNames(t *testing.T) {
 			}
 		}
 		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
-		// Test if is marked plagiarised:
+		// Test if is marked plagiarised and DN counts:
 		{
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
 				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
 			}
+			var count int
+			db.Model(&model.DefinedName{}).Where("worksheet_id = ?", ws.ID).Count(&count)
+			if count != r.DNCount {
+				t.Errorf("Defined name count incorrect! Expected: %d, got: %d", r.DNCount, count)
+			}
+
 		}
 	}
 
