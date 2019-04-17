@@ -41,18 +41,15 @@ var (
 
 // SolverNames - solver name mapping
 var SolverNames = map[string]string{
-	"solver_opt":  "Set Objective",
-	"solver_adj":  "Changing variable cells",
-	"solver_num":  "number of constraints",
-	"solver_lhs1": "Constraint LHS ",
-	"solver_rel1": "Constraint Relation",
-	"solver_rhs1": "Constraint RHS",
-	"solver_lhs2": "Constraint LHS ",
-	"solver_rel2": "Constraint Relation",
-	"solver_rhs2": "Constraint RHS",
-	"solver_eng":  "Solver Engine",
-	"solver_typ":  "Solver Type ",
-	"solver_val":  "Solver Value",
+	"solver_opt": "Set Objective",
+	"solver_adj": "Changing variable cells",
+	"solver_num": "number of constraints",
+	"solver_lhs": "Constraint LHS ",
+	"solver_rel": "Constraint Relation",
+	"solver_rhs": "Constraint RHS",
+	"solver_eng": "Solver Engine",
+	"solver_typ": "Solver Type ",
+	"solver_val": "Solver Value",
 }
 
 // CellAddress maps a cell coordinates (row, column) to its address
@@ -2406,6 +2403,8 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 						log.WithError(result.Error).Errorf(
 							"Failed to retrieve or create a cell %q", modifiedValue)
 					}
+					cell.Type = "solver"
+					Db.Save(&cell)
 					cells[dn.LocalSheetID] = cell
 				} else {
 					log.WithError(result.Error).Errorf(
@@ -2458,7 +2457,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 				Name:        dn.Name,
 				Value:       dn.Data,
 				IsHidden:    dn.Hidden,
-				SolverName:  SolverNames[dn.Name],
+				SolverName:  SolverNames[dn.Name[0:10]],
 				CellID:      cell.ID,
 				Description: descriptions[i],
 			}).Error; err != nil {
