@@ -2373,7 +2373,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 
 		// Map 'solver_opt' to cells:
 		for _, dn := range file.DefinedNames {
-			if dn.Name == "solver_opt" {
+			if dn.Name == "solver_opt" || (!strings.HasPrefix(dn.Name, "solver_") && strings.Contains(dn.Data, "!")) {
 				// solverOpts[dn.LocalSheetID] {
 				var (
 					worksheetID = sheetIDs[dn.LocalSheetID]
@@ -2383,6 +2383,15 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 				)
 				if len(parts) > 1 {
 					value = parts[1]
+					sheetName := parts[0]
+					if dn.Name != "solver_opt" {
+						var ws Worksheet
+						if err := Db.Where("workbook_id = ? AND name = ?", wb.ID, sheetName).First(&ws).Error; err != nil {
+							log.Errorf("Failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
+							continue
+						}
+						worksheetID = ws.ID
+					}
 				}
 				var modifiedValue = strings.Replace(value, "$", "", -1)
 
@@ -2402,10 +2411,25 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 						}).FirstOrCreate(&cell).Error; err != nil {
 						log.WithError(result.Error).Errorf(
 							"Failed to retrieve or create a cell %q", modifiedValue)
+						continue
 					}
 					cell.Type = "solver"
 					Db.Save(&cell)
-					cells[dn.LocalSheetID] = cell
+					if dn.Name == "solver_opt" {
+						cells[dn.LocalSheetID] = cell
+					} else if !strings.HasPrefix(dn.Name, "solver_") {
+						if err := Db.Create(&DefinedName{
+							WorksheetID: cell.WorksheetID,
+							Name:        dn.Name,
+							Value:       dn.Data,
+							IsHidden:    dn.Hidden,
+							CellID:      cell.ID,
+						}).Error; err != nil {
+							log.WithError(result.Error).Errorf(
+								"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+								dn, cell.WorksheetID, dn.Data, cell.ID)
+						}
+					}
 				} else {
 					log.WithError(result.Error).Errorf(
 						"Failed to create an error for %#v, worksheet ID: %d, value: %q",
@@ -2445,25 +2469,26 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 			}
 		}
 		for i, dn := range file.DefinedNames {
+			if strings.HasPrefix(dn.Name, "solver_") {
+				cell, ok := cells[dn.LocalSheetID]
+				if !ok {
+					log.Errorf("Missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
+					continue
+				}
 
-			cell, ok := cells[dn.LocalSheetID]
-			if !ok {
-				log.Errorf("Missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
-				continue
-			}
-
-			if err := Db.Create(&DefinedName{
-				WorksheetID: cell.WorksheetID,
-				Name:        dn.Name,
-				Value:       dn.Data,
-				IsHidden:    dn.Hidden,
-				SolverName:  SolverNames[dn.Name[0:10]],
-				CellID:      cell.ID,
-				Description: descriptions[i],
-			}).Error; err != nil {
-				log.WithError(result.Error).Errorf(
-					"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
-					dn, cell.WorksheetID, dn.Data, cell.ID)
+				if err := Db.Create(&DefinedName{
+					WorksheetID: cell.WorksheetID,
+					Name:        dn.Name,
+					Value:       dn.Data,
+					IsHidden:    dn.Hidden,
+					SolverName:  SolverNames[dn.Name[0:10]],
+					CellID:      cell.ID,
+					Description: descriptions[i],
+				}).Error; err != nil {
+					log.WithError(result.Error).Errorf(
+						"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+						dn, cell.WorksheetID, dn.Data, cell.ID)
+				}
 			}
 		}
 	}

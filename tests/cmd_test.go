@@ -905,6 +905,7 @@ func testDefinedNames(t *testing.T) {
 		DNCount                                 int
 	}{
 		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 33},
+		{"Solver Simple Question.xlsx", "stud2-solver-multi-sheet.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 37},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, true, 0}, // "missing download"
 	} {
 
