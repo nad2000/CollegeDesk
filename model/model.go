@@ -1463,7 +1463,8 @@ type Cell struct {
 	Fill, Font            bool
 	Borders, Alignments   string
 	CellFormat, MergedRef string
-	BorderID              sql.NullInt64 `gorm:"index;type:int"`
+	Type                  sql.NullString `grom:"column:cell_type"`
+	BorderID              sql.NullInt64  `gorm:"index;type:int"`
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
 	Alignment             *Alignment
