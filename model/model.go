@@ -1500,7 +1500,6 @@ type Cell struct {
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
 	Alignment             *Alignment
-	Type                  string `gorm:"column:cell_type"`
 }
 
 // TableName overrides default table name for the model
