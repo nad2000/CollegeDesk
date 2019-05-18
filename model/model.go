@@ -2480,7 +2480,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 							"Failed to retrieve or create a cell %q", modifiedValue)
 						continue
 					}
-					cell.Type = "solver"
+					cell.Type = NewNullString("solver")
 					Db.Save(&cell)
 					if dn.Name == "solver_opt" {
 						cells[dn.LocalSheetID] = cell
