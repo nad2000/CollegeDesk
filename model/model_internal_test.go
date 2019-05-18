@@ -30,6 +30,7 @@ func TestModel(t *testing.T) {
 	defer Db.Close()
 	t.Log("DIALECT: ", Db.Dialect().GetName(), Db.Dialect().CurrentDatabase())
 	if Db.Dialect().GetName() == "mysql" {
+		Db.Exec("TRUNCATE TABLE DefinedNames")
 		Db.Exec("TRUNCATE TABLE AutoEvaluation")
 		Db.Exec("DELETE FROM Cells")
 		Db.Exec("TRUNCATE TABLE BlockCommentMapping")
