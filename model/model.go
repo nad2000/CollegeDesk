@@ -35,6 +35,9 @@ var DebugLevel int
 // DryRun - perform processing without actually updating or changing files
 var DryRun bool
 
+// ModelAnswerUserID - the user ID of the model answers
+var ModelAnswerUserID = 10000
+
 var (
 	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 )
@@ -1484,7 +1487,7 @@ type Cell struct {
 	Fill, Font            bool
 	Borders, Alignments   string
 	CellFormat, MergedRef string
-	Type                  sql.NullString `grom:"column:cell_type"`
+	Type                  sql.NullString `gorm:"column:cell_type"`
 	BorderID              sql.NullInt64  `gorm:"index;type:int"`
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
@@ -2114,6 +2117,45 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+	// Add missing blocks and cells from the model:
+	var sa StudentAssignment
+	if err := Db.Where("StudentAssignmentID = ?", answer.StudentAssignmentID).First(&sa).Error; err != nil {
+		log.WithError(err).Errorf("Failed to find the stuedent assignemt for the answer (AnswerID: %d)", answerID)
+	} else if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
+		var ma Answer
+		if res := Db.
+			Joins("JOIN StudentAssignments AS msa ON msa.StudentAssignmentID = StudentAnswers.StudentAssignmentID").
+			Where("QuestionID = ? AND UserID = ?", q.ID, ModelAnswerUserID).First(&ma); !res.RecordNotFound() {
+			if _, err := Db.DB().Exec(`
+					INSERT INTO ExcelBlocks(BlockCellRange, worksheet_id)
+					SELECT mb.BlockCellRange, s.ID
+					FROM WorkSheets AS ms JOIN ExcelBlocks AS mb ON  mb.worksheet_id = ms.ID
+					JOIN WorkSheets s ON ms.idx = s.idx
+					LEFT JOIN ExcelBlocks AS b ON b.worksheet_id = s.ID
+					  AND b.BlockCellRange = mb.BlockCellRange
+					WHERE s.StudentAnswerID = ? AND ms.StudentAnswerID = ?
+					  AND b.ExcelBlockID IS NULL`, answerID, ma.ID); err != nil {
+				log.WithError(err).Errorln("Failed to add blocks from the model answer.")
+			}
+			if _, err := Db.DB().Exec(`
+					INSERT INTO Cells(block_id, cell_range, cell_type)
+					SELECT b.ExcelBlockID, mc.cell_range, mc.cell_type
+					FROM WorkSheets AS ms JOIN ExcelBlocks AS mb ON  mb.worksheet_id = ms.ID
+					JOIN Cells AS mc ON mc.block_id = mb.ExcelBlockID
+					JOIN WorkSheets s ON ms.idx = s.idx
+					JOIN ExcelBlocks AS b  ON  b.worksheet_id = s.ID
+					  AND b.BlockCellRange = mb.BlockCellRange
+					LEFT JOIN Cells AS c ON c.block_id = b.ExcelBlockID AND c.cell_range = mc.cell_range
+					WHERE s.StudentAnswerID = ? AND ms.StudentAnswerID = ?
+					  AND c.ID IS NULL`, answerID, ma.ID); err != nil {
+				log.WithError(err).Errorln("Failed to add cells from the model answer.")
+			}
+		} else if res.RecordNotFound() {
+			log.Errorf("A model answer for the current anser (AnswerID: %d) doesn't exist.", answerID)
+		} else {
+			log.WithError(res.Error).Errorf("Failed to find the model answer for the current anser (AnserID: %d)", answerID)
+		}
+	}
 
 	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
@@ -2269,6 +2311,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 											Range:       r,
 											Row:         i,
 											Col:         j,
+											Type:        NewNullString("Formatting"),
 										}
 										Db.FirstOrCreate(&cell, cell)
 									} else {
@@ -2323,7 +2366,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 											} else {
 												cell.CellFormat = "ID: " + xf.NumFmtId
 											}
-											cell.Type = NewNullString("Formatting")
 										}
 
 										Db.Save(&cell)
@@ -2361,9 +2403,9 @@ FROM "Users" AS u
 	JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
 	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
 	JOIN Questions AS q ON q.QuestionID = a.QuestionID
-WHERE q.is_rubric_created = 0 AND u.UserID = 10000
-`).Error; err != nil {
-			log.WithError(err).Errorln("Failed to insert rubrics for UserID=1000.")
+WHERE q.is_rubric_created = 0 AND u.UserID = ?
+`, ModelAnswerUserID).Error; err != nil {
+			log.WithError(err).Errorf("Failed to insert rubrics for UserID=%d.", ModelAnswerUserID)
 		}
 		if err := Db.Exec(`
 UPDATE Questions SET is_rubric_created = 1

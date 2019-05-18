@@ -104,6 +104,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 // and returns the downloades file name or an error.
 func HandleAnswers(manager s3.FileManager) error {
 
+	model.ModelAnswerUserID = modelAnswerUserID
 	rows, err := model.RowsToProcess()
 	if err != nil {
 		log.WithError(err).Fatalf("Failed to retrieve list of source files to process.")
