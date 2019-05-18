@@ -114,6 +114,14 @@ func NewNullInt64(value interface{}) sql.NullInt64 {
 	return sql.NullInt64{}
 }
 
+// NewNullString creates a NULLable string
+func NewNullString(value string) sql.NullString {
+	if value == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{Valid: true, String: value}
+}
+
 // Question - questions
 type Question struct {
 	ID                 int            `gorm:"column:QuestionID;primary_key:true;AUTO_INCREMENT"`
@@ -641,7 +649,7 @@ func (ws *Worksheet) ImportCharts(file *excelize.File) {
 								drawing.FromRow+propCount, drawing.ToCol+2),
 							ChartID: chartID,
 						}
-						ws.AddAuxBlock(&block)
+						ws.AddAuxBlock(&block, "Chart")
 						propCount++
 					}
 				}
@@ -716,7 +724,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					sorting.IconSet,
 					sorting.IconID),
 				SortingID: NewNullInt64(sorting.ID),
-			})
+			}, "Sorting")
 		}
 	}
 
@@ -730,7 +738,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		ws.AddAuxBlock(&Block{
 			Range:   "FilterSource",
 			Formula: af.Ref,
-		})
+		}, "Filter")
 
 		for _, fc := range af.FilterColumn {
 			colID, _ := strconv.Atoi(fc.ColId)
@@ -762,7 +770,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 							Range:    colName,
 							Formula:  f.Formula(),
 							FilterID: NewNullInt64(f.ID),
-						})
+						}, "Filter")
 					}
 				}
 
@@ -803,7 +811,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 							Range:    colName,
 							Formula:  f.Formula(),
 							FilterID: NewNullInt64(f.ID),
-						})
+						}, "Filter")
 					}
 				}
 			} else if fc.DynamicFilter.Type != "" || fc.DynamicFilter.Val != "" {
@@ -815,7 +823,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				Range:    colName,
 				Formula:  filter.Formula(),
 				FilterID: NewNullInt64(filter.ID),
-			})
+			}, "Filter")
 			for _, dgi := range fc.Filters.DateGroupItem {
 				item := DateGroupItem{
 					FilterID: filter.ID,
@@ -840,7 +848,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					Formula:         item.Grouping,
 					RelativeFormula: date,
 					FilterID:        NewNullInt64(filter.ID),
-				})
+				}, "Filter")
 			}
 		}
 	}
@@ -858,7 +866,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 		ws.AddAuxBlock(&Block{
 			Range:   "PivotSource",
 			Formula: ds.Range,
-		})
+		}, "Pivot")
 		log.Info(ptd.XMLName)
 		if ptd.PivotFields.Count >= "0" {
 			var pfIdx, rfIdx, cfIdx, dfIdx = 0, 0, 0, 0
@@ -918,7 +926,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 					Range:   blockCellRange,
 					Formula: label,
 					PivotID: NewNullInt64(rec.ID),
-				})
+				}, "Pivot")
 			}
 		}
 	}
@@ -934,7 +942,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 			Range:        "CFSource",
 			Formula:      ds.Range,
 			DataSourceID: NewNullInt64(ds.ID),
-		})
+		}, "CF")
 		for _, cfr := range cf.CfRule {
 			var operator, formula1, formula2, formula3 string
 			switch cfr.Type {
@@ -991,7 +999,7 @@ func (ws *Worksheet) ImportWorksheetData(file *excelize.File, sharedStrings Shar
 				Range:        rec.Type,
 				Formula:      joinStr(",", operator, formula1, formula2, formula3),
 				DataSourceID: NewNullInt64(ds.ID),
-			})
+			}, "CF")
 
 		}
 
@@ -1033,7 +1041,19 @@ func (Worksheet) TableName() string {
 
 // AddAuxBlock creates a block with an auxilary cell entry
 // related to the whorksheet data entry.
-func (ws *Worksheet) AddAuxBlock(b *Block) {
+func (ws *Worksheet) AddAuxBlock(b *Block, cellType string) {
+	if _, ok := map[string]int{
+		"Filter":     1,
+		"CF":         2,
+		"Source":     3,
+		"Pivot":      4,
+		"Formatting": 5,
+		"Solver":     6,
+		"Chart":      7,
+		"Sorting":    9,
+	}[cellType]; !ok {
+		log.Errorf("Incorrect cell type value: %q", cellType)
+	}
 	b.WorksheetID = ws.ID
 	Db.Create(b)
 	c := Cell{
@@ -1041,6 +1061,7 @@ func (ws *Worksheet) AddAuxBlock(b *Block) {
 		WorksheetID: b.WorksheetID,
 		Range:       b.Range,
 		Formula:     b.Formula,
+		Type:        NewNullString(cellType),
 	}
 	Db.Create(&c)
 }
@@ -2302,6 +2323,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 											} else {
 												cell.CellFormat = "ID: " + xf.NumFmtId
 											}
+											cell.Type = NewNullString("Formatting")
 										}
 
 										Db.Save(&cell)

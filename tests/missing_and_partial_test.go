@@ -24,7 +24,7 @@ func TestMissingOrPartial(t *testing.T) {
 	}{
 		{"data/missing-or-partial/Conditional Formatting/", "CFQuestion.xlsx", "CFModelAnswer.xlsx", "CFStudentAnswer.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
 		{"data/missing-or-partial/Filter/", "FilterQuestion.xlsx", "FilterModelAnswer.xlsx", "FilterStudentAnswer.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
-		{"data/missing-or-partial/Solver/", "Solver Question.xlsx", "Solver ModelAnswer.xlsx", "Solver StudentlAnswer.xls", "KE4423", "2018-12-27 19:18:05", 4951, false},
+		{"data/missing-or-partial/Solver/", "Solver Question.xlsx", "Solver ModelAnswer.xlsx", "Solver StudentlAnswer.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
 	} {
 
 		qf := model.Source{
