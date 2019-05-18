@@ -39,6 +39,19 @@ var (
 	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
 )
 
+// SolverNames - solver name mapping
+var SolverNames = map[string]string{
+	"solver_opt": "Set Objective",
+	"solver_adj": "Changing variable cells",
+	"solver_num": "number of constraints",
+	"solver_lhs": "Constraint LHS ",
+	"solver_rel": "Constraint Relation",
+	"solver_rhs": "Constraint RHS",
+	"solver_eng": "Solver Engine",
+	"solver_typ": "Solver Type ",
+	"solver_val": "Solver Value",
+}
+
 // CellAddress maps a cell coordinates (row, column) to its address
 func CellAddress(rowIndex, colIndex int) string {
 	return xlsx.GetCellIDStringFromCoords(colIndex, rowIndex)
@@ -1247,24 +1260,19 @@ func cellValue(cell *xlsx.Cell) (value string) {
 // ChangeFormula removes _xlfn from cell formulas CWA-295
 // convert formulas to POI compatible formulas
 func ChangeFormula(formula string) string {
-	var updatedFormula string
-	updatedFormula = formula
-
-	if strings.Contains(updatedFormula, "_xlfn.") {
-		updatedFormula = strings.Replace(formula, "_xlfn.", "", -1)
+	switch {
+	case strings.Contains(formula, "_xlfn."):
+		formula = strings.Replace(formula, "_xlfn.", "", -1)
+	case strings.Contains(formula, "STDEV.S"):
+		formula = strings.Replace(formula, "STDEV.S", "STDEV", -1)
+	case strings.Contains(formula, "VAR.S"):
+		formula = strings.Replace(formula, "VAR.S", "VAR", -1)
+	case strings.Contains(formula, "MODE.SNGL"):
+		formula = strings.Replace(formula, "MODE.SNGL", "MODE", -1)
+	case strings.Contains(formula, "VAR.P"):
+		formula = strings.Replace(formula, "VAR.P", "VARP", -1)
 	}
-
-	if strings.Contains(updatedFormula, "STDEV.S") {
-		updatedFormula = strings.Replace(updatedFormula, "STDEV.S", "STDEV", -1)
-	} else if strings.Contains(updatedFormula, "VAR.S") {
-		updatedFormula = strings.Replace(updatedFormula, "VAR.S", "VAR", -1)
-	} else if strings.Contains(updatedFormula, "MODE.SNGL") {
-		updatedFormula = strings.Replace(updatedFormula, "MODE.SNGL", "MODE", -1)
-	} else if strings.Contains(updatedFormula, "VAR.P") {
-		updatedFormula = strings.Replace(updatedFormula, "VAR.P", "VARP", -1)
-	}
-
-	return updatedFormula
+	return formula
 }
 
 // fildWhole finds whole range of the specified color
@@ -1467,6 +1475,7 @@ type Cell struct {
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
 	Alignment             *Alignment
+	Type                  string `gorm:"column:cell_type"`
 }
 
 // TableName overrides default table name for the model
@@ -1686,6 +1695,7 @@ func SetDb() {
 	Db.AutoMigrate(&XLQTransformation{})
 	Db.AutoMigrate(&AutoEvaluation{})
 	Db.AutoMigrate(&Rubric{})
+	Db.AutoMigrate(&DefinedName{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1714,11 +1724,13 @@ func SetDb() {
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		// Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
-		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(ID)", "CASCADE", "CASCADE")
+		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
 		Db.Model(&Rubric{}).AddForeignKey("ExcelBlockID", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
 		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		Db.Model(&DefinedName{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
+		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -1981,6 +1993,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	allSheets := file.Sheets
+	sheetIDs := make([]int, len(allSheets))
 	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
@@ -2008,6 +2021,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 		wbReferences[sheet.Name] = references
+		sheetIDs[orderNum] = ws.ID
 
 		// Attempt to use reference blocks for the answer if it's given:
 		if q.ReferenceID.Valid {
@@ -2349,6 +2363,136 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 			log.WithError(err).Errorln("Failed to update question entries.")
 		}
 	}
+
+	// Import defined names
+	if file.DefinedNames != nil && len(file.DefinedNames) > 0 {
+		var (
+			descriptions = make([]string, len(file.DefinedNames))
+			cells        = make(map[int]Cell)
+		)
+
+		// Map 'solver_opt' to cells:
+		for _, dn := range file.DefinedNames {
+			if dn.Name == "solver_opt" || (!strings.HasPrefix(dn.Name, "solver_") && strings.Contains(dn.Data, "!")) {
+				// solverOpts[dn.LocalSheetID] {
+				var (
+					worksheetID = sheetIDs[dn.LocalSheetID]
+					value       = dn.Data
+					parts       = strings.Split(value, "!")
+					cell        Cell
+				)
+				if len(parts) > 1 {
+					value = parts[1]
+					sheetName := parts[0]
+					if dn.Name != "solver_opt" {
+						var ws Worksheet
+						if err := Db.Where("workbook_id = ? AND name = ?", wb.ID, sheetName).First(&ws).Error; err != nil {
+							log.Errorf("Failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
+							continue
+						}
+						worksheetID = ws.ID
+					}
+				}
+				var modifiedValue = strings.Replace(value, "$", "", -1)
+
+				if cellIDRe.MatchString(modifiedValue) {
+					col, row, err := xlsx.GetCoordsFromCellIDString(modifiedValue)
+					if err != nil {
+						log.WithError(err).Error("Failed to map address ", modifiedValue)
+						continue
+					}
+					if err := Db.
+						Where("worksheet_id=? AND cell_range=?", worksheetID, modifiedValue).
+						Attrs(Cell{
+							WorksheetID: worksheetID,
+							Range:       modifiedValue,
+							Row:         row,
+							Col:         col,
+						}).FirstOrCreate(&cell).Error; err != nil {
+						log.WithError(result.Error).Errorf(
+							"Failed to retrieve or create a cell %q", modifiedValue)
+						continue
+					}
+					cell.Type = "solver"
+					Db.Save(&cell)
+					if dn.Name == "solver_opt" {
+						cells[dn.LocalSheetID] = cell
+					} else if !strings.HasPrefix(dn.Name, "solver_") {
+						if err := Db.Create(&DefinedName{
+							WorksheetID: cell.WorksheetID,
+							Name:        dn.Name,
+							Value:       dn.Data,
+							IsHidden:    dn.Hidden,
+							CellID:      cell.ID,
+						}).Error; err != nil {
+							log.WithError(result.Error).Errorf(
+								"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+								dn, cell.WorksheetID, dn.Data, cell.ID)
+						}
+					}
+				} else {
+					log.WithError(result.Error).Errorf(
+						"Failed to create an error for %#v, worksheet ID: %d, value: %q",
+						dn, worksheetID, modifiedValue)
+				}
+			}
+		}
+		for i, dn := range file.DefinedNames {
+			if strings.HasPrefix(dn.Name, "solver_lhs") || strings.HasPrefix(dn.Name, "solver_rel") || strings.HasPrefix(dn.Name, "solver_rhs") {
+				var (
+					solverNum     = dn.Name[10:11]
+					sheetID       = dn.LocalSheetID
+					lhs, rel, rhs string
+				)
+				for _, dn := range file.DefinedNames[i:len(file.DefinedNames)] {
+					if dn.LocalSheetID != sheetID {
+						continue
+					}
+					if dn.Name == "solver_lhs"+solverNum {
+						lhs = dn.Data
+					}
+					if dn.Name == "solver_rel"+solverNum {
+						switch dn.Data {
+						case "1":
+							rel = " <= "
+						case "3":
+							rel = " >= "
+						default:
+							rel = " = "
+						}
+					}
+					if dn.Name == "solver_rhs"+solverNum {
+						rhs = dn.Data
+					}
+				}
+				descriptions[i] = lhs + rel + rhs
+			}
+		}
+		for i, dn := range file.DefinedNames {
+			if strings.HasPrefix(dn.Name, "solver_") {
+				cell, ok := cells[dn.LocalSheetID]
+				if !ok {
+					log.Errorf("Missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
+					continue
+				}
+
+				if err := Db.Create(&DefinedName{
+					WorksheetID: cell.WorksheetID,
+					Name:        dn.Name,
+					Value:       dn.Data,
+					IsHidden:    dn.Hidden,
+					SolverName:  SolverNames[dn.Name[0:10]],
+					CellID:      cell.ID,
+					Description: descriptions[i],
+				}).Error; err != nil {
+					log.WithError(result.Error).Errorf(
+						"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+						dn, cell.WorksheetID, dn.Data, cell.ID)
+				}
+			}
+		}
+	}
+
 	return
 }
 
@@ -2491,6 +2635,25 @@ type User struct {
 // TableName overrides default table name for the model
 func (User) TableName() string {
 	return "Users"
+}
+
+// DefinedName - defined names
+type DefinedName struct {
+	ID          int
+	Name        string
+	Value       string
+	IsHidden    bool
+	SolverName  string
+	Description string
+	WorksheetID int
+	Worksheet   *Worksheet
+	CellID      int
+	Cell        *Cell
+}
+
+// TableName overrides default table name for the model
+func (DefinedName) TableName() string {
+	return "DefinedNames"
 }
 
 // AutoCommentAnswerCells adds automatic comment to the student answer cells
