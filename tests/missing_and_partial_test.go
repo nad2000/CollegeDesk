@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// Test partial and unanswered questions.
-func TestMissingOrPartial(t *testing.T) {
+// TestMissingOrPartialMultipleTypes tests partial and unanswered questions.
+func TestMissingOrPartialMultipleTypes(t *testing.T) {
 
 	db = createTestDB()
 	defer db.Close()
@@ -133,4 +133,90 @@ func TestMissingOrPartial(t *testing.T) {
 	// 		"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
 	// 		countBefore, countAfter)
 	// }
+}
+
+// TestMissingOrPartialFilter tests partial and unanswered questions with 2 answers submitted.
+func TestMissingOrPartialFilter(t *testing.T) {
+
+	db = createTestDB()
+	defer db.Close()
+
+	assignment := model.Assignment{
+		Title: "Test Missing Or Partial / Filter...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	type answerRec struct {
+		fileName string
+		uid      int
+	}
+	for _, r := range []struct {
+		base, questionFileName, modelAnswerFileName string
+		answers                                     []answerRec
+	}{
+		{"data/missing-or-partial/Filter_2_answers/", "FilterQuestion.xlsx", "FilterModelAnswer.xlsx",
+			[]answerRec{
+				{"FilterStudentAnswer1.xlsx", 4951},
+				{"FilterStudentAnswer2.xlsx", 4952},
+			},
+		}} {
+
+		qf := model.Source{
+			FileName:     r.base + r.questionFileName,
+			S3BucketName: "studentanswers",
+			S3Key:        r.base + r.questionFileName,
+		}
+		db.Create(&qf)
+		q := model.Question{
+			SourceID:     model.NewNullInt64(qf.ID),
+			QuestionType: model.QuestionType("FileUpload"),
+			QuestionText: r.base + r.questionFileName,
+			MaxScore:     1010.88,
+			AuthorUserID: 123456789,
+			WasCompared:  false,
+			IsFormatting: true,
+		}
+		if err := db.Create(&q).Error; err != nil {
+			t.Error(err)
+		}
+		q.ImportFile(r.base+r.questionFileName, "FFFFFF00", true)
+
+		// Model answer:
+		msa := model.StudentAssignment{
+			UserID:       10000,
+			AssignmentID: assignment.ID,
+		}
+		db.Create(&msa)
+		maf := model.Source{FileName: r.base + r.modelAnswerFileName, S3BucketName: "studentanswers"}
+		db.Create(&maf)
+		ma := model.Answer{
+			SourceID:            model.NewNullInt64(maf.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-30 12:42"),
+			StudentAssignmentID: msa.ID,
+		}
+		db.Create(&ma)
+		model.ExtractBlocksFromFile(r.base+r.modelAnswerFileName, "FFFFFF00", true, true, ma.ID)
+
+		// Answer
+		for _, ar := range r.answers {
+			af := model.Source{FileName: r.base + ar.fileName, S3BucketName: "studentanswers"}
+			db.Create(&af)
+
+			sa := model.StudentAssignment{
+				UserID:       ar.uid,
+				AssignmentID: assignment.ID,
+			}
+			db.Create(&sa)
+
+			a := model.Answer{
+				SourceID:            model.NewNullInt64(af.ID),
+				QuestionID:          model.NewNullInt64(q.ID),
+				SubmissionTime:      *parseTime("2018-09-30 12:42"),
+				StudentAssignmentID: sa.ID,
+			}
+			db.Create(&a)
+			model.ExtractBlocksFromFile(r.base+ar.fileName, "FFFFFF00", true, true, a.ID)
+		}
+	}
 }

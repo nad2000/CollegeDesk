@@ -2130,6 +2130,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			}
 		}
 	}
+	wb.ImportWorksheets(fileName)
+
 	// Add missing blocks and cells from the model:
 	var sa StudentAssignment
 	if err := Db.Where("StudentAssignmentID = ?", answer.StudentAssignmentID).First(&sa).Error; err != nil {
@@ -2139,6 +2141,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		if res := Db.
 			Joins("JOIN StudentAssignments AS msa ON msa.StudentAssignmentID = StudentAnswers.StudentAssignmentID").
 			Where("QuestionID = ? AND UserID = ?", q.ID, ModelAnswerUserID).First(&ma); !res.RecordNotFound() {
+			log.Debugf("Inserting missing or partially answered blocks (AnswerID: %d, Model AnswerID: %d).", answerID, ma.ID)
+
 			if _, err := Db.DB().Exec(`
 					INSERT INTO ExcelBlocks(BlockCellRange, worksheet_id)
 					SELECT mb.BlockCellRange, s.ID
@@ -2150,6 +2154,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					  AND b.ExcelBlockID IS NULL`, answerID, ma.ID); err != nil {
 				log.WithError(err).Errorln("Failed to add blocks from the model answer.")
 			}
+			log.Debugf("Inserting missing or partially answered cells (AnswerID: %d, Model AnswerID: %d).", answerID, ma.ID)
 			if _, err := Db.DB().Exec(`
 					INSERT INTO Cells(block_id, cell_range, cell_type)
 					SELECT b.ExcelBlockID, mc.cell_range, mc.cell_type
@@ -2170,7 +2175,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		}
 	}
 
-	wb.ImportWorksheets(fileName)
 	if _, err := Db.DB().
 		Exec(`
 			UPDATE StudentAnswers
