@@ -2444,7 +2444,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 
 		// Map 'solver_opt' to cells:
 		for _, dn := range file.DefinedNames {
-			if dn.Name == "solver_opt" || (!strings.HasPrefix(dn.Name, "solver_") && strings.Contains(dn.Data, "!")) {
+			if dn.Name == "solver_opt" /*|| (!strings.HasPrefix(dn.Name, "solver_") && strings.Contains(dn.Data, "!")) */ {
 				// solverOpts[dn.LocalSheetID] {
 				var (
 					worksheetID = sheetIDs[dn.LocalSheetID]
