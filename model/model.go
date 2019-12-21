@@ -372,6 +372,21 @@ func (Source) TableName() string {
 	return "FileSources"
 }
 
+// Proplem - TODO: ...
+type Problem struct {
+	ID             int    // `gorm:"column:FileID;primary_key:true;AUTO_INCREMENT"`
+	NumberOfSheets int    `gorm:"column:Number_of_sheets"`
+	Name           string //`gorm:"column:S3BucketName;size:100"`
+	Category       sql.NullString
+	Marks          sql.NullFloat64
+	Source         Source `gorm:"ForeignKey:FileID"`
+}
+
+// TableName overrides default table name for the model
+func (Problem) TableName() string {
+	return "Problems"
+}
+
 // DownloadTo - download and store source file to a specified directory
 func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string, err error) {
 	destinationName := path.Join(dest, s.FileName)
@@ -1496,6 +1511,7 @@ type Cell struct {
 	Borders, Alignments   string
 	CellFormat, MergedRef string
 	Type                  sql.NullString `gorm:"column:cell_type"`
+	Type                  sql.NullString `gorm:"column:cell_type"`
 	BorderID              sql.NullInt64  `gorm:"index;type:int"`
 	Border                *Border
 	AlignmentID           sql.NullInt64 `gorm:"index;type:int"`
@@ -1720,6 +1736,7 @@ func SetDb() {
 	Db.AutoMigrate(&AutoEvaluation{})
 	Db.AutoMigrate(&Rubric{})
 	Db.AutoMigrate(&DefinedName{})
+	Db.AutoMigrate(&Problem{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1755,6 +1772,7 @@ func SetDb() {
 		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
+		Db.Model(&Problem{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 	}
 }
 
