@@ -449,11 +449,9 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
-	if err := db.Exec(`
+	db.Exec(`
 		INSERT INTO Problems (Number_of_sheets, Name, Category, FileID)
-		SELECT 1, 'ABC123', 'CATEGORY', FileID FROM FileSources`).Error; err != nil {
-		t.Error(err)
-	}
+		SELECT 1, 'ABC123', 'CATEGORY', FileID FROM FileSources`)
 
 	return db
 }

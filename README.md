@@ -9,6 +9,6 @@ docker rm -f mydb; docker run --name mydb -e MYSQL_ROOT_PASSWORD=p455w0rd -e MYS
 docker logs -f mydb
 
 # wait until the DB is up
-export DATABASE_URL='mysql://root:p455w0rd@tcp(172.17.0.2:3306)/blocks?parseTime=true'
+export DATABASE_URL='mysql://root:p455w0rd@/blocks?parseTime=true'
 go test ./... -short -v 
 ```
