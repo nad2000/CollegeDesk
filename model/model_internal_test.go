@@ -92,7 +92,7 @@ func TestModel(t *testing.T) {
 			Value:     "1234.567",
 			Comment:   Comment{Text: fmt.Sprintf("JUST A COMMENT FOR %q", r)},
 		}
-		cell.Row, cell.Col, err = xlsx.GetCoordsFromCellIDString(r)
+		cell.Row, cell.Col, _ = xlsx.GetCoordsFromCellIDString(r)
 		Db.Create(&cell)
 		if r == "C3" {
 			Db.Create(&AutoEvaluation{

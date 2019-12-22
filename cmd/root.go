@@ -46,7 +46,6 @@ var (
 	debugLevel             int
 	dest                   string
 	force                  bool
-	region                 string
 	testing                bool
 	url                    string
 	verbose                bool

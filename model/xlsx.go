@@ -96,10 +96,6 @@ type xlsxAnyChart struct {
 	// XML     string `xml:",innerxml"`
 }
 
-type xlsxSapeProperties struct {
-	Properies string `xml:",innerxml"`
-}
-
 type anyHolder struct {
 	// XMLName Name
 	// XML string `xml:",innerxml"`
