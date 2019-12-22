@@ -401,6 +401,39 @@ func (ProblemSheet) TableName() string {
 	return "ProblemWorkSheets"
 }
 
+// ProblemSheetData - TODO: ...
+type ProblemSheetData struct {
+	ID             int
+	Range          string `gorm:"column:CellRange;size:10"`
+	Value          sql.NullString
+	Comment        sql.NullString
+	Formula        sql.NullString
+	IsReference    bool
+	ProblemID      int           `gorm:"index"`
+	Problem        *Problem      `gorm:"ForeignKey:ProblemID"`
+	ProblemSheetID int           `gorm:"column:ProblemWorkSheet_ID;index"`
+	ProblemSheet   *ProblemSheet `gorm:"ForeignKey:ProblemSheetID"`
+}
+
+// TableName overrides default table name for the model
+func (ProblemSheetData) TableName() string {
+	return "ProblemWorkSheetExcelData"
+}
+
+// QuestionFile - TODO: ...
+type QuestionFile struct {
+	ID         int
+	SourceID   int    `gorm:"column:FileID;type:int;index"`
+	Source     Source `gorm:"ForeignKey:SourceID"`
+	QuestionID int    `gorm:"column:QuestionID;index"`
+	Question   *Question
+}
+
+// TableName overrides default table name for the model
+func (QuestionFile) TableName() string {
+	return "QuestionFiles"
+}
+
 // DownloadTo - download and store source file to a specified directory
 func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string, err error) {
 	destinationName := path.Join(dest, s.FileName)
@@ -1751,6 +1784,8 @@ func SetDb() {
 	Db.AutoMigrate(&DefinedName{})
 	Db.AutoMigrate(&Problem{})
 	Db.AutoMigrate(&ProblemSheet{})
+	Db.AutoMigrate(&ProblemSheetData{})
+	Db.AutoMigrate(&QuestionFile{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1788,6 +1823,10 @@ func SetDb() {
 		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&Problem{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		Db.Model(&ProblemSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&ProblemSheetData{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&ProblemSheetData{}).AddForeignKey("ProblemWorkSheet_ID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
+		// Db.Model(&QuestionFile{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		// Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 	}
 }
 
