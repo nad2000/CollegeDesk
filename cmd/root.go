@@ -66,7 +66,7 @@ Conditions that define Cell Formula Block -
   (iii) The formula in the range of cells should be the same except the changes due to relative cell references.
 
 Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS,
-where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
+where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@tcp(SERVER:PORT)/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
 	// Run: func(c *cobra.Command, args []Args) {},
 }
