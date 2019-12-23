@@ -27,7 +27,7 @@ var problemsCmd = &cobra.Command{
 	Use:   "problems",
 	Short: "Process problems and questions workbooks.",
 	Long:  `Process problems and questions workbooks.`,
-	Run:   processQuestions,
+	Run:   processProblems,
 }
 
 func processProblems(cmd *cobra.Command, args []string) {

@@ -151,8 +151,8 @@ type Question struct {
 	IsProcessed        bool `gorm:"column:IsProcessed;default:0"`
 	Source             Source
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
-	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
-	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	Answers            []Answer            `gorm:"foreignkey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"foreignkey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
 	IsRubricCreated    bool
@@ -363,8 +363,8 @@ type Source struct {
 	FileName     string     `gorm:"column:FileName;size:100"`
 	ContentType  string     `gorm:"column:ContentType;size:100"`
 	FileSize     int64      `gorm:"column:FileSize"`
-	Answers      []Answer   `gorm:"ForeignKey:FileID"`
-	Questions    []Question `gorm:"ForeignKey:FileID"`
+	Answers      []Answer   `gorm:"foreignkey:FileID"`
+	Questions    []Question `gorm:"foreignkey:FileID"`
 }
 
 // TableName overrides default table name for the model
@@ -380,7 +380,7 @@ type Problem struct {
 	Category       sql.NullString
 	Marks          sql.NullFloat64
 	FileID         int     `gorm:"column:FileID;index"`
-	Source         *Source `gorm:"ForeignKey:FileID"`
+	Source         *Source `gorm:"foreignkey:FileID"`
 }
 
 // TableName overrides default table name for the model
@@ -393,7 +393,7 @@ type ProblemSheet struct {
 	ID             int
 	SequenceNumber int      `gorm:"column:Sequence_Number"`
 	ProblemID      int      `gorm:"index"`
-	Problem        *Problem `gorm:"ForeignKey:ProblemID"`
+	Problem        *Problem `gorm:"foreignkey:ProblemID"`
 }
 
 // TableName overrides default table name for the model
@@ -410,9 +410,9 @@ type ProblemSheetData struct {
 	Formula        sql.NullString
 	IsReference    bool
 	ProblemID      int           `gorm:"index"`
-	Problem        *Problem      `gorm:"ForeignKey:ProblemID"`
+	Problem        *Problem      `gorm:"foreignkey:ProblemID"`
 	ProblemSheetID int           `gorm:"column:ProblemWorkSheet_ID;index"`
-	ProblemSheet   *ProblemSheet `gorm:"ForeignKey:ProblemSheetID"`
+	ProblemSheet   *ProblemSheet `gorm:"foreignkey:ProblemSheetID"`
 }
 
 // TableName overrides default table name for the model
@@ -424,7 +424,7 @@ func (ProblemSheetData) TableName() string {
 type QuestionFile struct {
 	ID         int
 	SourceID   int    `gorm:"column:FileID;type:int;index"`
-	Source     Source `gorm:"ForeignKey:SourceID"`
+	Source     Source `gorm:"foreignkey:SourceID"`
 	QuestionID int    `gorm:"column:QuestionID;index"`
 	Question   *Question
 }
@@ -432,6 +432,24 @@ type QuestionFile struct {
 // TableName overrides default table name for the model
 func (QuestionFile) TableName() string {
 	return "QuestionFiles"
+}
+
+// QuestionFileSheet - TODO: ...
+type QuestionFileSheet struct {
+	ID              int
+	Sequence        int    `gorm:"column:Sheet_Sequence"`
+	Name            string `gorm:"column:Sheet_Name"`
+	QuestionFileID  int    `gorm:"column:QuestionFileID;type:int;index"`
+	QuestionFile    *QuestionFile
+	ProblemSheetsID int `gorm:"column:ProblemSheetsID;type:int;index"`
+	ProblemSheet    *ProblemSheet
+	ProblemID       int      `gorm:"index"`
+	Problem         *Problem `gorm:"foreignkey:ProblemID"`
+}
+
+// TableName overrides default table name for the model
+func (QuestionFileSheet) TableName() string {
+	return "QuestionFileWorkSheets"
 }
 
 // DownloadTo - download and store source file to a specified directory
@@ -459,16 +477,16 @@ type Answer struct {
 	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
 	Marks               float64       `gorm:"column:Marks;type:float"`
 	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
-	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
-	Source              Source        `gorm:"Association_ForeignKey:FileID"`
+	Worksheets          []Worksheet   `gorm:"foreignkey:AnswerID"`
+	Source              Source        `gorm:"Association_foreignkey:FileID"`
 	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
 	WasXLProcessed      uint8         `gorm:"type:tinyint(1);default:0"`
 	WasAutocommented    bool
-	AnswerComments      []AnswerComment     `gorm:"ForeignKey:AnswerID"`
-	XLQTransformations  []XLQTransformation `gorm:"ForeignKey:QuestionID"`
+	AnswerComments      []AnswerComment     `gorm:"foreignkey:AnswerID"`
+	XLQTransformations  []XLQTransformation `gorm:"foreignkey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -1100,16 +1118,16 @@ type Worksheet struct {
 	ID               int
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
-	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
+	Blocks           []Block       `gorm:"foreignkey:WorksheetID"`
+	Answer           Answer        `gorm:"foreignkey:AnswerID"`
 	AnswerID         sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
-	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
+	Workbook         Workbook      `gorm:"foreignkey:WorkbookId"`
 	WorkbookID       int           `gorm:"index"`
 	IsReference      bool
 	OrderNum         int
 	Idx              int
 	IsPlagiarised    bool   // sql.NullBool
-	Cells            []Cell `gorm:"ForeignKey:WorksheetID"`
+	Cells            []Cell `gorm:"foreignkey:WorksheetID"`
 }
 
 // TableName overrides default table name for the model
@@ -1225,11 +1243,11 @@ type Block struct {
 	Range           string                       `gorm:"column:BlockCellRange"`
 	Formula         string                       `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string                       // first block cell relative formula formula
-	Cells           []Cell                       `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet                    `gorm:"ForeignKey:WorksheetID"`
+	Cells           []Cell                       `gorm:"foreignkey:BlockID"`
+	Worksheet       Worksheet                    `gorm:"foreignkey:WorksheetID"`
 	WorksheetID     int                          `gorm:"index"`
-	CommentMappings []BlockCommentMapping        `gorm:"ForeignKey:ExcelBlockID"`
-	Chart           Chart                        `gorm:"ForeignKey:ChartId"`
+	CommentMappings []BlockCommentMapping        `gorm:"foreignkey:ExcelBlockID"`
+	Chart           Chart                        `gorm:"foreignkey:ChartId"`
 	ChartID         sql.NullInt64                `grom:"type:int;index"`
 	IsReference     bool                         // the block is used for referencing the expected bloks
 	TRow            int                          `gorm:"index"` // Top row
@@ -1529,7 +1547,7 @@ func (b *Block) IsInside(r, c int) bool {
 // Cell - a single cell of the block
 type Cell struct {
 	ID                    int
-	Block                 Block         `gorm:"ForeignKey:BlockID"`
+	Block                 Block         `gorm:"foreignkey:BlockID"`
 	BlockID               sql.NullInt64 `gorm:"index;type:int"`
 	Worksheet             Worksheet
 	WorksheetID           int    `gorm:"index"`
@@ -1589,11 +1607,14 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
 	}
 	db, err = gorm.Open(parts[0], parts[1])
-	if parts[0] == "mysql" {
+	switch parts[0] {
+	case "mysql":
 		db.Set("gorm:table_options", "collation_connection=utf8_bin")
 		if err := db.Exec("SET @@sql_mode='ANSI'").Error; err != nil {
 			log.Error(err)
 		}
+	case "sqlite3":
+		db.Exec("PRAGMA foreign_keys = ON")
 	}
 	if err != nil {
 		log.Error(err)
@@ -1619,9 +1640,9 @@ type MySQLQuestion struct {
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
 	WasCompared        bool                `gorm:"default:0"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;default:0"`
-	Source             Source              `gorm:"ForeignKey:FileID"`
-	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
-	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	Source             Source              `gorm:"foreignkey:FileID"`
+	Answers            []Answer            `gorm:"foreignkey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"foreignkey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
 	IsRubricCreated    bool
@@ -1637,8 +1658,8 @@ type Comment struct {
 	ID              int                   `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
 	Text            string                `gorm:"column:CommentText"`
 	Marks           float64               `gorm:"column:Marks;type:float"`
-	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelCommentID"`
-	AnswerComments  []AnswerComment       `gorm:"ForeignKey:CommentID"`
+	CommentMappings []BlockCommentMapping `gorm:"foreignkey:ExcelCommentID"`
+	AnswerComments  []AnswerComment       `gorm:"foreignkey:CommentID"`
 }
 
 // TableName overrides default table name for the model
@@ -1773,6 +1794,7 @@ func SetDb() {
 	Db.AutoMigrate(&ProblemSheet{})
 	Db.AutoMigrate(&ProblemSheetData{})
 	Db.AutoMigrate(&QuestionFile{})
+	Db.AutoMigrate(&QuestionFileSheet{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1798,9 +1820,11 @@ func SetDb() {
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
-		// Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
@@ -1812,8 +1836,13 @@ func SetDb() {
 		Db.Model(&ProblemSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
 		Db.Model(&ProblemSheetData{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
 		Db.Model(&ProblemSheetData{}).AddForeignKey("ProblemWorkSheet_ID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
-		// Db.Model(&QuestionFile{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
-		// Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+
+		Db.Model(&QuestionFile{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("ProblemSheetsID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("QuestionFileID", "QuestionFiles(ID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -2740,14 +2769,18 @@ func (ConditionalFormatting) TableName() string {
 
 // XLQTransformation - XLQ Transformations
 type XLQTransformation struct {
-	ID            int
-	CellReference string    `gorm:"type:varchar(10);not null"`
-	TimeStamp     time.Time `gorm:"not null"`
-	UserID        int       `gorm:"column:UserID;not null;index"`
-	Question      Question
-	QuestionID    int `gorm:"column:QuestionID;not null;index"`
-	// Source        Source
-	// SourceID      int `gorm:"column:FileID;not null;index"`
+	ID             int
+	CellReference  string    `gorm:"type:varchar(10);not null"`
+	TimeStamp      time.Time `gorm:"not null"`
+	UserID         int       `gorm:"column:UserID;not null;index"`
+	User           *User
+	QuestionID     int `gorm:"column:QuestionID;not null;index"`
+	Question       Question
+	SourceID       int       `gorm:"column:FileID;not null;index"`
+	Source         *Source   `gorm:"foreignkey:SourceID"`
+	QuestionFileID int       `gorm:"column:questionfile_id;not null;index"`
+	QuestionFile   *Question `gorm:"foreignkey:questionfile_id"`
+	Randomstring   sql.NullString
 }
 
 // TableName overrides default table name for the model
