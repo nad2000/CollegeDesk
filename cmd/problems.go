@@ -15,7 +15,7 @@
 package cmd
 
 import (
-	model "extract-blocks/model"
+	"extract-blocks/model"
 	"extract-blocks/s3"
 
 	log "github.com/Sirupsen/logrus"
@@ -44,49 +44,54 @@ func processProblems(cmd *cobra.Command, args []string) {
 	defer Db.Close()
 
 	manager := createS3Manager()
-	HandleQuestions(manager)
+	HandleProblems(manager)
 }
 
 // HandleProblems - iterates through questions, downloads the all files
 // and inport all cells into DB
-func HandleProblems(manager s3.FileManager) error {
+func HandleProblems(manager s3.FileManager) (err error) {
 
-	rows, err := model.QuestionsToProcess()
+	var problems []model.Problem
+	// Db.LogMode(true)
+	err = (Db.
+		Preload("Source").
+		Joins("JOIN FileSources ON FileSources.FileID = Problems.FileID").
+		Where("IsProcessed = ?", 0).
+		Where("FileSources.FileName LIKE ?", "%.xlsx").
+		Find(&problems)).Error
 	if err != nil {
 		log.WithError(err).Fatalf("Failed to retrieve list of question source files to process.")
 	}
 	var fileCount int
-	for _, q := range rows {
-		if err := Db.Where("QuestionID = ?", q.ID).Delete(&model.QuestionExcelData{}).Error; err != nil {
-			log.WithError(err).Errorln("Failed to delete existing question data of the qustion: ", q)
+	for _, p := range problems {
+		if err := Db.Where("problem_id = ?", p.ID).Delete(&model.ProblemSheetData{}).Error; err != nil {
+			log.WithError(err).Errorln("Failed to delete existing problem worksheet data of the problem: ", p)
 		}
-		var s model.Source
-		if err := Db.Model(&q).Related(&s, "FileID").Error; err != nil {
-			log.WithError(err).Errorln("Failed to retrieve source file data entry for the question: ", q)
-			continue
+		if err := Db.Where("problem_id = ?", p.ID).Delete(&model.ProblemSheet{}).Error; err != nil {
+			log.WithError(err).Errorln("Failed to delete existing problem worksheet entries of the problem: ", p)
 		}
-		fileName, err := s.DownloadTo(manager, dest)
+		fileName, err := p.Source.DownloadTo(manager, dest)
 		if err != nil {
-			log.WithError(err).Errorln("Failed to download the file: ", s)
+			log.WithError(err).Errorln("Failed to download the file: ", p.Source)
 			continue
 		}
 		log.Infof("Processing %q", fileName)
 
-		if err := q.ImportFile(fileName, color, verbose); err != nil {
-			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, q)
+		if err := p.ImportFile(fileName, color, verbose); err != nil {
+			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, p)
 			continue
 		}
-		q.IsProcessed = true
+		p.IsProcessed = true
 
-		if err := Db.Save(&q).Error; err != nil {
-			log.WithError(err).Errorf("Failed update question entry %#v for %q.", q, fileName)
+		if err := Db.Save(&p).Error; err != nil {
+			log.WithError(err).Errorf("Failed update question entry %#v for %q.", p, fileName)
 			continue
 		}
 		fileCount++
 	}
 	log.WithField("filecount", fileCount).
 		Infof("Downloaded and loaded %d Excel files.", fileCount)
-	if missedCount := len(rows) - fileCount; missedCount > 0 {
+	if missedCount := len(problems) - fileCount; missedCount > 0 {
 		log.WithField("missed", missedCount).
 			Infof("Failed to download and load %d file(s)", missedCount)
 	}

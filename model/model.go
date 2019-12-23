@@ -372,54 +372,6 @@ func (Source) TableName() string {
 	return "FileSources"
 }
 
-// Proplem - TODO: ...
-type Problem struct {
-	ID             int    // `gorm:"column:FileID;primary_key:true;AUTO_INCREMENT"`
-	NumberOfSheets int    `gorm:"column:Number_of_sheets"`
-	Name           string //`gorm:"column:S3BucketName;size:100"`
-	Category       sql.NullString
-	Marks          sql.NullFloat64
-	FileID         int     `gorm:"column:FileID;index"`
-	Source         *Source `gorm:"foreignkey:FileID"`
-}
-
-// TableName overrides default table name for the model
-func (Problem) TableName() string {
-	return "Problems"
-}
-
-// ProblemSheet - TODO: ...
-type ProblemSheet struct {
-	ID             int
-	SequenceNumber int      `gorm:"column:Sequence_Number"`
-	ProblemID      int      `gorm:"index"`
-	Problem        *Problem `gorm:"foreignkey:ProblemID"`
-}
-
-// TableName overrides default table name for the model
-func (ProblemSheet) TableName() string {
-	return "ProblemWorkSheets"
-}
-
-// ProblemSheetData - TODO: ...
-type ProblemSheetData struct {
-	ID             int
-	Range          string `gorm:"column:CellRange;size:10"`
-	Value          sql.NullString
-	Comment        sql.NullString
-	Formula        sql.NullString
-	IsReference    bool
-	ProblemID      int           `gorm:"index"`
-	Problem        *Problem      `gorm:"foreignkey:ProblemID"`
-	ProblemSheetID int           `gorm:"column:ProblemWorkSheet_ID;index"`
-	ProblemSheet   *ProblemSheet `gorm:"foreignkey:ProblemSheetID"`
-}
-
-// TableName overrides default table name for the model
-func (ProblemSheetData) TableName() string {
-	return "ProblemWorkSheetExcelData"
-}
-
 // QuestionFile - TODO: ...
 type QuestionFile struct {
 	ID         int

@@ -450,8 +450,8 @@ func createTestDB() *gorm.DB {
 
 	}
 	db.Exec(`
-		INSERT INTO Problems (Number_of_sheets, Name, Category, FileID)
-		SELECT 1, 'ABC123', 'CATEGORY', FileID FROM FileSources`)
+		INSERT INTO Problems (Number_of_sheets, Name, Category, FileID, IsProcessed)
+		SELECT 1, 'ABC123', 'CATEGORY', FileID, 1 FROM FileSources`)
 
 	return db
 }
@@ -671,10 +671,10 @@ func testRowsToProcess(t *testing.T) {
 
 }
 
-type testManager struct{}
+type testManager struct{ SourceDirectory string }
 
 func (m testManager) Download(sourceName, s3BucketName, s3Key, dest string) (string, error) {
-	return sourceName, nil
+	return path.Join(m.SourceDirectory, sourceName), nil
 }
 
 func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, error) {
@@ -751,6 +751,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("FullCycle", testFullCycle)
 	t.Run("ChangeFormula", testChangeFormula)
 	t.Run("DefinedNames", testDefinedNames)
+	t.Run("HandleProblems", testHandleProblems)
 }
 
 func testChangeFormula(t *testing.T) {
