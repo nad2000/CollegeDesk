@@ -127,9 +127,9 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 			}
 		}
 
-		sheet.Cell(1, 0).SetInt(p.ID)
+		sheet.Cell(0, 1).SetInt(p.ID)
 		for i := 2; i < 5; i++ {
-			sheet.Cell(1, i).SetInt(ps.ID)
+			sheet.Cell(i, 1).SetInt(ps.ID)
 		}
 	}
 	p.ImportBlocks(file, color, verbose)
