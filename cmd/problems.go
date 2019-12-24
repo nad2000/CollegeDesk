@@ -77,14 +77,13 @@ func HandleProblems(manager s3.FileManager) (err error) {
 		}
 		log.Infof("Processing %q", fileName)
 
-		if err := p.ImportFile(fileName, color, verbose); err != nil {
+		if err := p.ImportFile(fileName, color, verbose, manager); err != nil {
 			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, p)
 			continue
 		}
-		p.IsProcessed = true
 
-		if err := Db.Save(&p).Error; err != nil {
-			log.WithError(err).Errorf("Failed update question entry %#v for %q.", p, fileName)
+		if err := Db.Model(&p).UpdateColumn("IsProcessed", true).Error; err != nil {
+			log.WithError(err).Errorf("Failed update problem entry %#v for %q.", p, fileName)
 			continue
 		}
 		fileCount++

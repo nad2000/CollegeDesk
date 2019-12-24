@@ -403,7 +403,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
-				// SourceID:      f.ID,
+				SourceID:      f.ID,
 			})
 		}
 		if fn == "partial.xlsx" {
@@ -413,6 +413,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
+				SourceID:      f.ID,
 			})
 		}
 	}

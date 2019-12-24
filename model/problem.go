@@ -2,7 +2,12 @@ package model
 
 import (
 	"database/sql"
+	"extract-blocks/s3"
+	"extract-blocks/utils"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nad2000/xlsx"
@@ -64,7 +69,7 @@ func (p Problem) String() string {
 }
 
 // ImportFile imports form Excel file QuestionExcleData
-func (p *Problem) ImportFile(fileName, color string, verbose bool) error {
+func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.FileManager) error {
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		return err
@@ -74,6 +79,7 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool) error {
 		log.Infof("Processing workbook: %s", fileName)
 	}
 
+	var sheetCount int
 	for sqn, sheet := range file.Sheets {
 
 		if sheet.Hidden {
@@ -81,6 +87,7 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool) error {
 			continue
 		}
 
+		sheetCount++
 		if VerboseLevel > 0 {
 			log.Infof("Processing worksheet %q", sheet.Name)
 		}
@@ -120,9 +127,46 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool) error {
 			}
 		}
 
+		sheet.Cell(1, 0).SetInt(p.ID)
+		for i := 2; i < 5; i++ {
+			sheet.Cell(1, i).SetInt(ps.ID)
+		}
 	}
 	p.ImportBlocks(file, color, verbose)
 
+	// Choose the output file name
+	outputName := path.Join(os.TempDir(), filepath.Base(fileName))
+	file.Save(outputName)
+
+	// Upload the file
+	newKey := utils.NewS3Key() + filepath.Ext(fileName)
+
+	location, err := manager.Upload(outputName, p.Source.S3BucketName, newKey)
+	if err != nil {
+		return fmt.Errorf("failed to uploade the output file %q to %q with S3 key %q: %s",
+			outputName, p.Source.S3BucketName, newKey, err)
+	}
+	log.Infof("Output file %q uploaded to bucket %q with S3 key %q, location: %q",
+		outputName, p.Source.S3BucketName, newKey, location)
+
+	var s Source
+	if err := Db.FirstOrCreate(&s, Source{
+		S3BucketName: p.Source.S3BucketName,
+		S3Key:        newKey,
+		FileName:     filepath.Base(outputName),
+		ContentType:  p.Source.ContentType,
+		FileSize:     p.Source.FileSize,
+	}).Error; err != nil {
+		log.Error(err)
+		return err
+	}
+	if err := Db.Model(p).UpdateColumns(map[string]interface{}{
+		"Number_of_sheets": sheetCount,
+		"FileID":           s.ID,
+	}).Error; err != nil {
+		log.Error(err)
+		return err
+	}
 	return nil
 }
 
