@@ -25,8 +25,8 @@ import (
 // problemsCmd represents the questions command
 var problemsCmd = &cobra.Command{
 	Use:   "problems",
-	Short: "Process problems and questions workbooks.",
-	Long:  `Process problems and questions workbooks.`,
+	Short: "Process problem workbooks.",
+	Long:  `Process problem workbooks.`,
 	Run:   processProblems,
 }
 

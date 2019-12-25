@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 )
 
@@ -74,6 +75,11 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 	if err != nil {
 		return err
 	}
+	// For the output use "excelize"
+	output, err := excelize.OpenFile(fileName)
+	if err != nil {
+		return err
+	}
 
 	if VerboseLevel > 0 {
 		log.Infof("Processing workbook: %s", fileName)
@@ -98,6 +104,7 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 			SequenceNumber: sqn,
 		}
 		if err := Db.Create(&ps).Error; err != nil {
+			log.Error(err)
 			return err
 		}
 
@@ -122,27 +129,36 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 					Comment:        NewNullString(commentText),
 				}
 				if err := Db.Create(&psd).Error; err != nil {
+					log.Error(err)
 					return err
 				}
 			}
 		}
 
-		sheet.Cell(0, 1).SetInt(p.ID)
-		for i := 2; i < 5; i++ {
-			sheet.Cell(i, 1).SetInt(ps.ID)
-		}
+		// sheet.Cell(0, 1).SetInt(p.ID)
+		// for i := 2; i < 5; i++ {
+		// 	sheet.Cell(i, 1).SetInt(ps.ID)
+		// }
+		output.SetCellValue(sheet.Name, "B1", p.ID)
+		output.SetCellValue(sheet.Name, "B3", ps.ID)
+		output.SetCellValue(sheet.Name, "B4", ps.ID)
+		output.SetCellValue(sheet.Name, "B5", ps.ID)
 	}
 	p.ImportBlocks(file, color, verbose)
 
 	// Choose the output file name
 	outputName := path.Join(os.TempDir(), filepath.Base(fileName))
-	file.Save(outputName)
+	// file.Save(outputName)
+	if err := output.SaveAs(outputName); err != nil {
+		return err
+	}
 
 	// Upload the file
 	newKey := utils.NewS3Key() + filepath.Ext(fileName)
 
 	location, err := manager.Upload(outputName, p.Source.S3BucketName, newKey)
 	if err != nil {
+		log.Error(err)
 		return fmt.Errorf("failed to uploade the output file %q to %q with S3 key %q: %s",
 			outputName, p.Source.S3BucketName, newKey, err)
 	}
@@ -180,6 +196,7 @@ func (p *Problem) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb 
 		wb = Workbook{FileName: fileName, IsReference: true}
 
 		if err := Db.Create(&wb).Error; err != nil {
+			log.Error(err)
 			log.WithError(err).Errorf("failed to create workbook entry %#v", wb)
 			return
 		}
