@@ -8,11 +8,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/nad2000/excelize"
 	"github.com/nad2000/xlsx"
 )
+
+const detailSheetName = "Details"
 
 // Proplem - TODO: ...
 type Problem struct {
@@ -88,8 +91,8 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 	var sheetCount int
 	for sqn, sheet := range file.Sheets {
 
-		if sheet.Hidden {
-			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+		if sheet.Hidden || sheet.Name == detailSheetName {
+			log.Infof("Skipping hidden or detail worksheet %q", sheet.Name)
 			continue
 		}
 
@@ -139,11 +142,11 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 		// for i := 2; i < 5; i++ {
 		// 	sheet.Cell(i, 1).SetInt(ps.ID)
 		// }
-		output.SetCellValue(sheet.Name, "B1", p.ID)
-		output.SetCellValue(sheet.Name, "B3", ps.ID)
-		output.SetCellValue(sheet.Name, "B4", ps.ID)
-		output.SetCellValue(sheet.Name, "B5", ps.ID)
+		row := strconv.Itoa(sqn + 5)
+		output.SetCellValue(detailSheetName, "A"+row, sqn+1)
+		output.SetCellValue(detailSheetName, "B"+row, ps.ID)
 	}
+	output.SetCellValue(detailSheetName, "B1", p.ID)
 	p.ImportBlocks(file, color, verbose)
 
 	// Choose the output file name
