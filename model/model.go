@@ -2037,6 +2037,32 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		return
 	}
 
+	var sheetsToUserIDs = make(map[int]int)
+	GA, ok := file.Sheet["GA"]
+	if ok {
+		for i := 1; ; i++ {
+			value := GA.Cell(i, 0).Value
+			if value == "" {
+				break
+			}
+			sheetNo, err := strconv.Atoi(value)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			value = GA.Cell(i, 2).Value
+			if value == "" {
+				break
+			}
+			userID, err := strconv.Atoi(value)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			sheetsToUserIDs[sheetNo] = userID
+		}
+	}
+
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
