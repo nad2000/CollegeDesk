@@ -23,6 +23,8 @@ import (
 	"github.com/nad2000/xlsx"
 )
 
+const gradingAssistanceSheetName = "GA"
+
 // Db - shared DB connection
 var Db *gorm.DB
 
@@ -393,7 +395,7 @@ type QuestionFileSheet struct {
 	Name            string `gorm:"column:Sheet_Name"`
 	QuestionFileID  int    `gorm:"column:QuestionFileID;type:int;index"`
 	QuestionFile    *QuestionFile
-	ProblemSheetsID int `gorm:"column:ProblemSheetsID;type:int;index"`
+	ProblemSheetsID int `gorm:"column:ProblemWorkSheetsID;type:int;index"`
 	ProblemSheet    *ProblemSheet
 	ProblemID       int      `gorm:"index"`
 	Problem         *Problem `gorm:"foreignkey:ProblemID"`
@@ -1793,7 +1795,7 @@ func SetDb() {
 		Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 
 		Db.Model(&QuestionFileSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
-		Db.Model(&QuestionFileSheet{}).AddForeignKey("ProblemSheetsID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("ProblemWorkSheetsID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
 		Db.Model(&QuestionFileSheet{}).AddForeignKey("QuestionFileID", "QuestionFiles(ID)", "CASCADE", "CASCADE")
 	}
 }
@@ -2036,9 +2038,29 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	} else if err = result.Error; err != nil {
 		return
 	}
+	if verbose {
+		log.Infof("*** Processing workbook: %s", fileName)
+	}
+	var q Question
+	err = Db.
+		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
+		Where("StudentAnswers.StudentAnswerID = ?", answerID).
+		Order("Questions.reference_id DESC").
+		First(&q).Error
+	if err != nil {
+		log.WithError(err).Errorln("Failed to retrieve the question entry for the answer ID: ", answerID)
+		return
+	}
+	if verbose {
+		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
+	}
 
-	var sheetsToUserIDs = make(map[int]int)
-	GA, ok := file.Sheet["GA"]
+	type Row struct {
+		userID, sheetID, sequence int
+		name                      string
+	}
+	var sheetsToUserIDs = make(map[int]Row)
+	GA, ok := file.Sheet[gradingAssistanceSheetName]
 	if ok {
 		for i := 1; ; i++ {
 			value := GA.Cell(i, 0).Value
@@ -2059,25 +2081,45 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.Error(err)
 				continue
 			}
-			sheetsToUserIDs[sheetNo] = userID
-		}
-	}
+			sheetsToUserIDs[sheetNo] = Row{userID: userID}
 
-	if verbose {
-		log.Infof("*** Processing workbook: %s", fileName)
-	}
-	var q Question
-	err = Db.
-		Joins("JOIN StudentAnswers ON StudentAnswers.QuestionID = Questions.QuestionID").
-		Where("StudentAnswers.StudentAnswerID = ?", answerID).
-		Order("Questions.reference_id DESC").
-		First(&q).Error
-	if err != nil {
-		log.WithError(err).Errorln("Failed to retrieve the question entry for the answer ID: ", answerID)
-		return
-	}
-	if verbose {
-		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
+		}
+		userIDs := make([]int, 0, len(sheetsToUserIDs))
+		for _, v := range sheetsToUserIDs {
+			userIDs = append(userIDs, v.userID)
+		}
+
+		var rows *sql.Rows
+		rows, err = Db.Raw(`SELECT
+				qs.ProblemWorkSheetsID,
+				qs.Sheet_Sequence,
+				qs.Sheet_Name
+			FROM XLQTransformation AS xt 
+			JOIN QuestionFileWorkSheets AS qs ON qs.QuestionFileID = xt.questionfile_id
+			WHERE xt.UserID IN (?) AND xt.QuestionID = ?`, userIDs, q.ID).Rows()
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				sheetID, sequence int
+				name              string
+			)
+
+			rows.Scan(&sheetID, &sequence, &name)
+			r, ok := sheetsToUserIDs[sequence]
+			if !ok {
+				log.Errorf("missing entry in the 'Details' spreadsheet for %q", name)
+				continue
+			}
+			r.name = name
+			r.sequence = sequence
+			r.sheetID = sheetID
+			sheetsToUserIDs[sequence] = r
+		}
+
 	}
 
 	allSheets := file.Sheets
@@ -2085,8 +2127,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
-		if sheet.Hidden {
-			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+		if sheet.Hidden || sheet.Name == gradingAssistanceSheetName {
+			log.Infof("Skipping hidden worksheet %q or GA sheet", sheet.Name)
 			continue
 		}
 
