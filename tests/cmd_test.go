@@ -753,6 +753,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("ChangeFormula", testChangeFormula)
 	t.Run("DefinedNames", testDefinedNames)
 	t.Run("HandleProblems", testHandleProblems)
+	t.Run("GradingAssistanceData", testGradingAssistanceData)
 }
 
 func testChangeFormula(t *testing.T) {

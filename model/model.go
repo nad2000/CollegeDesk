@@ -23,8 +23,6 @@ import (
 	"github.com/nad2000/xlsx"
 )
 
-const gradingAssistanceSheetName = "GA"
-
 // Db - shared DB connection
 var Db *gorm.DB
 
@@ -390,15 +388,15 @@ func (QuestionFile) TableName() string {
 
 // QuestionFileSheet - TODO: ...
 type QuestionFileSheet struct {
-	ID              int
-	Sequence        int    `gorm:"column:Sheet_Sequence"`
-	Name            string `gorm:"column:Sheet_Name"`
-	QuestionFileID  int    `gorm:"column:QuestionFileID;type:int;index"`
-	QuestionFile    *QuestionFile
-	ProblemSheetsID int `gorm:"column:ProblemWorkSheetsID;type:int;index"`
-	ProblemSheet    *ProblemSheet
-	ProblemID       int      `gorm:"index"`
-	Problem         *Problem `gorm:"foreignkey:ProblemID"`
+	ID             int
+	Sequence       int    `gorm:"column:Sheet_Sequence"`
+	Name           string `gorm:"column:Sheet_Name"`
+	QuestionFileID int    `gorm:"column:QuestionFileID;type:int;index"`
+	QuestionFile   *QuestionFile
+	ProblemSheetID int `gorm:"column:ProblemWorkSheetsID;type:int;index"`
+	ProblemSheet   *ProblemSheet
+	ProblemID      int      `gorm:"index"`
+	Problem        *Problem `gorm:"foreignkey:ProblemID"`
 }
 
 // TableName overrides default table name for the model
@@ -2055,72 +2053,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
-	type Row struct {
-		userID, sheetID, sequence int
-		name                      string
-	}
-	var sheetsToUserIDs = make(map[int]Row)
-	GA, ok := file.Sheet[gradingAssistanceSheetName]
-	if ok {
-		for i := 1; ; i++ {
-			value := GA.Cell(i, 0).Value
-			if value == "" {
-				break
-			}
-			sheetNo, err := strconv.Atoi(value)
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-			value = GA.Cell(i, 2).Value
-			if value == "" {
-				break
-			}
-			userID, err := strconv.Atoi(value)
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-			sheetsToUserIDs[sheetNo] = Row{userID: userID}
-
-		}
-		userIDs := make([]int, 0, len(sheetsToUserIDs))
-		for _, v := range sheetsToUserIDs {
-			userIDs = append(userIDs, v.userID)
-		}
-
-		var rows *sql.Rows
-		rows, err = Db.Raw(`SELECT
-				qs.ProblemWorkSheetsID,
-				qs.Sheet_Sequence,
-				qs.Sheet_Name
-			FROM XLQTransformation AS xt 
-			JOIN QuestionFileWorkSheets AS qs ON qs.QuestionFileID = xt.questionfile_id
-			WHERE xt.UserID IN (?) AND xt.QuestionID = ?`, userIDs, q.ID).Rows()
-		if err != nil {
-			return
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var (
-				sheetID, sequence int
-				name              string
-			)
-
-			rows.Scan(&sheetID, &sequence, &name)
-			r, ok := sheetsToUserIDs[sequence]
-			if !ok {
-				log.Errorf("missing entry in the 'Details' spreadsheet for %q", name)
-				continue
-			}
-			r.name = name
-			r.sequence = sequence
-			r.sheetID = sheetID
-			sheetsToUserIDs[sequence] = r
-		}
-
-	}
+	// sheetsToUserIDs, err := q.getGAEntries(file)
 
 	allSheets := file.Sheets
 	sheetIDs := make([]int, len(allSheets))
