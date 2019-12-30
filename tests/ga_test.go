@@ -54,6 +54,9 @@ func testGradingAssistanceData(t *testing.T) {
 
 	}
 	sheetsToUserIDs, err := q.GetGAEntries(file)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if sheetsToUserIDs == nil {
 		t.Fatal("Expected to get a populated map with GA data entries")
 	}

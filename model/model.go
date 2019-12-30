@@ -2053,7 +2053,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
-	// sheetsToUserIDs, err := q.getGAEntries(file)
+	sheetsToUserIDs, err := q.GetGAEntries(file)
+	if err != nil {
+		return
+	}
 
 	allSheets := file.Sheets
 	sheetIDs := make([]int, len(allSheets))
@@ -2072,12 +2075,24 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		var ws Worksheet
 		var references []Block
 		if !DryRun {
+			var isPlagiarised bool
+			GAEntry, ok := sheetsToUserIDs[orderNum+1]
+			if ok {
+				isPlagiarised = GAEntry.name != sheet.Name || GAEntry.userID == 0 || GAEntry.sheetID == 0 || GAEntry.sequence != orderNum+1
+				if isPlagiarised {
+					log.Debugf("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
+				}
+			} else {
+				isPlagiarised = true
+			}
+
 			err = Db.FirstOrCreate(&ws, Worksheet{
 				Name:             sheet.Name,
 				WorkbookID:       wb.ID,
 				WorkbookFileName: wb.FileName,
 				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
+				IsPlagiarised:    isPlagiarised,
 			}).Error
 			if err != nil {
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
@@ -2733,7 +2748,7 @@ type XLQTransformation struct {
 	Source         *Source   `gorm:"foreignkey:SourceID"`
 	QuestionFileID int       `gorm:"column:questionfile_id;not null;index"`
 	QuestionFile   *Question `gorm:"foreignkey:questionfile_id"`
-	Randomstring   sql.NullString
+	Randomstring   string
 }
 
 // TableName overrides default table name for the model
@@ -2960,13 +2975,13 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		// List of all keys. In case there were multiple downloads
 		keys := make(map[string]string)
 		for _, t := range transformations {
-			keys[t.CellReference] = t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+			// keys[t.CellReference] = t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+			keys[t.CellReference] = t.Randomstring
 		}
 		for _, ws := range worksheets {
 			for r, k := range keys {
 				value := file.GetCellValue(ws.Name, r)
 				if value == k {
-					ws.IsPlagiarised = false
 					goto MATCH
 				}
 				if VerboseLevel > 0 {
@@ -2980,8 +2995,8 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 				log.Infof("No match found among %v", transformations)
 			}
 			ws.IsPlagiarised = true
-		MATCH:
 			Db.Save(&ws)
+		MATCH:
 		}
 	}
 }
