@@ -16,6 +16,7 @@ type GARow struct {
 	name                      string
 }
 
+// GetGAEntries - build the GA entry list (map) for the question and answer file
 func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow, err error) {
 
 	GA, ok := file.Sheet[gradingAssistanceSheetName]
