@@ -327,7 +327,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{4951, 4952, 4953, 10000} {
+	for _, uid := range []int{-1, 4951, 4952, 4953, 10000} {
 		db.Create(&model.User{ID: uid})
 	}
 	assignment := model.Assignment{
@@ -798,24 +798,25 @@ func testFullCycle(t *testing.T) {
 	}
 	db.Create(&assignment)
 	for _, r := range []struct {
-		questionFileName, anserFileName, cr, ts string
+		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
 	}{
-		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
-		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952, true},
-		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953, true},
+		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "RND111", 4951, false},
+		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "RND222", 4952, true},
+		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "RND333", 4953, true},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", -1, true}, // "missing download"
 	} {
 
-		qf := model.Source{
+		qs := model.Source{
 			FileName:     r.questionFileName,
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qf)
+		db.Create(&qs)
+
 		q := model.Question{
-			SourceID:     model.NewNullInt64(qf.ID),
+			SourceID:     model.NewNullInt64(qs.ID),
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
@@ -826,6 +827,23 @@ func testFullCycle(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
+
+		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+		db.Create(&qf)
+
+		p := model.Problem{SourceID: qs.ID}
+		db.Create(&p)
+
+		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1}
+		db.Create(&ps)
+
+		qss := model.QuestionFileSheet{Sequence: 1, Name: "Sheet1", QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+		db.Create(&qss)
+
+		file, _ := xlsx.OpenFile(r.anserFileName)
+		gaEntries, _ := q.GetGAEntries(file)
+		t.Logf("%#v", gaEntries)
+
 		q.ImportFile(r.questionFileName, "FFFFFF00", true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
@@ -846,8 +864,9 @@ func testFullCycle(t *testing.T) {
 			db.Create(&model.XLQTransformation{
 				CellReference: r.cr,
 				UserID:        r.uid,
-				TimeStamp:     *parseTime(r.ts),
+				Randomstring:  r.rs,
 				QuestionID:    q.ID,
+				SourceID:      af.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
@@ -855,8 +874,9 @@ func testFullCycle(t *testing.T) {
 					db.Create(&model.XLQTransformation{
 						CellReference: "A" + strconv.Itoa(i),
 						UserID:        r.uid,
-						TimeStamp:     *parseTime(r.ts),
+						Randomstring:  r.rs,
 						QuestionID:    q.ID,
+						SourceID:      af.ID,
 					})
 				}
 			}
@@ -867,7 +887,8 @@ func testFullCycle(t *testing.T) {
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+				t.Errorf("Exected that %#v will get marked as %s.", ws,
+					map[bool]string{true: "plagiarised", false: "not plagiarised"}[r.isPlagiarised])
 			}
 		}
 	}
