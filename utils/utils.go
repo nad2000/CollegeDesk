@@ -29,6 +29,18 @@ func NewUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
+const validS3KeyCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+const s3KeyLength = 8
+
+// NewS3Key generates a new S3 Key value
+func NewS3Key() string {
+	b := make([]byte, s3KeyLength)
+	for i := range b {
+		b[i] = validS3KeyCharacters[rnd.Intn(len(validS3KeyCharacters))]
+	}
+	return string(b)
+}
+
 // TempFileName generates a temporary filename for use in testing or whatever
 func TempFileName(prefix, suffix string) string {
 	randBytes := make([]byte, 8)

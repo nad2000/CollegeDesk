@@ -41,38 +41,6 @@ func flagString(cmd *cobra.Command, name string) string {
 	return conf.(string)
 }
 
-func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringSlice(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagStringArray(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringArray(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagBool(cmd *cobra.Command, name string) (val bool) {
-	val, err := cmd.Flags().GetBool(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagInt(cmd *cobra.Command, name string) (val int) {
-	val, err := cmd.Flags().GetInt(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
 func debugCmd(cmd *cobra.Command) {
 
 	if debugLevel > 0 {

@@ -92,7 +92,7 @@ func AddComments(fileNames ...string) {
 	base := filepath.Base(fileName)
 	res := Db.Order("ID DESC").First(&book, "StudentAnswerID IS NOT NULL AND file_name LIKE ?", "%"+base)
 	if res.RecordNotFound() {
-		log.Errorf("The workbook record not found for %q.", fileName)
+		log.Errorf("the workbook record not found for %q.", fileName)
 		return
 	}
 	if res.Error != nil {
@@ -149,7 +149,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 		newKey += filepath.Ext(fileName)
 		location, err := manager.Upload(outputName, a.Source.S3BucketName, newKey)
 		if err != nil {
-			log.Errorf("Failed to uploade the output file %q to %q with S3 key %q: %s",
+			log.Errorf("failed to uploade the output file %q to %q with S3 key %q: %s",
 				outputName, a.Source.S3BucketName, newKey, err)
 			continue
 		}
@@ -182,7 +182,7 @@ type commentEntry struct {
 func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[int][]commentEntry) {
 	cols := make([]int, 0)
 	for c, column := range comments {
-		if column != nil && len(column) != 0 {
+		if column != nil {
 			cols = append(cols, c)
 		}
 	}
@@ -198,7 +198,7 @@ func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[
 // addCommentsToColumn
 func addCommentsToColumn(file *excelize.File, sheetName string, column []commentEntry, boxCol int) {
 
-	if column == nil || len(column) == 0 {
+	if column == nil {
 		return
 	}
 	if boxCol < 0 {
@@ -207,7 +207,7 @@ func addCommentsToColumn(file *excelize.File, sheetName string, column []comment
 	address := column[0].address
 	col, _, err := xlsx.GetCoordsFromCellIDString(address)
 	if err != nil {
-		log.Errorf("Error occured while adding commment to column starting with %q: %s", address, err)
+		log.Errorf("error occured while adding commment to column starting with %q: %s", address, err)
 		col = column[0].col
 	}
 
@@ -242,7 +242,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 	// Iterate via assosiated comments and add them to the file
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
-		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+		return fmt.Errorf("failed to open file %q: %s", fileName, err.Error())
 	}
 	if deleteComments {
 		if model.DeleteAllComments(file) {
@@ -251,12 +251,12 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 			log.Infof("Inermediate file saved to %q", fileName)
 			err = file.SaveAs(fileName)
 			if err != nil {
-				return fmt.Errorf("Failed to remove comments from file %q: %s", fileName, err.Error())
+				return fmt.Errorf("failed to remove comments from file %q: %s", fileName, err.Error())
 			}
 
 			file, err = excelize.OpenFile(fileName)
 			if err != nil {
-				return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+				return fmt.Errorf("failed to open file %q: %s", fileName, err.Error())
 			}
 		}
 	}
@@ -334,9 +334,9 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 
 	if err != nil {
 		if outputName != "" {
-			return fmt.Errorf("Failed to save file %q -> %q: %s", fileName, outputName, err.Error())
+			return fmt.Errorf("failed to save file %q -> %q: %s", fileName, outputName, err.Error())
 		}
-		return fmt.Errorf("Failed to save file %q: %s", fileName, err.Error())
+		return fmt.Errorf("failed to save file %q: %s", fileName, err.Error())
 	}
 	log.Infof("Outpu saved to %q", outputName)
 

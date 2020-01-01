@@ -327,7 +327,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{4951, 4952, 4953, 10000} {
+	for _, uid := range []int{-1, 4951, 4952, 4953, 10000} {
 		db.Create(&model.User{ID: uid})
 	}
 	assignment := model.Assignment{
@@ -403,7 +403,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
-				// SourceID:      f.ID,
+				SourceID:      f.ID,
 			})
 		}
 		if fn == "partial.xlsx" {
@@ -413,6 +413,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
+				SourceID:      f.ID,
 			})
 		}
 	}
@@ -449,6 +450,9 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
+	db.Exec(`
+		INSERT INTO Problems (Number_of_sheets, Name, Category, FileID, IsProcessed)
+		SELECT 1, 'ABC123', 'CATEGORY', FileID, 1 FROM FileSources`)
 
 	return db
 }
@@ -668,10 +672,10 @@ func testRowsToProcess(t *testing.T) {
 
 }
 
-type testManager struct{}
+type testManager struct{ SourceDirectory string }
 
 func (m testManager) Download(sourceName, s3BucketName, s3Key, dest string) (string, error) {
-	return sourceName, nil
+	return path.Join(m.SourceDirectory, sourceName), nil
 }
 
 func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, error) {
@@ -748,6 +752,8 @@ func TestProcessing(t *testing.T) {
 	t.Run("FullCycle", testFullCycle)
 	t.Run("ChangeFormula", testChangeFormula)
 	t.Run("DefinedNames", testDefinedNames)
+	t.Run("HandleProblems", testHandleProblems)
+	t.Run("GradingAssistanceData", testGradingAssistanceData)
 }
 
 func testChangeFormula(t *testing.T) {
@@ -792,24 +798,27 @@ func testFullCycle(t *testing.T) {
 	}
 	db.Create(&assignment)
 	for _, r := range []struct {
-		questionFileName, anserFileName, cr, ts string
+		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
 	}{
-		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
-		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952, true},
-		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953, true},
+		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "RND111", 4951, false},
+		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "RND222", 4952, true},
+		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "RND333", 4953, true},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", -1, true}, // "missing download"
 	} {
 
-		qf := model.Source{
+		qs := model.Source{
 			FileName:     r.questionFileName,
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qf)
+		if err := db.Create(&qs).Error; err != nil {
+			t.Error(err)
+		}
+
 		q := model.Question{
-			SourceID:     model.NewNullInt64(qf.ID),
+			SourceID:     model.NewNullInt64(qs.ID),
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
@@ -820,37 +829,68 @@ func testFullCycle(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
+
+		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+		if err := db.Create(&qf).Error; err != nil {
+			t.Error(err)
+		}
+
+		p := model.Problem{SourceID: qs.ID}
+		if err := db.Create(&p).Error; err != nil {
+			t.Error(err)
+		}
+
+		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1}
+		if err := db.Create(&ps).Error; err != nil {
+			t.Error(err)
+		}
+
+		qss := model.QuestionFileSheet{Sequence: 1, Name: "Sheet1", QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+		if err := db.Create(&qss).Error; err != nil {
+			t.Error(err)
+		}
+
 		q.ImportFile(r.questionFileName, "FFFFFF00", true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
 		}
-		db.Create(&sa)
+		if err := db.Create(&sa).Error; err != nil {
+			t.Error(err)
+		}
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
-		db.Create(&af)
+		if err := db.Create(&af).Error; err != nil {
+			t.Error(err)
+		}
 		a := model.Answer{
 			SourceID:            model.NewNullInt64(af.ID),
 			QuestionID:          model.NewNullInt64(q.ID),
 			SubmissionTime:      *parseTime("2018-09-30 12:42"),
 			StudentAssignmentID: sa.ID,
 		}
-		db.Create(&a)
+		if err := db.Create(&a).Error; err != nil {
+			t.Error(err)
+		}
 		if r.uid > 0 {
 			db.Create(&model.XLQTransformation{
-				CellReference: r.cr,
-				UserID:        r.uid,
-				TimeStamp:     *parseTime(r.ts),
-				QuestionID:    q.ID,
+				CellReference:  r.cr,
+				UserID:         r.uid,
+				Randomstring:   r.rs,
+				QuestionID:     q.ID,
+				SourceID:       af.ID,
+				QuestionFileID: qf.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
 				for i := 1; i < 10; i++ {
 					db.Create(&model.XLQTransformation{
-						CellReference: "A" + strconv.Itoa(i),
-						UserID:        r.uid,
-						TimeStamp:     *parseTime(r.ts),
-						QuestionID:    q.ID,
+						CellReference:  "A" + strconv.Itoa(i),
+						UserID:         r.uid,
+						Randomstring:   r.rs,
+						QuestionID:     q.ID,
+						SourceID:       af.ID,
+						QuestionFileID: qf.ID,
 					})
 				}
 			}
@@ -861,7 +901,8 @@ func testFullCycle(t *testing.T) {
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+				t.Errorf("Exected that %#v will get marked as %s.", ws,
+					map[bool]string{true: "plagiarised", false: "not plagiarised"}[r.isPlagiarised])
 			}
 		}
 	}
