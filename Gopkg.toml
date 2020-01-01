@@ -24,7 +24,7 @@
 #   go-tests = true
 #   unused-packages = true
 
-required = ["github.com/rakyll/gotest"]
+required = ["github.com/rakyll/gotest", "github.com/mattn/goveralls"]
 
 [[constraint]]
   name = "github.com/Sirupsen/logrus"
