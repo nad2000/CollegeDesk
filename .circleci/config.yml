@@ -31,6 +31,7 @@ jobs:
       # - go get -v
       # - go build -v
       # - go build -v -o $(basename $PWD) main.go
+      - run: go get github.com/mattn/goveralls
       - run: go install extract-blocks/extract-blocks
       - run: cd vendor/github.com/rakyll/gotest/; go install .
       - save_cache:
@@ -44,7 +45,7 @@ jobs:
             extract-blocks run -t -v tests/demo.xlsx
             extract-blocks run -t -v tests/test_floats.xlsx
             extract-blocks comment -t -v tests/commenting.test.xlsx
-            gotest -v -short ./...
+            gotest -v -short -cover -covermode=count -coverprofile coverage.out ./...
       - run:
           name: Upload the buid
           # BB_AUTH_STRING=<bb_user_name>:<APP Password>
@@ -55,3 +56,4 @@ jobs:
               mv "${GOPATH}/bin/extract-blocks" "${OUTPUT}"
             fi
             curl -X POST "https://${BB_AUTH_STRING}@api.bitbucket.org/2.0/repositories/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/downloads" --form files=@"${OUTPUT}"
+            goveralls -coverprofile=coverage.out -service=circleci -repotoken $COVERALLS_TOKEN
