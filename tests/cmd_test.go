@@ -813,7 +813,9 @@ func testFullCycle(t *testing.T) {
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qs)
+		if err := db.Create(&qs).Error; err != nil {
+			t.Error(err)
+		}
 
 		q := model.Question{
 			SourceID:     model.NewNullInt64(qs.ID),
@@ -829,54 +831,66 @@ func testFullCycle(t *testing.T) {
 		}
 
 		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
-		db.Create(&qf)
+		if err := db.Create(&qf).Error; err != nil {
+			t.Error(err)
+		}
 
 		p := model.Problem{SourceID: qs.ID}
-		db.Create(&p)
+		if err := db.Create(&p).Error; err != nil {
+			t.Error(err)
+		}
 
 		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1}
-		db.Create(&ps)
+		if err := db.Create(&ps).Error; err != nil {
+			t.Error(err)
+		}
 
 		qss := model.QuestionFileSheet{Sequence: 1, Name: "Sheet1", QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
-		db.Create(&qss)
-
-		file, _ := xlsx.OpenFile(r.anserFileName)
-		gaEntries, _ := q.GetGAEntries(file)
-		t.Logf("%#v", gaEntries)
+		if err := db.Create(&qss).Error; err != nil {
+			t.Error(err)
+		}
 
 		q.ImportFile(r.questionFileName, "FFFFFF00", true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
 		}
-		db.Create(&sa)
+		if err := db.Create(&sa).Error; err != nil {
+			t.Error(err)
+		}
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
-		db.Create(&af)
+		if err := db.Create(&af).Error; err != nil {
+			t.Error(err)
+		}
 		a := model.Answer{
 			SourceID:            model.NewNullInt64(af.ID),
 			QuestionID:          model.NewNullInt64(q.ID),
 			SubmissionTime:      *parseTime("2018-09-30 12:42"),
 			StudentAssignmentID: sa.ID,
 		}
-		db.Create(&a)
+		if err := db.Create(&a).Error; err != nil {
+			t.Error(err)
+		}
 		if r.uid > 0 {
 			db.Create(&model.XLQTransformation{
-				CellReference: r.cr,
-				UserID:        r.uid,
-				Randomstring:  r.rs,
-				QuestionID:    q.ID,
-				SourceID:      af.ID,
+				CellReference:  r.cr,
+				UserID:         r.uid,
+				Randomstring:   r.rs,
+				QuestionID:     q.ID,
+				SourceID:       af.ID,
+				QuestionFileID: qf.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
 				for i := 1; i < 10; i++ {
 					db.Create(&model.XLQTransformation{
-						CellReference: "A" + strconv.Itoa(i),
-						UserID:        r.uid,
-						Randomstring:  r.rs,
-						QuestionID:    q.ID,
-						SourceID:      af.ID,
+						CellReference:  "A" + strconv.Itoa(i),
+						UserID:         r.uid,
+						Randomstring:   r.rs,
+						QuestionID:     q.ID,
+						SourceID:       af.ID,
+						QuestionFileID: qf.ID,
 					})
 				}
 			}

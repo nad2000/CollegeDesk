@@ -42,7 +42,6 @@ func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow,
 				continue
 			}
 			sheetsToUserIDs[sheetNo] = GARow{userID: userID}
-
 		}
 		userIDs := make([]int, 0, len(sheetsToUserIDs))
 		for _, v := range sheetsToUserIDs {
@@ -50,7 +49,7 @@ func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow,
 		}
 
 		var rows *sql.Rows
-		rows, err = Db.Raw(`SELECT
+		rows, err = Db.Raw(`SELECT DISTINCT
 				qs.ProblemWorkSheetsID,
 				qs.Sheet_Sequence,
 				qs.Sheet_Name
