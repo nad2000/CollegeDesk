@@ -940,24 +940,24 @@ func testDefinedNames(t *testing.T) {
 	}
 	db.Create(&assignment)
 	for _, r := range []struct {
-		questionFileName, anserFileName, cr, ts string
+		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
 		DNCount                                 int
 	}{
-		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 33},
-		{"Solver Simple Question.xlsx", "stud2-solver-multi-sheet.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 36},
+		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "TMP111", 4951, false, 33},
+		{"Solver Simple Question.xlsx", "stud2-solver-multi-sheet.xlsx", "D11", "TMP222", 4951, false, 36},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, true, 0}, // "missing download"
 	} {
 
-		qf := model.Source{
+		qs := model.Source{
 			FileName:     r.questionFileName,
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qf)
+		db.Create(&qs)
 		q := model.Question{
-			SourceID:     model.NewNullInt64(qf.ID),
+			SourceID:     model.NewNullInt64(qs.ID),
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
@@ -968,12 +968,37 @@ func testDefinedNames(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
+
+		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+		if err := db.Create(&qf).Error; err != nil {
+			t.Error(err)
+		}
+
+		p := model.Problem{SourceID: qs.ID}
+		if err := db.Create(&p).Error; err != nil {
+			t.Error(err)
+		}
+
+		for sequence := 1; sequence <= 5; sequence++ {
+			sheetName := "Sheet" + strconv.Itoa(sequence)
+			ps := model.ProblemSheet{ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
+			if err := db.Create(&ps).Error; err != nil {
+				t.Error(err)
+			}
+			qss := model.QuestionFileSheet{Sequence: sequence, Name: sheetName, QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+			if err := db.Create(&qss).Error; err != nil {
+				t.Error(err)
+
+			}
+		}
+
 		q.ImportFile(r.questionFileName, "FFFFFF00", true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
 		}
 		db.Create(&sa)
+
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
 		db.Create(&af)
@@ -984,21 +1009,25 @@ func testDefinedNames(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		if r.uid > 0 && r.ts != "" {
+		if r.uid > 0 && r.rs != "" {
 			db.Create(&model.XLQTransformation{
-				CellReference: r.cr,
-				UserID:        r.uid,
-				TimeStamp:     *parseTime(r.ts),
-				QuestionID:    q.ID,
+				CellReference:  r.cr,
+				UserID:         r.uid,
+				Randomstring:   r.rs,
+				QuestionID:     q.ID,
+				SourceID:       af.ID,
+				QuestionFileID: qf.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
 				for i := 1; i < 10; i++ {
 					db.Create(&model.XLQTransformation{
-						CellReference: "A" + strconv.Itoa(i),
-						UserID:        r.uid,
-						TimeStamp:     *parseTime(r.ts),
-						QuestionID:    q.ID,
+						CellReference:  "A" + strconv.Itoa(i),
+						UserID:         r.uid,
+						Randomstring:   r.rs,
+						QuestionID:     q.ID,
+						SourceID:       af.ID,
+						QuestionFileID: qf.ID,
 					})
 				}
 			}
@@ -1009,7 +1038,11 @@ func testDefinedNames(t *testing.T) {
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+				if r.isPlagiarised {
+					t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
+				} else {
+					t.Errorf("Expected that %#v will get marked as NOT plagiarised.", ws)
+				}
 			}
 			var count int
 			db.Model(&model.DefinedName{}).Where("worksheet_id = ?", ws.ID).Count(&count)

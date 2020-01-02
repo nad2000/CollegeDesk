@@ -2091,7 +2091,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				isPlagiarised = true
 			}
 			if isPlagiarised {
-				log.Debugf("***** Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
+				log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
 			}
 
 			err = Db.FirstOrCreate(&ws, Worksheet{
