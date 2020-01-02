@@ -110,7 +110,15 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 type QuestionType string
 
 // Scan - workaround for MySQL EMUM(...)
-func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.([]byte)); return nil }
+func (qt *QuestionType) Scan(value interface{}) error {
+	switch v := value.(type) {
+	case string:
+		*qt = QuestionType(v)
+	case []byte:
+		*qt = QuestionType(v)
+	}
+	return nil
+}
 
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
