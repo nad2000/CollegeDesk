@@ -19,15 +19,17 @@ func testGradingAssistanceData(t *testing.T) {
 		s model.Source
 		q model.Question
 		p model.Problem
+		u model.User
 	)
 	db.First(&s)
+	db.First(&u)
 	db.First(&q)
 	p.SourceID = s.ID
 	db.Create(&p)
 
 	for _, r := range []struct {
-		sequence, userID int
-		name             string
+		sequence, sheetID int
+		name              string
 	}{
 		{2, 11684, "Q1"},
 		{3, 11688, "Q2"},
@@ -41,27 +43,26 @@ func testGradingAssistanceData(t *testing.T) {
 		{11, 10688, "Q10"},
 	} {
 
-		u := model.User{ID: r.userID}
-		db.FirstOrCreate(&u, u)
 		qf := model.QuestionFile{SourceID: s.ID, QuestionID: q.ID}
 		db.Create(&qf)
 		ps := model.ProblemSheet{ProblemID: p.ID, Name: r.name, SequenceNumber: r.sequence}
 		db.Create(&ps)
-		qs := model.QuestionFileSheet{Sequence: r.sequence, Name: r.name, QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+		sheetID := r.sheetID - u.ID
+		qs := model.QuestionFileSheet{ID: sheetID, Sequence: r.sequence, Name: r.name, QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
 		db.Create(&qs)
-		xt := model.XLQTransformation{UserID: r.userID, QuestionID: q.ID, SourceID: s.ID}
+		xt := model.XLQTransformation{UserID: u.ID, QuestionID: q.ID, SourceID: s.ID}
 		db.Create(&xt)
 
 	}
-	sheetsToUserIDs, err := q.GetGAEntries(file)
+	entires, err := q.GetGAEntries(file, u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sheetsToUserIDs == nil {
+	if entires == nil {
 		t.Fatal("Expected to get a populated map with GA data entries")
 	}
 
-	if expected, count := 10, len(sheetsToUserIDs); count != expected {
+	if expected, count := 10, len(entires); count != expected {
 		t.Errorf("Expected %d entries, got: %d", expected, count)
 	}
 }

@@ -110,7 +110,15 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 type QuestionType string
 
 // Scan - workaround for MySQL EMUM(...)
-func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.([]byte)); return nil }
+func (qt *QuestionType) Scan(value interface{}) error {
+	switch v := value.(type) {
+	case string:
+		*qt = QuestionType(v)
+	case []byte:
+		*qt = QuestionType(v)
+	}
+	return nil
+}
 
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
@@ -424,14 +432,15 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 type Answer struct {
 	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
 	Assignment          Assignment
-	StudentAssignmentID int           `gorm:"column:StudentAssignmentID"`
-	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
-	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64       `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
-	Worksheets          []Worksheet   `gorm:"foreignkey:AnswerID"`
-	Source              Source        `gorm:"Association_foreignkey:FileID"`
-	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
+	StudentAssignment   StudentAssignment `gorm:"association_foreignkey:StudentAssignmentID;foreignkey:StudentAssignmentID"`
+	StudentAssignmentID int               `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         sql.NullInt64     `gorm:"column:MCQOptionID;type:int"`
+	ShortAnswer         string            `gorm:"column:ShortAnswerText;type:text"`
+	Marks               float64           `gorm:"column:Marks;type:float"`
+	SubmissionTime      time.Time         `gorm:"column:SubmissionTime;default:NULL"`
+	Worksheets          []Worksheet       `gorm:"foreignkey:AnswerID"`
+	Source              Source            `gorm:"Association_foreignkey:FileID"`
+	SourceID            sql.NullInt64     `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
@@ -2053,7 +2062,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
-	sheetsToUserIDs, err := q.GetGAEntries(file)
+	var sa StudentAssignment
+	if err = Db.Model(&answer).Related(&sa, "StudentAssignmentID").Error; err != nil {
+		log.WithError(err).Errorf("missing student assignment for the answer (ID: %d)", answer.ID)
+	}
+
+	GAEntries, err := q.GetGAEntries(file, sa.UserID)
 	if err != nil {
 		return
 	}
@@ -2076,14 +2090,14 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		var references []Block
 		if !DryRun {
 			var isPlagiarised bool
-			GAEntry, ok := sheetsToUserIDs[orderNum+1]
-			if ok {
-				isPlagiarised = GAEntry.name != sheet.Name || GAEntry.userID == 0 || GAEntry.sheetID == 0 || GAEntry.sequence != orderNum+1
-			} else {
-				isPlagiarised = true
-			}
+			GAEntry, ok := GAEntries[orderNum+1]
+			isPlagiarised = !(ok && GAEntry.isNotPlagiarised)
 			if isPlagiarised {
-				log.Debugf("***** Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
+				if ok {
+					log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntries)
+				} else {
+					log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d), missing GA entry.", sheet.Name, orderNum+1)
+				}
 			}
 
 			err = Db.FirstOrCreate(&ws, Worksheet{
@@ -2187,10 +2201,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wb.ImportWorksheets(fileName)
 
 	// Add missing blocks and cells from the model:
-	var sa StudentAssignment
-	if err := Db.Where("StudentAssignmentID = ?", answer.StudentAssignmentID).First(&sa).Error; err != nil {
-		log.WithError(err).Errorf("failed to find the stuedent assignemt for the answer (AnswerID: %d)", answerID)
-	} else if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
+	if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
 		var ma Answer
 		if res := Db.
 			Joins("JOIN StudentAssignments AS msa ON msa.StudentAssignmentID = StudentAnswers.StudentAssignmentID").
@@ -2512,7 +2523,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 					if dn.Name != "solver_opt" {
 						var ws Worksheet
 						if err := Db.Where("workbook_id = ? AND name = ?", wb.ID, sheetName).First(&ws).Error; err != nil {
-							log.Errorf("failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
+							log.Errorf("Failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
 							continue
 						}
 						worksheetID = ws.ID
