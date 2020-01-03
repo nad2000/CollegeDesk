@@ -2063,13 +2063,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	}
 
 	var sa StudentAssignment
-	Db.LogMode(true)
 	if err = Db.Model(&answer).Related(&sa, "StudentAssignmentID").Error; err != nil {
 		log.WithError(err).Errorf("missing assignment for the answer (ID: %d)", answer.ID)
-		Db.LogMode(false)
 		return
 	}
-	Db.LogMode(false)
 
 	GAEntries, err := q.GetGAEntries(file, sa.UserID)
 	if err != nil {

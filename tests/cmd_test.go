@@ -625,6 +625,12 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, r := range []struct {
 		fn                     string
 		blockCount, emptyCount int
@@ -634,9 +640,10 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 97},
 	} {
 		a = model.Answer{
-			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-30 12:42"),
+			Source:              model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-30 12:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
 		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, a.ID)
@@ -939,7 +946,7 @@ func testDefinedNames(t *testing.T) {
 		State: "READY_FOR_GRADING",
 	}
 	db.Create(&assignment)
-	for _, r := range []struct {
+	for fileNo, r := range []struct {
 		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
@@ -985,7 +992,13 @@ func testDefinedNames(t *testing.T) {
 			if err := db.Create(&ps).Error; err != nil {
 				t.Error(err)
 			}
-			qss := model.QuestionFileSheet{Sequence: sequence, Name: sheetName, QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+			qss := model.QuestionFileSheet{
+				ID:             (fileNo+1)*1000 + sequence,
+				Sequence:       sequence,
+				Name:           sheetName,
+				QuestionFileID: qf.ID,
+				ProblemSheetID: ps.ID,
+				ProblemID:      p.ID}
 			if err := db.Create(&qss).Error; err != nil {
 				t.Error(err)
 
@@ -1248,6 +1261,12 @@ func testCWA175(t *testing.T) {
 		Worksheet:   ws,
 	}
 	db.Create(&rb)
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, r := range []struct {
 		fn       string
 		expected int
@@ -1266,6 +1285,7 @@ func testCWA175(t *testing.T) {
 				S3BucketName: "studentanswers",
 				S3Key:        r.fn,
 			},
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&answer)
 		model.ExtractBlocksFromFile(r.fn, "", true, true, answer.ID)
@@ -1412,6 +1432,12 @@ func testCorruptedFiles(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, fn := range []string{"corrupt1.xlsx", "corrupt2.xlsx", "demo.xlsx"} {
 		f := model.Source{
 			FileName:     fn,
@@ -1420,9 +1446,10 @@ func testCorruptedFiles(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-14 14:42"),
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-14 14:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
 	}
