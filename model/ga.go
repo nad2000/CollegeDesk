@@ -49,11 +49,6 @@ func (q *Question) GetGAEntries(file *xlsx.File, userID int) (entries map[int]GA
 			sheetID -= userID
 			entries[sheetNo] = GARow{sheetID: sheetID, userID: userID, name: name, sequence: sheetNo}
 		}
-		userIDs := make([]int, 0, len(entries))
-		for _, v := range entries {
-			userIDs = append(userIDs, v.userID)
-		}
-
 		sheetIDs := make([]int, 0, len(entries))
 		for _, v := range entries {
 			sheetIDs = append(sheetIDs, v.sheetID)
@@ -68,7 +63,7 @@ func (q *Question) GetGAEntries(file *xlsx.File, userID int) (entries map[int]GA
 			FROM XLQTransformation AS xt 
 			JOIN QuestionFileWorkSheets AS qs ON qs.QuestionFileID = xt.questionfile_id
 			WHERE xt.UserID = ? AND xt.QuestionID = ? AND qs.ProblemWorkSheetsID IN (?)`,
-			userIDs, q.ID, sheetIDs).Rows()
+			userID, q.ID, sheetIDs).Rows()
 		if err != nil {
 			return
 		}
