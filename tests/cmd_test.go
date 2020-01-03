@@ -825,7 +825,7 @@ func testFullCycle(t *testing.T) {
 		State: "READY_FOR_GRADING",
 	}
 	db.Create(&assignment)
-	for _, r := range []struct {
+	for fileNo, r := range []struct {
 		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
@@ -868,7 +868,7 @@ func testFullCycle(t *testing.T) {
 			t.Error(err)
 		}
 
-		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1}
+		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1, ID: (fileNo + 1) * 1000}
 		if err := db.Create(&ps).Error; err != nil {
 			t.Error(err)
 		}
