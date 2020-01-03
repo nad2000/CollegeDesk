@@ -1009,12 +1009,13 @@ func testDefinedNames(t *testing.T) {
 
 		for sequence := 1; sequence <= 5; sequence++ {
 			sheetName := "Sheet" + strconv.Itoa(sequence)
-			ps := model.ProblemSheet{ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
+			ps := model.ProblemSheet{
+				ID:        (fileNo+1)*1000 + sequence,
+				ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
 			if err := db.Create(&ps).Error; err != nil {
 				t.Error(err)
 			}
 			qss := model.QuestionFileSheet{
-				ID:             (fileNo+1)*1000 + sequence,
 				Sequence:       sequence,
 				Name:           sheetName,
 				QuestionFileID: qf.ID,
