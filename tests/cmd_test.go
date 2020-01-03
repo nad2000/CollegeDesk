@@ -118,11 +118,23 @@ func TestDemoFile(t *testing.T) {
 		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
 		MaxScore:          999.99,
 	}
-	db.FirstOrCreate(&q, &q)
+	db.FirstOrCreate(&q, q)
+	var u model.User
+	db.FirstOrCreate(&u, u)
+	assignment := model.Assignment{
+		Title: "TestDemoFile...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	a := model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2019-12-13 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, &a)
 
@@ -204,9 +216,10 @@ func TestDemoFile(t *testing.T) {
 	}
 	db.FirstOrCreate(&q, q)
 	a = model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2019-12-13 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, a)
 
@@ -542,6 +555,13 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
+
 	for _, fn := range []string{"answer.xlsx", "answer.nocolor.xlsx"} {
 		f := model.Source{
 			FileName:     fn,
@@ -550,9 +570,10 @@ func testHandleNotcolored(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-14 14:42"),
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-14 14:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
 		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)

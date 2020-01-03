@@ -2064,8 +2064,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 
 	var sa StudentAssignment
 	if err = Db.Model(&answer).Related(&sa, "StudentAssignmentID").Error; err != nil {
-		log.WithError(err).Errorf("missing assignment for the answer (ID: %d)", answer.ID)
-		return
+		log.WithError(err).Errorf("missing student assignment for the answer (ID: %d)", answer.ID)
 	}
 
 	GAEntries, err := q.GetGAEntries(file, sa.UserID)
@@ -2094,7 +2093,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			GAEntry, ok := GAEntries[orderNum+1]
 			isPlagiarised = !(ok && GAEntry.isNotPlagiarised)
 			if isPlagiarised {
-				log.Infof("detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
+				log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
 			}
 
 			err = Db.FirstOrCreate(&ws, Worksheet{
@@ -2520,7 +2519,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 					if dn.Name != "solver_opt" {
 						var ws Worksheet
 						if err := Db.Where("workbook_id = ? AND name = ?", wb.ID, sheetName).First(&ws).Error; err != nil {
-							log.Errorf("failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
+							log.Errorf("Failed to detect the worksheet %q for the defined name %#v", sheetName, dn)
 							continue
 						}
 						worksheetID = ws.ID
