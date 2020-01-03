@@ -432,14 +432,15 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 type Answer struct {
 	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
 	Assignment          Assignment
-	StudentAssignmentID int           `gorm:"column:StudentAssignmentID"`
-	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
-	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64       `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
-	Worksheets          []Worksheet   `gorm:"foreignkey:AnswerID"`
-	Source              Source        `gorm:"Association_foreignkey:FileID"`
-	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
+	StudentAssignment   StudentAssignment `gorm:"association_foreignkey:StudentAssignmentID;foreignkey:StudentAssignmentID"`
+	StudentAssignmentID int               `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         sql.NullInt64     `gorm:"column:MCQOptionID;type:int"`
+	ShortAnswer         string            `gorm:"column:ShortAnswerText;type:text"`
+	Marks               float64           `gorm:"column:Marks;type:float"`
+	SubmissionTime      time.Time         `gorm:"column:SubmissionTime;default:NULL"`
+	Worksheets          []Worksheet       `gorm:"foreignkey:AnswerID"`
+	Source              Source            `gorm:"Association_foreignkey:FileID"`
+	SourceID            sql.NullInt64     `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
@@ -2061,7 +2062,16 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
-	sheetsToUserIDs, err := q.GetGAEntries(file)
+	var sa StudentAssignment
+	Db.LogMode(true)
+	if err = Db.Model(&answer).Related(&sa, "StudentAssignmentID").Error; err != nil {
+		log.WithError(err).Errorf("missing assignment for the answer (ID: %d)", answer.ID)
+		Db.LogMode(false)
+		return
+	}
+	Db.LogMode(false)
+
+	GAEntries, err := q.GetGAEntries(file, sa.UserID)
 	if err != nil {
 		return
 	}
@@ -2084,14 +2094,10 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		var references []Block
 		if !DryRun {
 			var isPlagiarised bool
-			GAEntry, ok := sheetsToUserIDs[orderNum+1]
-			if ok {
-				isPlagiarised = GAEntry.name != sheet.Name || GAEntry.userID == 0 || GAEntry.sheetID == 0 || GAEntry.sequence != orderNum+1
-			} else {
-				isPlagiarised = true
-			}
+			GAEntry, ok := GAEntries[orderNum+1]
+			isPlagiarised = !(ok && GAEntry.isNotPlagiarised)
 			if isPlagiarised {
-				log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
+				log.Infof("detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntry)
 			}
 
 			err = Db.FirstOrCreate(&ws, Worksheet{
@@ -2195,10 +2201,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wb.ImportWorksheets(fileName)
 
 	// Add missing blocks and cells from the model:
-	var sa StudentAssignment
-	if err := Db.Where("StudentAssignmentID = ?", answer.StudentAssignmentID).First(&sa).Error; err != nil {
-		log.WithError(err).Errorf("failed to find the stuedent assignemt for the answer (AnswerID: %d)", answerID)
-	} else if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
+	if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
 		var ma Answer
 		if res := Db.
 			Joins("JOIN StudentAssignments AS msa ON msa.StudentAssignmentID = StudentAnswers.StudentAssignmentID").

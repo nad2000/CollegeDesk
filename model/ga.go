@@ -14,14 +14,15 @@ const gradingAssistanceSheetName = "GA"
 type GARow struct {
 	userID, sheetID, sequence int
 	name                      string
+	isNotPlagiarised          bool
 }
 
 // GetGAEntries - build the GA entry list (map) for the question and answer file
-func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow, err error) {
+func (q *Question) GetGAEntries(file *xlsx.File, userID int) (entries map[int]GARow, err error) {
 
 	GA, ok := file.Sheet[gradingAssistanceSheetName]
 	if ok {
-		sheetsToUserIDs = make(map[int]GARow)
+		entries = make(map[int]GARow)
 		for i := 1; ; i++ {
 			value := GA.Cell(i, 0).Value
 			if value == "" {
@@ -32,30 +33,42 @@ func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow,
 				log.Error(err)
 				continue
 			}
+			name := GA.Cell(i, 1).Value
+			if value == "" {
+				break
+			}
 			value = GA.Cell(i, 2).Value
 			if value == "" {
 				break
 			}
-			userID, err := strconv.Atoi(value)
+			sheetID, err := strconv.Atoi(value)
 			if err != nil {
 				log.Error(err)
 				continue
 			}
-			sheetsToUserIDs[sheetNo] = GARow{userID: userID}
+			sheetID -= userID
+			entries[sheetNo] = GARow{sheetID: sheetID, userID: userID, name: name}
 		}
-		userIDs := make([]int, 0, len(sheetsToUserIDs))
-		for _, v := range sheetsToUserIDs {
+		userIDs := make([]int, 0, len(entries))
+		for _, v := range entries {
 			userIDs = append(userIDs, v.userID)
 		}
 
+		sheetIDs := make([]int, 0, len(entries))
+		for _, v := range entries {
+			sheetIDs = append(sheetIDs, v.sheetID)
+		}
+
 		var rows *sql.Rows
-		rows, err = Db.Raw(`SELECT DISTINCT
+		rows, err = Db.Raw(`
+			SELECT DISTINCT
 				qs.ProblemWorkSheetsID,
 				qs.Sheet_Sequence,
 				qs.Sheet_Name
 			FROM XLQTransformation AS xt 
 			JOIN QuestionFileWorkSheets AS qs ON qs.QuestionFileID = xt.questionfile_id
-			WHERE xt.UserID IN (?) AND xt.QuestionID = ?`, userIDs, q.ID).Rows()
+			WHERE xt.UserID = ? AND xt.QuestionID = ? AND qs.ProblemWorkSheetsID`,
+			userIDs, q.ID, sheetIDs).Rows()
 		if err != nil {
 			return
 		}
@@ -68,15 +81,15 @@ func (q *Question) GetGAEntries(file *xlsx.File) (sheetsToUserIDs map[int]GARow,
 			)
 
 			rows.Scan(&sheetID, &sequence, &name)
-			r, ok := sheetsToUserIDs[sequence]
+			r, ok := entries[sequence]
 			if !ok {
 				log.Errorf("missing entry in the 'Details' spreadsheet for %q", name)
 				continue
 			}
-			r.name = name
-			r.sequence = sequence
-			r.sheetID = sheetID
-			sheetsToUserIDs[sequence] = r
+			if r.name == name && r.sequence == sequence {
+				r.isNotPlagiarised = true
+				entries[sequence] = r
+			}
 		}
 		return
 	}
