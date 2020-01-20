@@ -382,7 +382,7 @@ func (Source) TableName() string {
 
 // QuestionFile - TODO: ...
 type QuestionFile struct {
-	ID         int
+	ID         int    `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
 	SourceID   int    `gorm:"column:FileID;type:int;index"`
 	Source     Source `gorm:"foreignkey:SourceID"`
 	QuestionID int    `gorm:"column:QuestionID;index"`
@@ -396,14 +396,14 @@ func (QuestionFile) TableName() string {
 
 // QuestionFileSheet - TODO: ...
 type QuestionFileSheet struct {
-	ID             int
+	ID             int    `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
 	Sequence       int    `gorm:"column:Sheet_Sequence"`
 	Name           string `gorm:"column:Sheet_Name"`
 	QuestionFileID int    `gorm:"column:QuestionFileID;type:int;index"`
 	QuestionFile   *QuestionFile
 	ProblemSheetID int `gorm:"column:ProblemWorkSheetsID;type:int;index"`
 	ProblemSheet   *ProblemSheet
-	ProblemID      int      `gorm:"index"`
+	ProblemID      int      `gorm:"column:Problem_ID;index"`
 	Problem        *Problem `gorm:"foreignkey:ProblemID"`
 }
 
@@ -2748,7 +2748,7 @@ func (ConditionalFormatting) TableName() string {
 
 // XLQTransformation - XLQ Transformations
 type XLQTransformation struct {
-	ID             int
+	ID             int       `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
 	CellReference  string    `gorm:"type:varchar(10);not null"`
 	TimeStamp      time.Time `gorm:"not null"`
 	UserID         int       `gorm:"column:UserID;not null;index"`

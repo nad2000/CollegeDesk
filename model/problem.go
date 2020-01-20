@@ -19,15 +19,14 @@ const detailSheetName = "Details"
 
 // Proplem - TODO: ...
 type Problem struct {
-	ID             int    // `gorm:"column:FileID;primary_key:true;AUTO_INCREMENT"`
-	NumberOfSheets int    `gorm:"column:Number_of_sheets"`
-	Name           string //`gorm:"column:S3BucketName;size:100"`
-	Category       sql.NullString
-	IsProcessed    bool `gorm:"column:IsProcessed;default:0"`
-	Marks          sql.NullFloat64
-	SourceID       int           `gorm:"column:FileID;index"`
-	Source         *Source       `gorm:"foreignkey:SourceID"`
-	ReferenceID    sql.NullInt64 `gorm:"index;type:int"`
+	ID             int             `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
+	NumberOfSheets int             `gorm:"column:Number_of_sheets"`
+	Name           string          `gorm:"column:Name"` //`gorm:"column:S3BucketName;size:100"`
+	Category       sql.NullString  `gorm:"column:Category"`
+	IsProcessed    bool            `gorm:"column:IsProcessed;default:0"`
+	Marks          sql.NullFloat64 `gorm:"column:Marks"`
+	SourceID       int             `gorm:"column:FileID;index"`
+	Source         *Source         `gorm:"foreignkey:SourceID"`
 }
 
 // TableName overrides default table name for the model
@@ -37,10 +36,10 @@ func (Problem) TableName() string {
 
 // ProblemSheet - TODO: ...
 type ProblemSheet struct {
-	ID             int
+	ID             int `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
 	SequenceNumber int `gorm:"column:Sequence_Number"`
 	Name           string
-	ProblemID      int      `gorm:"index"`
+	ProblemID      int      `gorm:"column:Problem_ID;index"`
 	Problem        *Problem `gorm:"foreignkey:ProblemID"`
 }
 
@@ -51,13 +50,13 @@ func (ProblemSheet) TableName() string {
 
 // ProblemSheetData - TODO: ...
 type ProblemSheetData struct {
-	ID             int
-	Range          string `gorm:"column:CellRange;size:10"`
-	Value          sql.NullString
-	Comment        sql.NullString
-	Formula        sql.NullString
+	ID             int            `gorm:"column:ID;primary_key:true;AUTO_INCREMENT"`
+	Range          string         `gorm:"column:CellRange;size:10"`
+	Value          sql.NullString `gorm:"column:Value"`
+	Comment        sql.NullString `gorm:"column:Comment"`
+	Formula        sql.NullString `gorm:"column:Formula"`
 	IsReference    bool
-	ProblemID      int           `gorm:"index"`
+	ProblemID      int           `gorm:"column:Problem_ID;index"`
 	Problem        *Problem      `gorm:"foreignkey:ProblemID"`
 	ProblemSheetID int           `gorm:"column:ProblemWorkSheet_ID;index"`
 	ProblemSheet   *ProblemSheet `gorm:"foreignkey:ProblemSheetID"`
@@ -294,11 +293,6 @@ func (p *Problem) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb 
 				log.Infof("Following colors were found in the worksheet you could use: %v", sheetFillColors)
 			}
 		}
-	}
-
-	if !DryRun {
-		p.ReferenceID = NewNullInt64(wb.ID)
-		Db.Save(&p)
 	}
 
 	return

@@ -11,7 +11,7 @@ func testHandleProblems(t *testing.T) {
 
 	var files = []string{
 		"Problem File Sample Before Utility is Run.xlsx",
-		// "Problem File Sample After Utility Processed the file.xlsx",
+		"ProblemB4Utility.xlsx",
 	}
 	for _, fn := range files {
 		var f model.Source
