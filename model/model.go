@@ -365,7 +365,7 @@ func (QuestionExcelData) TableName() string {
 
 // Source - student answer file sources
 type Source struct {
-	ID           int        `gorm:"column:FileID;primary_key:true;AUTO_INCREMENT"`
+	ID           int        `gorm:"column:FileId;primary_key:true;AUTO_INCREMENT"`
 	S3BucketName string     `gorm:"column:S3BucketName;size:100"`
 	S3Key        string     `gorm:"column:S3Key;size:100"`
 	FileName     string     `gorm:"column:FileName;size:100"`
@@ -466,7 +466,8 @@ type Assignment struct {
 	// IsHidden           int8      `gorm:"type:tinyint(4)"`
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
-	// CourseID           int      `gorm:"column:CourseID"`
+	CourseID int `gorm:"column:CourseID"`
+	// Course       *Course
 	State        string `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
 	WasProcessed int8   `gorm:"type:tinyint(1)"`
 }
@@ -1725,6 +1726,12 @@ func SetDb() {
 	} else {
 		Db.AutoMigrate(&Question{})
 	}
+	Db.AutoMigrate(&Course{})
+	Db.AutoMigrate(&College{})
+	Db.AutoMigrate(&Block{})
+	Db.AutoMigrate(&AnswerOption{})
+	Db.AutoMigrate(&CourseAssociation{})
+	Db.AutoMigrate(&BucketComment{})
 	Db.AutoMigrate(&Border{})
 	Db.AutoMigrate(&Alignment{})
 	Db.AutoMigrate(&User{})
@@ -1756,6 +1763,11 @@ func SetDb() {
 	Db.AutoMigrate(&ProblemSheetData{})
 	Db.AutoMigrate(&QuestionFile{})
 	Db.AutoMigrate(&QuestionFileSheet{})
+	Db.AutoMigrate(&MasterKeyphrase{})
+	Db.AutoMigrate(&KeyphraseAnswer{})
+	Db.AutoMigrate(&KeyphraseBucket{})
+	Db.AutoMigrate(&FeedbackAndMessage{})
+	Db.AutoMigrate(&Bucket{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1779,7 +1791,7 @@ func SetDb() {
 		Db.Model(&DataSource{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		Db.Model(&Filter{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
-		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
+		// Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
@@ -1790,7 +1802,7 @@ func SetDb() {
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
 		Db.Model(&Rubric{}).AddForeignKey("ExcelBlockID", "ExcelBlocks(ExcelBlockID)", "CASCADE", "CASCADE")
-		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+		// Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&Problem{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
@@ -1801,7 +1813,7 @@ func SetDb() {
 		Db.Model(&QuestionFile{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
 		Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 
-		Db.Model(&QuestionFileSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		// Db.Model(&QuestionFileSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
 		Db.Model(&QuestionFileSheet{}).AddForeignKey("ProblemWorkSheetsID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
 		Db.Model(&QuestionFileSheet{}).AddForeignKey("QuestionFileID", "QuestionFiles(ID)", "CASCADE", "CASCADE")
 	}
@@ -2643,6 +2655,11 @@ type Chart struct {
 	XMinValue, XMaxValue, YMaxValue, YMinValue string
 }
 
+// TableName overrides default table name for the model
+func (Chart) TableName() string {
+	return "chart"
+}
+
 // DataSource - autofilter
 type DataSource struct {
 	ID          int
@@ -2769,7 +2786,8 @@ func (XLQTransformation) TableName() string {
 
 // User - users
 type User struct {
-	ID int `gorm:"column:UserID;primary_key;auto_increment"`
+	ID    int    `gorm:"column:UserID;primary_key;auto_increment"`
+	Email string `gorm:"column:Email"`
 }
 
 // TableName overrides default table name for the model
@@ -3010,4 +3028,105 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		MATCH:
 		}
 	}
+}
+
+// MasterKeyphrase - defined names
+type MasterKeyphrase struct{}
+
+// TableName overrides default table name for the model
+func (MasterKeyphrase) TableName() string {
+	return "MasterKeyphrases"
+}
+
+// KeyphraseAnswer - defined names
+type KeyphraseAnswer struct{}
+
+// TableName overrides default table name for the model
+func (KeyphraseAnswer) TableName() string {
+	return "KeyphraseStudentAnswerMapping"
+}
+
+// KeyphraseBucket - defined names
+type KeyphraseBucket struct{}
+
+// TableName overrides default table name for the model
+func (KeyphraseBucket) TableName() string {
+	return "MasterKeyphrasesBucketMapping"
+}
+
+// FeedbackAndMessage - defined names
+type FeedbackAndMessage struct{}
+
+// TableName overrides default table name for the model
+func (FeedbackAndMessage) TableName() string {
+	return "FeedbackAndMessages"
+}
+
+// Bucket - defined names
+type Bucket struct{}
+
+// TableName overrides default table name for the model
+func (Bucket) TableName() string {
+	return "Buckets"
+}
+
+// BucketComment - defined names
+type BucketComment struct{}
+
+// TableName overrides default table name for the model
+func (BucketComment) TableName() string {
+	return "BucketCommentMapping"
+}
+
+// CourseAssociation - defined names
+type CourseAssociation struct{}
+
+// TableName overrides default table name for the model
+func (CourseAssociation) TableName() string {
+	return "CourseAssociation"
+}
+
+// AnswerOption - defined names
+type AnswerOption struct{}
+
+// TableName overrides default table name for the model
+func (AnswerOption) TableName() string {
+	return "AnswerOptions"
+}
+
+// ExcelBucket - defined names
+type ExcelBucket struct{}
+
+// TableName overrides default table name for the model
+func (ExcelBucket) TableName() string {
+	return "ExcelBuckets"
+}
+
+// Role - defined names
+type Role struct{}
+
+// TableName overrides default table name for the model
+func (Role) TableName() string {
+	return "UserRoles"
+}
+
+// College - defined names
+type College struct {
+	ID int `gorm:"column:CollegeID;primary_key:true;AUTO_INCREMENT"`
+}
+
+// TableName overrides default table name for the model
+func (College) TableName() string {
+	return "Colleges"
+}
+
+// Course - defined names
+type Course struct {
+	ID        int `gorm:"column:CourseID;primary_key:true;AUTO_INCREMENT"`
+	CollegeID int `gorm:"column:CollegeID"`
+}
+
+// TableName overrides default table name for the model
+func (Course) TableName() string {
+	return "Courses"
 }

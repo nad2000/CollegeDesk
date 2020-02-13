@@ -25,7 +25,7 @@ type Problem struct {
 	Category       sql.NullString  `gorm:"column:Category"`
 	IsProcessed    bool            `gorm:"column:IsProcessed;default:0"`
 	Marks          sql.NullFloat64 `gorm:"column:Marks"`
-	SourceID       int             `gorm:"column:FileID;index"`
+	SourceID       int             `gorm:"column:FileId;index"`
 	Source         *Source         `gorm:"foreignkey:SourceID"`
 }
 

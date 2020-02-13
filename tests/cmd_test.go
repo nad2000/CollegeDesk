@@ -284,14 +284,31 @@ func TestFormattingImport(t *testing.T) {
 	}
 }
 
+type Model interface {
+	TableName() string
+}
+
 func deleteData() {
 
 	if db == nil || db.DB() == nil {
 		db, _ = model.OpenDb(url)
 		defer db.Close()
 	}
-	for _, m := range []interface{}{
+	for _, m := range []Model{
+		&model.Role{},
+		&model.ExcelBucket{},
+		&model.AnswerOption{},
+		&model.CourseAssociation{},
+		&model.BucketComment{},
+		&model.Bucket{},
+		&model.FeedbackAndMessage{},
+		&model.KeyphraseAnswer{},
+		&model.KeyphraseBucket{},
+		&model.MasterKeyphrase{},
 		&model.XLQTransformation{},
+		&model.Answer{},
+		&model.Rubric{},
+		&model.QuestionAssignment{},
 		&model.StudentAssignment{},
 		&model.Cell{},
 		&model.Block{},
@@ -301,10 +318,13 @@ func deleteData() {
 		&model.QuestionExcelData{},
 		&model.QuestionAssignment{},
 		&model.Assignment{},
+		&model.Course{},
+		&model.College{},
 		&model.Worksheet{},
 		&model.Workbook{},
 		&model.Question{},
 		&model.Answer{},
+		&model.User{},
 		&model.Source{},
 		&model.Comment{},
 		&model.ConditionalFormatting{},
@@ -312,13 +332,12 @@ func deleteData() {
 		&model.Sorting{},
 		&model.PivotTable{},
 		&model.DataSource{},
-		&model.User{},
 		&model.Alignment{},
 		&model.Border{},
 	} {
 		err := db.Delete(m).Error
 		if err != nil {
-			fmt.Println("ERROR: ", err)
+			fmt.Printf("DELETING %q ERROR: %s\n", m.TableName(), err)
 		}
 	}
 }
@@ -341,11 +360,16 @@ func createTestDB() *gorm.DB {
 
 	deleteData()
 	for _, uid := range []int{-1, 4951, 4952, 4953, 10000} {
-		db.Create(&model.User{ID: uid})
+		db.Create(&model.User{ID: uid, Email: fmt.Sprintf("user%d@test.edu", uid)})
 	}
+	college := model.College{}
+	db.Create(&college)
+	course := model.Course{CollegeID: college.ID}
+	db.Create(&course)
 	assignment := model.Assignment{
-		Title: "Testing...",
-		State: "READY_FOR_GRADING",
+		Title:    "Testing...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	sa := model.StudentAssignment{
@@ -373,7 +397,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     123456789,
+			AuthorUserID:     10000,
 			WasCompared:      true,
 			IsFormatting:     true,
 		}
@@ -394,6 +418,12 @@ func createTestDB() *gorm.DB {
 			StudentAssignmentID: msa.ID,
 			SubmissionTime:      *parseTime("2017-01-01 14:42"),
 		})
+
+		qf := model.QuestionFile{SourceID: f.ID, QuestionID: q.ID}
+		if err := db.Create(&qf).Error; err != nil {
+			fmt.Println(err)
+		}
+
 		if fn == "Sample-poi-file.xlsx" {
 			rwb := model.Workbook{IsReference: true}
 			db.Create(&rwb)
@@ -412,28 +442,38 @@ func createTestDB() *gorm.DB {
 			})
 			t, _ := time.Parse(time.UnixDate, "Thu Dec 20 12:06:10 UTC 2042")
 			db.Create(&model.XLQTransformation{
-				CellReference: "AT9013",
-				UserID:        4951,
-				TimeStamp:     t,
-				QuestionID:    q.ID,
-				SourceID:      f.ID,
+				CellReference:  "AT9013",
+				UserID:         4951,
+				TimeStamp:      t,
+				QuestionID:     q.ID,
+				SourceID:       f.ID,
+				QuestionFileID: qf.ID,
 			})
 		}
+
 		if fn == "partial.xlsx" {
 			t, _ := time.Parse(time.UnixDate, "Thu Dec 22 12:06:10 UTC 2018")
 			db.Create(&model.XLQTransformation{
-				CellReference: "A1",
-				UserID:        4951,
-				TimeStamp:     t,
-				QuestionID:    q.ID,
-				SourceID:      f.ID,
+				CellReference:  "A1",
+				UserID:         4951,
+				TimeStamp:      t,
+				QuestionID:     q.ID,
+				SourceID:       f.ID,
+				QuestionFileID: qf.ID,
 			})
 		}
 	}
 
 	ignore := model.Source{FileName: "ignore.abc"}
 	db.Create(&ignore)
-	db.Create(&model.Answer{SourceID: model.NewNullInt64(ignore.ID), SubmissionTime: *parseTime("2017-01-01 14:42")})
+	var q model.Question
+	db.First(&q)
+	db.Create(&model.Answer{
+		SourceID:            model.NewNullInt64(ignore.ID),
+		SubmissionTime:      *parseTime("2017-01-01 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
+	})
 
 	var fileID int
 	db.DB().QueryRow("SELECT MAX(FileID)+1 AS FileID FROM FileSources").Scan(&fileID)
@@ -457,7 +497,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     123456789,
+			AuthorUserID:     10000,
 			WasCompared:      true,
 			IsFormatting:     true,
 		})

@@ -55,10 +55,11 @@ func HandleProblems(manager s3.FileManager) (err error) {
 	// Db.LogMode(true)
 	err = (Db.
 		Preload("Source").
-		Joins("JOIN FileSources ON FileSources.FileID = Problems.FileID").
 		Where("IsProcessed = ?", 0).
 		Where("FileSources.FileName LIKE ?", "%.xlsx").
+		Joins("JOIN FileSources ON FileSources.FileID = Problems.FileID").
 		Find(&problems)).Error
+	// Db.LogMode(false)
 	if err != nil {
 		log.WithError(err).Fatalf("Failed to retrieve list of question source files to process.")
 	}
