@@ -27,6 +27,8 @@ import (
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
+const testUserID = 10000
+
 var testFileNames = []string{
 	"demo.xlsx",
 	"partial.xlsx",
@@ -249,6 +251,7 @@ func TestFormattingImport(t *testing.T) {
 	q := model.Question{
 		QuestionType:      "ShortAnswer",
 		QuestionSequence:  0,
+		AuthorUserID:      testUserID,
 		QuestionText:      "DUMMY",
 		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
 		MaxScore:          999.99,
@@ -256,14 +259,14 @@ func TestFormattingImport(t *testing.T) {
 		ReferenceID:       model.NewNullInt64(refWB.ID),
 	}
 	db.FirstOrCreate(&q, q)
-	db.Create(&model.User{ID: 10000})
+	db.Create(&model.User{ID: testUserID})
 	assignment := model.Assignment{
 		Title: "Testing...",
 		State: "READY_FOR_GRADING",
 	}
 	db.Create(&assignment)
 	sa := model.StudentAssignment{
-		UserID:       10000,
+		UserID:       testUserID,
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&sa)
@@ -306,10 +309,8 @@ func deleteData() {
 		&model.KeyphraseBucket{},
 		&model.MasterKeyphrase{},
 		&model.XLQTransformation{},
-		&model.Answer{},
 		&model.Rubric{},
 		&model.QuestionAssignment{},
-		&model.StudentAssignment{},
 		&model.Cell{},
 		&model.Block{},
 		&model.Chart{},
@@ -317,13 +318,14 @@ func deleteData() {
 		&model.AnswerComment{},
 		&model.QuestionExcelData{},
 		&model.QuestionAssignment{},
+		&model.Worksheet{},
+		&model.Workbook{},
+		&model.Answer{},
+		&model.Question{},
+		&model.StudentAssignment{},
 		&model.Assignment{},
 		&model.Course{},
 		&model.College{},
-		&model.Worksheet{},
-		&model.Workbook{},
-		&model.Question{},
-		&model.Answer{},
 		&model.User{},
 		&model.Source{},
 		&model.Comment{},
@@ -359,7 +361,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{-1, 4951, 4952, 4953, 10000} {
+	for _, uid := range []int{-1, 0, 4951, 4952, 4953, testUserID} {
 		db.Create(&model.User{ID: uid, Email: fmt.Sprintf("user%d@test.edu", uid)})
 	}
 	college := model.College{}
@@ -378,7 +380,7 @@ func createTestDB() *gorm.DB {
 	}
 	db.Create(&sa)
 	msa := model.StudentAssignment{
-		UserID:       10000,
+		UserID:       testUserID,
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&msa)
@@ -397,7 +399,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     10000,
+			AuthorUserID:     testUserID,
 			WasCompared:      true,
 			IsFormatting:     true,
 		}
@@ -497,7 +499,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     10000,
+			AuthorUserID:     testUserID,
 			WasCompared:      true,
 			IsFormatting:     true,
 		})
@@ -548,7 +550,7 @@ func testImportFile(t *testing.T) {
 		QuestionSequence: 123,
 		QuestionText:     "Test Import Question...",
 		MaxScore:         9999.99,
-		AuthorUserID:     123456789,
+		AuthorUserID:     testUserID,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "question.xlsx"},
 		IsFormatting:     true,
@@ -581,14 +583,17 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes...",
 		MaxScore:         9999.99,
-		AuthorUserID:     123456789,
+		AuthorUserID:     testUserID,
 		WasCompared:      true,
 	}
 	db.Create(&q)
+	var course model.Course
+	db.First(&course)
 	q.ImportFile("question.xlsx", "FFFFFF00", true)
 	assignment = model.Assignment{
-		Title: "Test handle answers without the colorcodes...",
-		State: "READY_FOR_GRADING",
+		Title:    "Test handle answers without the colorcodes...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	db.Create(&model.QuestionAssignment{
@@ -630,15 +635,16 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes #2...",
 		MaxScore:         9999.99,
-		AuthorUserID:     123456789,
+		AuthorUserID:     testUserID,
 		WasCompared:      true,
 		IsFormatting:     true,
 	}
 	db.Create(&q)
 	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
 	assignment = model.Assignment{
-		Title: "Test handle answers without the colorcodes #2...",
-		State: "READY_FOR_GRADING",
+		Title:    "Test handle answers without the colorcodes #2...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	db.Create(&model.QuestionAssignment{
@@ -651,9 +657,10 @@ func testHandleNotcolored(t *testing.T) {
 	}
 	db.Create(&f)
 	a = model.Answer{
-		SourceID:       model.NewNullInt64(f.ID),
-		QuestionID:     model.NewNullInt64(q.ID),
-		SubmissionTime: *parseTime("2018-09-30 12:42"),
+		SourceID:            model.NewNullInt64(f.ID),
+		QuestionID:          model.NewNullInt64(q.ID),
+		SubmissionTime:      *parseTime("2018-09-30 12:42"),
+		StudentAssignmentID: sa.ID,
 	}
 	db.Create(&a)
 	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
@@ -670,16 +677,19 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes #3...",
 		MaxScore:         9999.99,
-		AuthorUserID:     123456789,
+		AuthorUserID:     testUserID,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "Q3 Compounding1.xlsx"},
 		IsFormatting:     true,
 	}
 	db.Create(&q)
 	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
+	var course model.Course
+	db.First(&course)
 	assignment = model.Assignment{
-		Title: "Test handle answers without the colorcodes #3...",
-		State: "READY_FOR_GRADING",
+		Title:    "Test handle answers without the colorcodes #3...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	db.Create(&model.QuestionAssignment{
@@ -793,7 +803,7 @@ WHERE ae.cell_id IS NULL
 		t.Error(err)
 		return
 	}
-	model.AutoCommentAnswerCells(12345, 10000)
+	model.AutoCommentAnswerCells(12345, testUserID)
 }
 
 func TestProcessing(t *testing.T) {
@@ -860,11 +870,17 @@ func testChangeFormula(t *testing.T) {
 
 func testFullCycle(t *testing.T) {
 
+	var course model.Course
+	db.First(&course)
 	assignment := model.Assignment{
-		Title: "Full Cycel Testing...",
-		State: "READY_FOR_GRADING",
+		Title:    "Full Cycel Testing...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
+	var noneUser model.User
+	db.Where("Email = ?", "user-1@test.edu").First(&noneUser)
+
 	for fileNo, r := range []struct {
 		questionFileName, anserFileName, cr, rs string
 		uid                                     int
@@ -873,7 +889,7 @@ func testFullCycle(t *testing.T) {
 		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "RND111", 4951, false},
 		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "RND222", 4952, true},
 		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "RND333", 4953, true},
-		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", -1, true}, // "missing download"
+		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", noneUser.ID, true}, // "missing download"
 	} {
 
 		qs := model.Source{
@@ -890,7 +906,7 @@ func testFullCycle(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: 123456789,
+			AuthorUserID: testUserID,
 			WasCompared:  false,
 			IsFormatting: true,
 		}
@@ -987,7 +1003,7 @@ func testFullCycle(t *testing.T) {
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
 		t.Error(err)
 	}
-	model.AutoCommentAnswerCells(12345, 10000)
+	model.AutoCommentAnswerCells(12345, testUserID)
 
 	var countAfter int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
@@ -1002,9 +1018,12 @@ func testFullCycle(t *testing.T) {
 
 func testDefinedNames(t *testing.T) {
 
+	var course model.Course
+	db.First(&course)
 	assignment := model.Assignment{
-		Title: "Full Cycel Testing...",
-		State: "READY_FOR_GRADING",
+		Title:    "Full Cycel Testing...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	for fileNo, r := range []struct {
@@ -1029,7 +1048,7 @@ func testDefinedNames(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: 123456789,
+			AuthorUserID: testUserID,
 			WasCompared:  false,
 			IsFormatting: true,
 		}
@@ -1140,7 +1159,7 @@ func testDefinedNames(t *testing.T) {
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
 		t.Error(err)
 	}
-	model.AutoCommentAnswerCells(12345, 10000)
+	model.AutoCommentAnswerCells(12345, testUserID)
 
 	var countAfter int
 	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
@@ -1165,7 +1184,7 @@ func testPOI(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: fileName,
 		MaxScore:     1010.88,
-		AuthorUserID: 123456789,
+		AuthorUserID: testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}
@@ -1173,9 +1192,12 @@ func testPOI(t *testing.T) {
 	if err := db.Create(&q).Error; err != nil {
 		t.Error(err)
 	}
+	var course model.Course
+	db.First(&course)
 	assignment := model.Assignment{
-		Title: "Testing...",
-		State: "READY_FOR_GRADING",
+		Title:    "Testing...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	sa := model.StudentAssignment{
@@ -1197,11 +1219,17 @@ func testPOI(t *testing.T) {
 	}
 	db.Create(&a)
 	ts, _ := time.Parse(time.UnixDate, "Thu Dec 27 19:18:05 UTC 2088")
+
 	db.Create(&model.XLQTransformation{
 		CellReference: "KE4423",
 		UserID:        4951,
 		TimeStamp:     ts,
 		QuestionID:    q.ID,
+		SourceID:      f.ID,
+		QuestionFile: &model.QuestionFile{
+			SourceID:   f.ID,
+			QuestionID: q.ID,
+		},
 	})
 	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
 
@@ -1239,16 +1267,34 @@ func testFindBlocksInside(t *testing.T) {
 	7. G11:G11 - G10/G9
 	*/
 	source := model.Source{S3Key: "KEY", FileName: "test.xlsx"}
+	db.Create(&source)
+	college := model.College{}
+	db.Create(&college)
+
+	course := model.Course{CollegeID: college.ID}
+	db.Create(&course)
+
+	assignment := model.Assignment{
+		Title:              "TEST ASSIGNMENT",
+		State:              "READY_FOR_GRADING",
+		AssignmentSequence: 888,
+		CourseID:           course.ID,
+	}
+	db.Create(&assignment)
 	ws := model.Worksheet{
 		Workbook: model.Workbook{
 			FileName: "find_blocks_inside_a_block.xlsx",
 			Answer: model.Answer{
-				Assignment: model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
-				Marks:      98.7654,
-				Source:     source,
+				StudentAssignment: model.StudentAssignment{
+					UserID:       testUserID,
+					AssignmentID: assignment.ID,
+				},
+				Marks:    98.7654,
+				SourceID: model.NewNullInt64(source.ID),
 				Question: model.Question{
-					QuestionType: "FileUpload", Source: source, MaxScore: 98.76453,
+					QuestionType: "FileUpload", SourceID: model.NewNullInt64(source.ID), MaxScore: 98.76453,
 					IsFormatting: true,
+					AuthorUserID: testUserID,
 				},
 			},
 		},
@@ -1295,7 +1341,9 @@ func testFindBlocksInside(t *testing.T) {
 }
 
 func testCWA175(t *testing.T) {
-	assignment := model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888}
+	var course model.Course
+	db.First(&course)
+	assignment := model.Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888, CourseID: course.ID}
 	db.Create(&assignment)
 	wb := model.Workbook{
 		IsReference: true,
@@ -1311,6 +1359,7 @@ func testCWA175(t *testing.T) {
 	q := model.Question{
 		ReferenceID:  model.NewNullInt64(wb.ID),
 		IsFormatting: true,
+		AuthorUserID: testUserID,
 	}
 	db.Create(&q)
 	rb := model.Block{
@@ -1339,9 +1388,12 @@ func testCWA175(t *testing.T) {
 	} {
 		answer := model.Answer{
 			SubmissionTime: *parseTime("2017-01-01 14:42"),
-			Assignment:     assignment,
-			QuestionID:     model.NewNullInt64(q.ID),
-			Marks:          98.7654,
+			StudentAssignment: model.StudentAssignment{
+				AssignmentID: assignment.ID,
+				UserID:       testUserID,
+			},
+			QuestionID: model.NewNullInt64(q.ID),
+			Marks:      98.7654,
 			Source: model.Source{
 				FileName:     r.fn,
 				S3BucketName: "studentanswers",
@@ -1396,7 +1448,7 @@ func testHandleQuestions(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: qt,
 			MaxScore:     8888.88,
-			AuthorUserID: 123456789,
+			AuthorUserID: testUserID,
 			WasCompared:  true,
 			IsFormatting: true,
 		})
@@ -1462,7 +1514,7 @@ func testImportQuestionFile(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: fileName,
 		MaxScore:     1010.88,
-		AuthorUserID: 123456789,
+		AuthorUserID: testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}
@@ -1480,14 +1532,17 @@ func testCorruptedFiles(t *testing.T) {
 		QuestionSequence: 77,
 		QuestionText:     "Test handle answers without the colorcodes...",
 		MaxScore:         7777.77,
-		AuthorUserID:     987654321,
+		AuthorUserID:     testUserID,
 		WasCompared:      true,
 		IsFormatting:     true,
 	}
 	db.Create(&q)
+	var course model.Course
+	db.First(&course)
 	assignment := model.Assignment{
-		Title: "Test handle answers without the colorcodes...",
-		State: "READY_FOR_GRADING",
+		Title:    "Test handle answers without the colorcodes...",
+		State:    "READY_FOR_GRADING",
+		CourseID: course.ID,
 	}
 	db.Create(&assignment)
 	db.Create(&model.QuestionAssignment{
@@ -1994,7 +2049,7 @@ func testCellComments(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: "Question wiht merged cells",
 		MaxScore:     8888.88,
-		AuthorUserID: 123456789,
+		AuthorUserID: testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}

@@ -50,7 +50,7 @@ func testGradingAssistanceData(t *testing.T) {
 		sheetID := r.sheetID - u.ID
 		qs := model.QuestionFileSheet{ID: sheetID, Sequence: r.sequence, Name: r.name, QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
 		db.Create(&qs)
-		xt := model.XLQTransformation{UserID: u.ID, QuestionID: q.ID, SourceID: s.ID}
+		xt := model.XLQTransformation{UserID: u.ID, QuestionID: q.ID, SourceID: s.ID, QuestionFileID: qf.ID}
 		db.Create(&xt)
 
 	}

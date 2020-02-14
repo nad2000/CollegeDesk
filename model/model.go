@@ -431,16 +431,15 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 // Answer - student submitted answers
 type Answer struct {
 	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
-	Assignment          Assignment
-	StudentAssignment   StudentAssignment `gorm:"association_foreignkey:StudentAssignmentID;foreignkey:StudentAssignmentID"`
-	StudentAssignmentID int               `gorm:"column:StudentAssignmentID"`
-	MCQOptionID         sql.NullInt64     `gorm:"column:MCQOptionID;type:int"`
-	ShortAnswer         string            `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64           `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time         `gorm:"column:SubmissionTime;default:NULL"`
-	Worksheets          []Worksheet       `gorm:"foreignkey:AnswerID"`
-	Source              Source            `gorm:"Association_foreignkey:FileID"`
-	SourceID            sql.NullInt64     `gorm:"column:FileID;type:int"`
+	StudentAssignment   StudentAssignment
+	StudentAssignmentID int           `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
+	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
+	Marks               float64       `gorm:"column:Marks;type:float"`
+	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
+	Worksheets          []Worksheet   `gorm:"foreignkey:AnswerID"`
+	Source              Source        `gorm:"Association_foreignkey:FileID"`
+	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
@@ -2772,10 +2771,10 @@ type XLQTransformation struct {
 	User           *User
 	QuestionID     int `gorm:"column:QuestionID;not null;index"`
 	Question       Question
-	SourceID       int       `gorm:"column:FileID;not null;index"`
-	Source         *Source   `gorm:"foreignkey:SourceID"`
-	QuestionFileID int       `gorm:"column:questionfile_id;not null;index"`
-	QuestionFile   *Question `gorm:"foreignkey:questionfile_id"`
+	SourceID       int           `gorm:"column:FileID;not null;index"`
+	Source         *Source       `gorm:"foreignkey:SourceID"`
+	QuestionFileID int           `gorm:"column:questionfile_id;not null;index"`
+	QuestionFile   *QuestionFile `gorm:"foreignkey:questionfile_id"`
 	Randomstring   string
 }
 
@@ -3112,7 +3111,9 @@ func (Role) TableName() string {
 
 // College - defined names
 type College struct {
-	ID int `gorm:"column:CollegeID;primary_key:true;AUTO_INCREMENT"`
+	ID   int    `gorm:"column:CollegeID;primary_key:true;AUTO_INCREMENT"`
+	Name string `gorm:"column:CollegeName"`
+	Code string `gorm:"column:CollegeCode"`
 }
 
 // TableName overrides default table name for the model
@@ -3124,6 +3125,7 @@ func (College) TableName() string {
 type Course struct {
 	ID        int `gorm:"column:CourseID;primary_key:true;AUTO_INCREMENT"`
 	CollegeID int `gorm:"column:CollegeID"`
+	College   College
 }
 
 // TableName overrides default table name for the model

@@ -30,6 +30,17 @@ func TestModel(t *testing.T) {
 	defer Db.Close()
 	t.Log("DIALECT: ", Db.Dialect().GetName(), Db.Dialect().CurrentDatabase())
 	if Db.Dialect().GetName() == "mysql" {
+		Db.Exec("DELETE FROM UserRoles")
+		Db.Exec("DELETE FROM ExcelBuckets")
+		Db.Exec("DELETE FROM AnswerOptions")
+		Db.Exec("DELETE FROM CourseAssociation")
+		Db.Exec("DELETE FROM BucketCommentMapping")
+		Db.Exec("DELETE FROM Buckets")
+		Db.Exec("DELETE FROM FeedbackAndMessages")
+		Db.Exec("DELETE FROM KeyphraseStudentAnswerMapping")
+		Db.Exec("DELETE FROM MasterKeyphrasesBucketMapping")
+		Db.Exec("DELETE FROM XLQTransformation")
+
 		Db.Exec("DELETE FROM QuestionFileWorkSheets")
 		Db.Exec("DELETE FROM ProblemWorkSheetExcelData")
 		Db.Exec("DELETE FROM ProblemWorkSheets")
@@ -40,25 +51,37 @@ func TestModel(t *testing.T) {
 		Db.Exec("DELETE FROM Cells")
 		Db.Exec("TRUNCATE TABLE BlockCommentMapping")
 		Db.Exec("TRUNCATE TABLE StudentAnswerCommentMapping")
-		Db.Exec("TRUNCATE TABLE QuestionAssignmentMapping")
+		Db.Exec("DELETE FROM QuestionAssignmentMapping")
 		Db.Exec("TRUNCATE TABLE QuestionExcelData")
 		Db.Exec("TRUNCATE TABLE Rubrics")
+		Db.Exec("DELETE FROM StudentAnswers")
 		Db.Exec("DELETE FROM Questions")
 		Db.Exec("DELETE FROM ExcelBlocks")
 		Db.Exec("DELETE FROM StudentAssignments")
 		Db.Exec("DELETE FROM CourseAssignments")
+		Db.Exec("DELETE FROM Courses")
+		Db.Exec("DELETE FROM Colleges")
+		Db.Exec("DELETE FROM Users")
 		Db.Exec("DELETE FROM FileSources")
 		Db.Exec("DELETE FROM WorkSheets")
 		Db.Exec("DELETE FROM WorkBooks")
-		Db.Exec("TRUNCATE TABLE Comments")
+		Db.Exec("DELETE FROM BlockCommentMapping")
+		Db.Exec("DELETE FROM Comments")
 	}
 	// Db.LogMode(true)
 	source := Source{S3Key: "KEY", FileName: "test.xlsx"}
 	Db.Create(&source)
+	var course = Course{College: College{}}
+	Db.LogMode(true)
+	Db.Create(&course)
+	Db.LogMode(false)
 	answer := Answer{
-		Assignment: Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888},
-		Marks:      98.7654,
-		Source:     source,
+		StudentAssignment: StudentAssignment{
+			Assignment: Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888, CourseID: course.ID},
+			User:       User{Email: "test123456@test.edu"},
+		},
+		Marks:  98.7654,
+		Source: source,
 		Question: Question{
 			QuestionType: "FileUpload",
 			Source:       source,
