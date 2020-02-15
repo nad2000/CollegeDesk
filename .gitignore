@@ -54,3 +54,4 @@ tags
 .DS_Store
 sendgrid-cli
 sendgrid-cli.exe
+.session.vim

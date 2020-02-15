@@ -71,10 +71,15 @@ func TestModel(t *testing.T) {
 	// Db.LogMode(true)
 	source := Source{S3Key: "KEY", FileName: "test.xlsx"}
 	Db.Create(&source)
-	var course = Course{College: College{}}
-	Db.LogMode(true)
+
+	course := Course{College: &College{}}
 	Db.Create(&course)
-	Db.LogMode(false)
+
+	const testUserID = 10000
+	for _, uid := range []int{-1, 0, 4951, 4952, 4953, testUserID} {
+		Db.Create(&User{ID: uid, Email: fmt.Sprintf("user%d@test.edu", uid)})
+	}
+
 	answer := Answer{
 		StudentAssignment: StudentAssignment{
 			Assignment: Assignment{Title: "TEST ASSIGNMENT", AssignmentSequence: 888, CourseID: course.ID},
@@ -86,9 +91,12 @@ func TestModel(t *testing.T) {
 			QuestionType: "FileUpload",
 			Source:       source,
 			MaxScore:     98.76453,
+			AuthorUserID: testUserID,
 		},
 	}
-	Db.Create(&answer)
+	if err := Db.Create(&answer).Error; err != nil {
+		t.Error(err)
+	}
 	block := Block{
 		Color: "FF00AA0000",
 		Range: "A1:C3",
@@ -102,7 +110,9 @@ func TestModel(t *testing.T) {
 		},
 	}
 
-	Db.Create(&block)
+	if err := Db.Create(&block).Error; err != nil {
+		t.Error(err)
+	}
 	var wb Workbook
 	Db.Preload("Worksheets").First(&wb, "file_name = ?", "test.xlsx")
 	if wb.Worksheets == nil || len(wb.Worksheets) < 1 {

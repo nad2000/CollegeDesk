@@ -3125,7 +3125,7 @@ func (College) TableName() string {
 type Course struct {
 	ID        int `gorm:"column:CourseID;primary_key:true;AUTO_INCREMENT"`
 	CollegeID int `gorm:"column:CollegeID"`
-	College   College
+	College   *College
 }
 
 // TableName overrides default table name for the model
