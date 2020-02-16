@@ -109,8 +109,12 @@ func TestRelativeFormulas(t *testing.T) {
 
 func TestDemoFile(t *testing.T) {
 	deleteData()
+
 	var wb model.Workbook
 	var fileName = "demo.xlsx"
+
+	u := model.User{Email: "test@test.edu"}
+	db.FirstOrCreate(&u, u)
 
 	db, _ := model.OpenDb(url)
 	q := model.Question{
@@ -119,13 +123,13 @@ func TestDemoFile(t *testing.T) {
 		QuestionText:      "DUMMY",
 		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
 		MaxScore:          999.99,
+		AuthorID:          u.ID,
 	}
 	db.FirstOrCreate(&q, q)
-	var u model.User
-	db.FirstOrCreate(&u, u)
 	assignment := model.Assignment{
-		Title: "TestDemoFile...",
-		State: "READY_FOR_GRADING",
+		Title:  "TestDemoFile...",
+		State:  "READY_FOR_GRADING",
+		Course: &model.Course{College: &model.College{}},
 	}
 	db.Create(&assignment)
 	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
@@ -215,6 +219,7 @@ func TestDemoFile(t *testing.T) {
 		MaxScore:          999.99,
 		IsFormatting:      true,
 		ReferenceID:       model.NewNullInt64(refWB.ID),
+		AuthorID:          u.ID,
 	}
 	db.FirstOrCreate(&q, q)
 	a = model.Answer{
@@ -231,6 +236,7 @@ func TestDemoFile(t *testing.T) {
 func TestFormattingImport(t *testing.T) {
 	db, _ = model.OpenDb(url)
 	defer db.Close()
+
 	deleteData()
 	var fileName = "Formatting Test File.xlsx"
 
@@ -247,11 +253,13 @@ func TestFormattingImport(t *testing.T) {
 		RCol:        10,
 		Range:       "B2:K14",
 	}
+	user := model.User{Email: "test@test.edu"}
+	db.Create(&user)
 	db.FirstOrCreate(&refBlock, refBlock)
 	q := model.Question{
 		QuestionType:      "ShortAnswer",
 		QuestionSequence:  0,
-		AuthorUserID:      testUserID,
+		AuthorID:          user.ID,
 		QuestionText:      "DUMMY",
 		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
 		MaxScore:          999.99,
@@ -261,8 +269,9 @@ func TestFormattingImport(t *testing.T) {
 	db.FirstOrCreate(&q, q)
 	db.Create(&model.User{ID: testUserID})
 	assignment := model.Assignment{
-		Title: "Testing...",
-		State: "READY_FOR_GRADING",
+		Title:  "Testing...",
+		State:  "READY_FOR_GRADING",
+		Course: &model.Course{College: &model.College{}},
 	}
 	db.Create(&assignment)
 	sa := model.StudentAssignment{
@@ -295,7 +304,7 @@ func deleteData() {
 
 	if db == nil || db.DB() == nil {
 		db, _ = model.OpenDb(url)
-		defer db.Close()
+		// defer db.Close()
 	}
 	for _, m := range []Model{
 		&model.Role{},
@@ -312,9 +321,9 @@ func deleteData() {
 		&model.Rubric{},
 		&model.QuestionAssignment{},
 		&model.Cell{},
+		&model.BlockCommentMapping{},
 		&model.Block{},
 		&model.Chart{},
-		&model.BlockCommentMapping{},
 		&model.AnswerComment{},
 		&model.QuestionExcelData{},
 		&model.QuestionAssignment{},
@@ -399,7 +408,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     testUserID,
+			AuthorID:         testUserID,
 			WasCompared:      true,
 			IsFormatting:     true,
 		}
@@ -499,7 +508,7 @@ func createTestDB() *gorm.DB {
 			QuestionSequence: 123,
 			QuestionText:     "QuestionText...",
 			MaxScore:         9999.99,
-			AuthorUserID:     testUserID,
+			AuthorID:         testUserID,
 			WasCompared:      true,
 			IsFormatting:     true,
 		})
@@ -550,7 +559,7 @@ func testImportFile(t *testing.T) {
 		QuestionSequence: 123,
 		QuestionText:     "Test Import Question...",
 		MaxScore:         9999.99,
-		AuthorUserID:     testUserID,
+		AuthorID:         testUserID,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "question.xlsx"},
 		IsFormatting:     true,
@@ -583,7 +592,7 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes...",
 		MaxScore:         9999.99,
-		AuthorUserID:     testUserID,
+		AuthorID:         testUserID,
 		WasCompared:      true,
 	}
 	db.Create(&q)
@@ -635,7 +644,7 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes #2...",
 		MaxScore:         9999.99,
-		AuthorUserID:     testUserID,
+		AuthorID:         testUserID,
 		WasCompared:      true,
 		IsFormatting:     true,
 	}
@@ -677,7 +686,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		QuestionSequence: 99,
 		QuestionText:     "Test handle answers without the colorcodes #3...",
 		MaxScore:         9999.99,
-		AuthorUserID:     testUserID,
+		AuthorID:         testUserID,
 		WasCompared:      true,
 		Source:           model.Source{FileName: "Q3 Compounding1.xlsx"},
 		IsFormatting:     true,
@@ -906,7 +915,7 @@ func testFullCycle(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: testUserID,
+			AuthorID:     testUserID,
 			WasCompared:  false,
 			IsFormatting: true,
 		}
@@ -1048,7 +1057,7 @@ func testDefinedNames(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: testUserID,
+			AuthorID:     testUserID,
 			WasCompared:  false,
 			IsFormatting: true,
 		}
@@ -1184,7 +1193,7 @@ func testPOI(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: fileName,
 		MaxScore:     1010.88,
-		AuthorUserID: testUserID,
+		AuthorID:     testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}
@@ -1294,7 +1303,7 @@ func testFindBlocksInside(t *testing.T) {
 				Question: model.Question{
 					QuestionType: "FileUpload", SourceID: model.NewNullInt64(source.ID), MaxScore: 98.76453,
 					IsFormatting: true,
-					AuthorUserID: testUserID,
+					AuthorID:     testUserID,
 				},
 			},
 		},
@@ -1359,7 +1368,7 @@ func testCWA175(t *testing.T) {
 	q := model.Question{
 		ReferenceID:  model.NewNullInt64(wb.ID),
 		IsFormatting: true,
-		AuthorUserID: testUserID,
+		AuthorID:     testUserID,
 	}
 	db.Create(&q)
 	rb := model.Block{
@@ -1448,7 +1457,7 @@ func testHandleQuestions(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: qt,
 			MaxScore:     8888.88,
-			AuthorUserID: testUserID,
+			AuthorID:     testUserID,
 			WasCompared:  true,
 			IsFormatting: true,
 		})
@@ -1514,7 +1523,7 @@ func testImportQuestionFile(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: fileName,
 		MaxScore:     1010.88,
-		AuthorUserID: testUserID,
+		AuthorID:     testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}
@@ -1532,7 +1541,7 @@ func testCorruptedFiles(t *testing.T) {
 		QuestionSequence: 77,
 		QuestionText:     "Test handle answers without the colorcodes...",
 		MaxScore:         7777.77,
-		AuthorUserID:     testUserID,
+		AuthorID:         testUserID,
 		WasCompared:      true,
 		IsFormatting:     true,
 	}
@@ -2049,7 +2058,7 @@ func testCellComments(t *testing.T) {
 		QuestionType: model.QuestionType("FileUpload"),
 		QuestionText: "Question wiht merged cells",
 		MaxScore:     8888.88,
-		AuthorUserID: testUserID,
+		AuthorID:     testUserID,
 		WasCompared:  true,
 		IsFormatting: true,
 	}

@@ -154,7 +154,8 @@ type Question struct {
 	QuestionText       string         `gorm:"column:QuestionText;type:text;not null"`
 	AnswerExplanation  sql.NullString `gorm:"column:AnswerExplanation;type:text"`
 	MaxScore           float32        `gorm:"column:MaxScore;type:float;not null"`
-	AuthorUserID       int            `gorm:"column:AuthorUserID;not null"`
+	AuthorID           int            `gorm:"column:AuthorUserID"`
+	Author             User           // `gorm:"foreignkey:AuthorID"`
 	WasCompared        bool
 	IsProcessed        bool `gorm:"column:IsProcessed;default:0"`
 	Source             Source
@@ -465,8 +466,8 @@ type Assignment struct {
 	// IsHidden           int8      `gorm:"type:tinyint(4)"`
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
-	CourseID int `gorm:"column:CourseID"`
-	// Course       *Course
+	CourseID     int `gorm:"column:CourseID"`
+	Course       *Course
 	State        string `gorm:"column:State"` // `gorm:"column:State;type:enum('UNDER_CREATION','CREATED','READY_FOR_GRADING','GRADED')"`
 	WasProcessed int8   `gorm:"type:tinyint(1)"`
 }
@@ -1598,7 +1599,8 @@ type MySQLQuestion struct {
 	AnswerExplanation  sql.NullString      `gorm:"column:AnswerExplanation;type:text"`
 	MaxScore           float32             `gorm:"column:MaxScore;type:float;not null"`
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
-	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
+	AuthorID           int                 `gorm:"column:AuthorUserID;not null"`
+	Author             User                `gorm:"foreignkey:AuthorID"`
 	WasCompared        bool                `gorm:"default:0"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;default:0"`
 	Source             Source              `gorm:"foreignkey:FileID"`

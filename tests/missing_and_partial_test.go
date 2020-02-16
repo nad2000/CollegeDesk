@@ -37,7 +37,7 @@ func TestMissingOrPartialMultipleTypes(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.base + r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: 123456789,
+			AuthorID: 123456789,
 			WasCompared:  false,
 			IsFormatting: true,
 		}
@@ -172,7 +172,7 @@ func TestMissingOrPartialFilter(t *testing.T) {
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.base + r.questionFileName,
 			MaxScore:     1010.88,
-			AuthorUserID: 123456789,
+			AuthorID: 123456789,
 			WasCompared:  false,
 			IsFormatting: true,
 		}

@@ -82,11 +82,15 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			if !model.DryRun {
 				Db.FirstOrCreate(&q, &q)
 			}
+			var sa model.StudentAssignment
+			Db.First(&sa)
+
 			// Create Student answer entry
 			a := model.Answer{
-				ShortAnswer:    excelFileName,
-				SubmissionTime: *parseTime("2017-01-01 14:42"),
-				QuestionID:     model.NewNullInt64(q.ID),
+				ShortAnswer:         excelFileName,
+				SubmissionTime:      *parseTime("2017-01-01 14:42"),
+				QuestionID:          model.NewNullInt64(q.ID),
+				StudentAssignmentID: sa.ID,
 			}
 			if !model.DryRun {
 				Db.FirstOrCreate(&a, &a)

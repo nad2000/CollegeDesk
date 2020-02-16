@@ -91,7 +91,7 @@ func TestModel(t *testing.T) {
 			QuestionType: "FileUpload",
 			Source:       source,
 			MaxScore:     98.76453,
-			AuthorUserID: testUserID,
+			AuthorID:     testUserID,
 		},
 	}
 	if err := Db.Create(&answer).Error; err != nil {
