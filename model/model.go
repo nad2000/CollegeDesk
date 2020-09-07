@@ -2290,8 +2290,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	// Insert block -> comment mapping:
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
-		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (` +
-		commentsToMapSQL + ") AS c"
+		SELECT StudentAnswerID, ExcelCommentID FROM (
+		  SELECT DISTINCT StudentAnswerID, ExcelCommentID, ExcelBlockID FROM (` +
+		commentsToMapSQL + ") AS uc) AS c"
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
