@@ -73,7 +73,7 @@ func (p Problem) String() string {
 }
 
 // ImportFile imports form Excel file QuestionExcleData
-func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.FileManager) error {
+func (p *Problem) ImportFile(fileName, color string, verbose, skipHidden bool, manager s3.FileManager) error {
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 		output.SetCellValue(detailSheetName, "B"+row, ps.ID)
 	}
 	output.SetCellValue(detailSheetName, "B1", p.ID)
-	p.ImportBlocks(file, color, verbose)
+	p.ImportBlocks(file, color, verbose, skipHidden)
 
 	// Choose the output file name
 	outputName := path.Join(os.TempDir(), filepath.Base(fileName))
@@ -190,7 +190,7 @@ func (p *Problem) ImportFile(fileName, color string, verbose bool, manager s3.Fi
 }
 
 // ImportBlocks extracts blocks from the given question file and stores in the DB for referencing
-func (p *Problem) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb Workbook) {
+func (p *Problem) ImportBlocks(file *xlsx.File, color string, verbose, skipHidden bool) (wb Workbook) {
 
 	// var source Source
 	// Db.Model(&p).Related(&source, "Source")
@@ -214,7 +214,7 @@ func (p *Problem) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb 
 
 	for orderNum, sheet := range file.Sheets {
 
-		if sheet.Hidden {
+		if skipHidden && sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
 			continue
 		}

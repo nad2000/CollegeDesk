@@ -177,7 +177,7 @@ func (q Question) String() string {
 }
 
 // ImportFile imports form Excel file QuestionExcleData
-func (q *Question) ImportFile(fileName, color string, verbose bool) error {
+func (q *Question) ImportFile(fileName, color string, verbose, skipHidden bool) error {
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		return err
@@ -227,13 +227,13 @@ func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 		}
 
 	}
-	q.ImportBlocks(file, color, verbose)
+	q.ImportBlocks(file, color, verbose, skipHidden)
 
 	return nil
 }
 
 // ImportBlocks extracts blocks from the given question file and stores in the DB for referencing
-func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb Workbook) {
+func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose, skipHidden bool) (wb Workbook) {
 
 	var source Source
 	Db.Model(&q).Related(&source, "Source")
@@ -256,7 +256,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 
 	for orderNum, sheet := range file.Sheets {
 
-		if sheet.Hidden {
+		if skipHidden && sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
 			continue
 		}
@@ -465,7 +465,7 @@ type Assignment struct {
 	// StartDateAndTime   time.Time `gorm:"column:StartDateAndTime"`
 	// DueDateAndTime     time.Time `gorm:"column:DueDateAndTime"`
 	// UpdateTime         time.Time `gorm:"column:UpdateTime"`
-	// IsHidden           int8      `gorm:"type:tinyint(4)"`
+	// IsHidden           bool
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
 	// CourseID           int      `gorm:"column:CourseID"`
@@ -1990,7 +1990,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook, err error) {
+func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bool, answerIDs ...int) (wb Workbook, err error) {
 	var (
 		answerID int
 		answer   Answer
@@ -2079,7 +2079,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
-		if sheet.Hidden || sheet.Name == gradingAssistanceSheetName {
+		if (skipHidden && sheet.Hidden) || sheet.Name == gradingAssistanceSheetName {
 			log.Infof("Skipping hidden worksheet %q or GA sheet", sheet.Name)
 			continue
 		}
@@ -2324,7 +2324,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					numFmts := ss.NumFmts.NumFmt
 					for orderNum, sheet := range allSheets {
 
-						if sheet.Hidden {
+						if skipHidden && sheet.Hidden {
 							log.Infof("Skipping hidden worksheet %q", sheet.Name)
 							continue
 						}

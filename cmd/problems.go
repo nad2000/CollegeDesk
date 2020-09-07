@@ -77,7 +77,7 @@ func HandleProblems(manager s3.FileManager) (err error) {
 		}
 		log.Infof("Processing %q", fileName)
 
-		if err := p.ImportFile(fileName, color, verbose, manager); err != nil {
+		if err := p.ImportFile(fileName, color, verbose, skipHidden, manager); err != nil {
 			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, p)
 			continue
 		}

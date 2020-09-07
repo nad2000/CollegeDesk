@@ -139,7 +139,7 @@ func TestDemoFile(t *testing.T) {
 	db.FirstOrCreate(&a, &a)
 
 	t.Log("+++ Start extration")
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 
 	result := db.First(&wb, "file_name = ?", fileName)
 	if result.Error != nil {
@@ -223,7 +223,7 @@ func TestDemoFile(t *testing.T) {
 	}
 	db.FirstOrCreate(&a, a)
 
-	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "", true, true, true, a.ID)
 }
 
 func TestFormattingImport(t *testing.T) {
@@ -276,7 +276,7 @@ func TestFormattingImport(t *testing.T) {
 	}
 	db.FirstOrCreate(&a, a)
 
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 	var count int
 	db.Model(&model.Rubric{}).Count(&count)
 	if expected := 116; count != expected {
@@ -514,7 +514,7 @@ func testImportFile(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	q.ImportFile("question.xlsx", "FFFFFF00", true, true)
 
 	var (
 		count int
@@ -545,7 +545,7 @@ func testHandleNotcolored(t *testing.T) {
 		WasCompared:      true,
 	}
 	db.Create(&q)
-	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	q.ImportFile("question.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes...",
 		State: "READY_FOR_GRADING",
@@ -576,7 +576,7 @@ func testHandleNotcolored(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, true, a.ID)
 	}
 
 	// var count int
@@ -595,7 +595,7 @@ func testHandleNotcolored(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
+	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes #2...",
 		State: "READY_FOR_GRADING",
@@ -616,7 +616,7 @@ func testHandleNotcolored(t *testing.T) {
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
 	db.Create(&a)
-	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, true, a.ID)
 }
 
 func testHandleNotcoloredQ3(t *testing.T) {
@@ -636,7 +636,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
+	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes #3...",
 		State: "READY_FOR_GRADING",
@@ -667,7 +667,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, a.ID)
+		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, true, a.ID)
 		if err != nil {
 			t.Error(err)
 		}
@@ -878,7 +878,7 @@ func testFullCycle(t *testing.T) {
 			t.Error(err)
 		}
 
-		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+		q.ImportFile(r.questionFileName, "FFFFFF00", true, true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
@@ -923,7 +923,7 @@ func testFullCycle(t *testing.T) {
 				}
 			}
 		}
-		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, true, a.ID)
 		// Test if is marked plagiarised:
 		{
 			var ws model.Worksheet
@@ -1027,7 +1027,7 @@ func testDefinedNames(t *testing.T) {
 			}
 		}
 
-		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+		q.ImportFile(r.questionFileName, "FFFFFF00", true, true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
@@ -1067,7 +1067,7 @@ func testDefinedNames(t *testing.T) {
 				}
 			}
 		}
-		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, true, a.ID)
 		// Test if is marked plagiarised and DN counts:
 		{
 			var ws model.Worksheet
@@ -1143,7 +1143,7 @@ func testPOI(t *testing.T) {
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&sa)
-	q.ImportFile(fileName, "FFFFFF00", true)
+	q.ImportFile(fileName, "FFFFFF00", true, true)
 
 	// Answer
 	fileName = "POI Q1_4951_null.xlsx"
@@ -1163,7 +1163,7 @@ func testPOI(t *testing.T) {
 		TimeStamp:     ts,
 		QuestionID:    q.ID,
 	})
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", fileName).First(&ws)
@@ -1310,7 +1310,7 @@ func testCWA175(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&answer)
-		model.ExtractBlocksFromFile(r.fn, "", true, true, answer.ID)
+		model.ExtractBlocksFromFile(r.fn, "", true, true, true, answer.ID)
 
 		var wb model.Workbook
 
@@ -1430,7 +1430,7 @@ func testImportQuestionFile(t *testing.T) {
 	if result.Error != nil {
 		t.Error(result.Error)
 	}
-	q.ImportFile(fileName, "FFFFFF00", true)
+	q.ImportFile(fileName, "FFFFFF00", true, true)
 }
 
 func testCorruptedFiles(t *testing.T) {

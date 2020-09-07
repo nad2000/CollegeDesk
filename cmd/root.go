@@ -43,6 +43,7 @@ var (
 	cfgFile                string
 	color                  = defaultColor
 	debug                  bool
+	skipHidden             bool
 	debugLevel             int
 	dest                   string
 	force                  bool
@@ -80,6 +81,7 @@ func getConfig() {
 	color = viper.GetString("color")
 	force = viper.GetBool("force")
 	dest = viper.GetString("dest")
+	skipHidden = viper.GetBool("skip-hidden")
 	isPlagiarisedCommentID = viper.GetInt("is-plagiarised-comment-id")
 	modelAnswerUserID = viper.GetInt("model-answer-user-id")
 	if !strings.HasPrefix(dest, "/") {
@@ -102,6 +104,7 @@ func init() {
 	flags := RootCmd.PersistentFlags()
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
 	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
+	flags.BoolVarP(&skipHidden, "skip-hidden", "", false, "Skip hidden worksheets.")
 	flags.CountVarP(&debugLevel, "debug", "d", "Show full stack trace on error.")
 	flags.CountVarP(&verboseLevel, "verbose", "v", "Verbose mode. Produce more output about what the program does.")
 	flags.BoolVarP(&model.DryRun, "dry", "D", false, "Dry run, run commands without performing and DB update or file changes.")
@@ -124,6 +127,7 @@ func init() {
 	viper.SetDefault("dest", os.TempDir())
 	viper.SetDefault("is-plagiarised-comment-id", 12345)
 	viper.SetDefault("model-answer-user-id", 10000)
+	viper.SetDefault("skip-hidden", false)
 }
 
 // initConfig reads in config file and ENV variables if set.

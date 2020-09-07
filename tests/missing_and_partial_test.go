@@ -44,7 +44,7 @@ func TestMissingOrPartialMultipleTypes(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
-		q.ImportFile(r.base+r.questionFileName, "FFFFFF00", true)
+		q.ImportFile(r.base+r.questionFileName, "FFFFFF00", true, true)
 
 		// Model answer:
 		msa := model.StudentAssignment{
@@ -61,7 +61,7 @@ func TestMissingOrPartialMultipleTypes(t *testing.T) {
 			StudentAssignmentID: msa.ID,
 		}
 		db.Create(&ma)
-		model.ExtractBlocksFromFile(r.base+r.modelAnswerFileName, "FFFFFF00", true, true, ma.ID)
+		model.ExtractBlocksFromFile(r.base+r.modelAnswerFileName, "FFFFFF00", true, true, true, ma.ID)
 
 		// Answer
 		af := model.Source{FileName: r.base + r.anserFileName, S3BucketName: "studentanswers"}
@@ -99,7 +99,7 @@ func TestMissingOrPartialMultipleTypes(t *testing.T) {
 		// 		}
 		// 	}
 		// }
-		model.ExtractBlocksFromFile(r.base+r.anserFileName, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(r.base+r.anserFileName, "FFFFFF00", true, true, true, a.ID)
 		// Test if is marked plagiarised:
 		// {
 		// 	var ws model.Worksheet
@@ -179,7 +179,7 @@ func TestMissingOrPartialFilter(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
-		q.ImportFile(r.base+r.questionFileName, "FFFFFF00", true)
+		q.ImportFile(r.base+r.questionFileName, "FFFFFF00", true, true)
 
 		// Model answer:
 		msa := model.StudentAssignment{
@@ -196,7 +196,7 @@ func TestMissingOrPartialFilter(t *testing.T) {
 			StudentAssignmentID: msa.ID,
 		}
 		db.Create(&ma)
-		model.ExtractBlocksFromFile(r.base+r.modelAnswerFileName, "FFFFFF00", true, true, ma.ID)
+		model.ExtractBlocksFromFile(r.base+r.modelAnswerFileName, "FFFFFF00", true, true, true, ma.ID)
 
 		// Answer
 		for _, ar := range r.answers {
@@ -216,7 +216,7 @@ func TestMissingOrPartialFilter(t *testing.T) {
 				StudentAssignmentID: sa.ID,
 			}
 			db.Create(&a)
-			model.ExtractBlocksFromFile(r.base+ar.fileName, "FFFFFF00", true, true, a.ID)
+			model.ExtractBlocksFromFile(r.base+ar.fileName, "FFFFFF00", true, true, true, a.ID)
 		}
 	}
 }
