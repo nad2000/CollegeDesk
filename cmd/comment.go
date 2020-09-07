@@ -198,7 +198,7 @@ func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[
 // addCommentsToColumn
 func addCommentsToColumn(file *excelize.File, sheetName string, column []commentEntry, boxCol int) {
 
-	if column == nil {
+	if column == nil || len(column) < 1 {
 		return
 	}
 	if boxCol < 0 {
