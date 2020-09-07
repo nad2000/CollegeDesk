@@ -2323,8 +2323,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 	// Insert block -> comment mapping:
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
-		SELECT StudentAnswerID, ExcelCommentID FROM (
-		  SELECT DISTINCT StudentAnswerID, ExcelCommentID, ExcelBlockID FROM (
+		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (
 			SELECT
 				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
 			-- Newly added/processed answers
@@ -2350,7 +2349,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 			WHERE nwb.StudentAnswerID = ?
 			AND sacm.CommentID IS NULL
 			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
-		) AS uc) AS c`
+		) AS c`
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
