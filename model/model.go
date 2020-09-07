@@ -2251,38 +2251,65 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 	}
 
 	// Comments that should be linked with the file:
-	const commentsToMapSQL = `
-	SELECT
-		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
-	-- Newly added/processed answers
-	FROM StudentAnswers AS nsa
-	JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
-	JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
-	JOIN ExcelBlocks AS nb
-	ON nb.worksheet_id = nws.id
-	-- Existing asnwers with mapped comments
-	JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
-		AND sa.was_xl_processed != 0
-		AND sa.StudentAnswerID != nsa.StudentAnswerID
-	JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
-	JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
-	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-		AND b.BlockCellRange = nb.BlockCellRange
-		AND b.BlockFormula = nb.BlockFormula
-	JOIN BlockCommentMapping AS bc
-	ON bc.ExcelBlockID = b.ExcelBlockID
-	-- Make sure the newly added block isn't mapped already
-	LEFT OUTER JOIN BlockCommentMapping AS nbc
-	ON nbc.ExcelBlockID = nb.ExcelBlockID
-	WHERE nwb.StudentAnswerID = ?
-	AND nbc.ExcelCommentID IS NULL
-	GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
+	/*
+		const commentsToMapSQL = `
+		SELECT
+			nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+		-- Newly added/processed answers
+		FROM StudentAnswers AS nsa
+		JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+		JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+		JOIN ExcelBlocks AS nb
+		ON nb.worksheet_id = nws.id
+		-- Existing asnwers with mapped comments
+		JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+			AND sa.was_xl_processed != 0
+			AND sa.StudentAnswerID != nsa.StudentAnswerID
+		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+		JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+			AND b.BlockCellRange = nb.BlockCellRange
+			AND b.BlockFormula = nb.BlockFormula
+		JOIN BlockCommentMapping AS bc
+		ON bc.ExcelBlockID = b.ExcelBlockID
+		-- Make sure the newly added block isn't mapped already
+		LEFT OUTER JOIN BlockCommentMapping AS nbc
+		ON nbc.ExcelBlockID = nb.ExcelBlockID
+		WHERE nwb.StudentAnswerID = ?
+		AND nbc.ExcelCommentID IS NULL
+		GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
+	*/
 
 	// Insert block -> comment mapping:
 	sql := `
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
-		SELECT ExcelBlockID, ExcelCommentID FROM (` +
-		commentsToMapSQL + ") AS c"
+		SELECT ExcelBlockID, ExcelCommentID FROM (
+			SELECT
+				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+			-- Newly added/processed answers
+			FROM StudentAnswers AS nsa
+			JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+			JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+			JOIN ExcelBlocks AS nb
+			ON nb.worksheet_id = nws.id
+			-- Existing asnwers with mapped comments
+			JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+				AND sa.was_xl_processed != 0
+				AND sa.StudentAnswerID != nsa.StudentAnswerID
+			JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+			JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				AND b.BlockCellRange = nb.BlockCellRange
+				AND b.BlockFormula = nb.BlockFormula
+			JOIN BlockCommentMapping AS bc
+			ON bc.ExcelBlockID = b.ExcelBlockID
+			-- Make sure the newly added block isn't mapped already
+			LEFT OUTER JOIN BlockCommentMapping AS nbc
+			ON nbc.ExcelBlockID = nb.ExcelBlockID
+			WHERE nwb.StudentAnswerID = ?
+			AND nbc.ExcelCommentID IS NULL
+			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
+	) AS c`
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
@@ -2293,8 +2320,33 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
 		SELECT StudentAnswerID, ExcelCommentID FROM (
-		  SELECT DISTINCT StudentAnswerID, ExcelCommentID, ExcelBlockID FROM (` +
-		commentsToMapSQL + ") AS uc) AS c"
+		  SELECT DISTINCT StudentAnswerID, ExcelCommentID, ExcelBlockID FROM (
+			SELECT
+				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+			-- Newly added/processed answers
+			FROM StudentAnswers AS nsa
+			JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+			JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+			JOIN ExcelBlocks AS nb
+			ON nb.worksheet_id = nws.id
+			-- Existing asnwers with mapped comments
+			JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+				AND sa.was_xl_processed != 0
+				AND sa.StudentAnswerID != nsa.StudentAnswerID
+			JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+			JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				AND b.BlockCellRange = nb.BlockCellRange
+				AND b.BlockFormula = nb.BlockFormula
+			JOIN BlockCommentMapping AS bc
+			ON bc.ExcelBlockID = b.ExcelBlockID
+			-- Make sure the newly added block isn't mapped already
+			LEFT OUTER JOIN StudentAnswerCommentMapping AS sacm
+			ON sacm.CommentID = nb.ExcelBlockID
+			WHERE nwb.StudentAnswerID = ?
+			AND sacm.CommentID IS NULL
+			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
+		) AS uc) AS c`
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
