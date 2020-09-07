@@ -782,6 +782,120 @@ func TestProcessing(t *testing.T) {
 	t.Run("DefinedNames", testDefinedNames)
 	t.Run("HandleProblems", testHandleProblems)
 	t.Run("GradingAssistanceData", testGradingAssistanceData)
+	t.Run("CWA380", testCWA380)
+}
+
+func testCWA380(t *testing.T) {
+
+	assignment := model.Assignment{
+		Title: "CWA-380 Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	var questionFileName = "tests/data/CWA-380/MiniCase2.xlsx"
+
+	qs := model.Source{
+		FileName:     questionFileName,
+		S3BucketName: "studentanswers",
+		S3Key:        questionFileName,
+	}
+	db.Create(&qs)
+	q := model.Question{
+		SourceID:     model.NewNullInt64(qs.ID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: questionFileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  false,
+		IsFormatting: true,
+	}
+	if err := db.Create(&q).Error; err != nil {
+		t.Error(err)
+	}
+
+	qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+	if err := db.Create(&qf).Error; err != nil {
+		t.Error(err)
+	}
+
+	p := model.Problem{SourceID: qs.ID}
+	if err := db.Create(&p).Error; err != nil {
+		t.Error(err)
+	}
+
+	for sequence := 1; sequence <= 5; sequence++ {
+		sheetName := "Sheet" + strconv.Itoa(sequence)
+		ps := model.ProblemSheet{
+			ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
+		if err := db.Create(&ps).Error; err != nil {
+			t.Error(err)
+		}
+		qss := model.QuestionFileSheet{
+			Sequence:       sequence,
+			Name:           sheetName,
+			QuestionFileID: qf.ID,
+			ProblemSheetID: ps.ID,
+			ProblemID:      p.ID}
+		if err := db.Create(&qss).Error; err != nil {
+			t.Error(err)
+
+		}
+	}
+
+	q.ImportFile(questionFileName, "FFFFFF00", true, true)
+	sa := model.StudentAssignment{
+		UserID:       4951,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
+
+	for _, answerFileName := range []string{"data/CWA-380/MC2_12329_stud1.xlsx", "data/CWA-380/MC3_12368_MiniCase3_12368.xlsx"} {
+
+		// answer
+		af := model.Source{FileName: answerFileName, S3BucketName: "studentanswers"}
+		db.Create(&af)
+		a := model.Answer{
+			SourceID:            model.NewNullInt64(af.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2020-08-30 12:42"),
+			StudentAssignmentID: sa.ID,
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(answerFileName, "FFFFFF00", true, true, true, a.ID)
+		// Test if is marked plagiarised and DN counts:
+		{
+			var ws model.Worksheet
+			db.Where("workbook_file_name = ?", answerFileName).First(&ws)
+			var count int
+			db.Model(&model.DefinedName{}).Where("worksheet_id = ?", ws.ID).Count(&count)
+
+		}
+	}
+
+	// Auto-commenting
+	if err := db.Exec(`
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%3 = 1, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL AND c.id % 3 != 2
+	`).Error; err != nil {
+		t.Error(err)
+	}
+	var countBefore int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
+		t.Error(err)
+	}
+	model.AutoCommentAnswerCells(12345, 10000)
+
+	var countAfter int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
+		t.Error(err)
+	}
+	if countAfter != countBefore {
+		t.Errorf(
+			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
+			countBefore, countAfter)
+	}
 }
 
 func testChangeFormula(t *testing.T) {
