@@ -2109,9 +2109,9 @@ func testCellComments(t *testing.T) {
 	}
 	db.Create(&block)
 	comments := []model.Comment{
-		{Text: "cell comment 40 1742"},
-		{Text: "cell comment 40 1743"},
-		{Text: "block comment 1101"},
+		{Text: "cell comment 40 1742", Marks: 1.2},
+		{Text: "cell comment 40 1743", Marks: 4.3},
+		{Text: "block comment 1101", Marks: 5.5},
 	}
 	for i := range comments {
 		db.Create(&comments[i])
@@ -2138,7 +2138,7 @@ func testCellComments(t *testing.T) {
 	comments = []model.Comment{
 		{Text: "CELL COMMENT #1"},
 		{Text: "CELL COMMENT #2"},
-		{Text: "BLOCK COMMENT"},
+		{Text: "BLOCK COMMENT", Marks: 5},
 	}
 	for i := range comments {
 		db.Create(&comments[i])

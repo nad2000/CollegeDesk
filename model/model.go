@@ -1129,6 +1129,7 @@ func (ws *Worksheet) AddAuxBlock(b *Block, cellType string) {
 type BlockCommentRow struct {
 	Range                  string
 	CommentText            string
+	Marks                  float64
 	TRow, LCol, BRow, RCol int
 }
 
@@ -1143,6 +1144,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	rows, err := Db.Raw(`SELECT
 	  b.BlockCellRange,
 	  c.CommentText,
+	  c.Marks,
 	  b.t_row, b.l_col, b.b_row, b.r_col
     FROM ExcelBlocks AS b
       LEFT JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
@@ -1158,7 +1160,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	col := -1
 	for rows.Next() {
 		r := BlockCommentRow{}
-		rows.Scan(&r.Range, &r.CommentText, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
 		if r.LCol != col {
 			col = r.LCol
 			res[col] = make([]BlockCommentRow, 1)
@@ -1175,12 +1177,14 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 type CellCommentRow struct {
 	Range       string
 	CommentText string
+	Marks       float64
 	Row, Col    int
 }
 
 // GetCellComments retrieves all block comments in a form of a map
 func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
-	rows, err := Db.Raw(`SELECT cell.cell_range, c.CommentText, cell.row, cell.col
+	rows, err := Db.Raw(
+		`SELECT cell.cell_range, c.CommentText, c.Marks, cell.row, cell.col
     FROM Cells AS cell JOIN Comments AS c ON c.CommentID = cell.CommentID
     WHERE  cell.worksheet_id = ?
 	ORDER BY cell.col, cell."row"`, ws.ID).Rows()
@@ -1192,7 +1196,7 @@ func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
 	res = make([]CellCommentRow, 0)
 	for rows.Next() {
 		r := CellCommentRow{}
-		rows.Scan(&r.Range, &r.CommentText, &r.Row, &r.Col)
+		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.Row, &r.Col)
 		res = append(res, r)
 	}
 	return

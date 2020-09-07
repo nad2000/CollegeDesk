@@ -162,10 +162,16 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			S3BucketName: a.Source.S3BucketName,
 			S3Key:        newKey,
 		}
-		Db.Create(&source)
-		Db.Model(&a).UpdateColumns(model.Answer{GradedFile: source, WasCommentProcessed: 1})
 
+		Db.Create(&source)
+		if err := Db.Model(&a).UpdateColumns(model.Answer{
+			GradedFileID:        model.NewNullInt64(source.ID),
+			WasCommentProcessed: 1,
+		}).Error; err != nil {
+			log.Errorf("Failed to update the answer entry: %s", err)
+		}
 		fileCount++
+
 	}
 	log.Infof("Successfully commented %d Excel files.", fileCount)
 	return nil
@@ -313,6 +319,9 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 							commentText += cc.CommentText
 						}
 
+						if bc.Marks > 0.000001 {
+							commentText = fmt.Sprintf("Points = %.2f. %s", bc.Marks, commentText)
+						}
 						log.Debugf("COMMENT: %q, %q, %q", sheet.Name, address, commentText)
 						if commentText != "" {
 							comments[bcCol] = append(comments[bcCol],
