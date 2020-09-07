@@ -446,6 +446,8 @@ type Answer struct {
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
 	WasXLProcessed      uint8         `gorm:"type:tinyint(1);default:0"`
 	WasAutocommented    bool
+	GradedFile          Source              `gorm:"Association_foreignkey:FileID"`
+	GradedFileID        sql.NullInt64       `gorm:"column:GradedFileID;type:int"`
 	AnswerComments      []AnswerComment     `gorm:"foreignkey:AnswerID"`
 	XLQTransformations  []XLQTransformation `gorm:"foreignkey:QuestionID"`
 }

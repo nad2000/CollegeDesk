@@ -163,7 +163,7 @@ func AddCommentsInBatch(manager s3.FileManager) error {
 			S3Key:        newKey,
 		}
 		Db.Create(&source)
-		Db.Model(&a).UpdateColumns(model.Answer{Source: source, WasCommentProcessed: 1})
+		Db.Model(&a).UpdateColumns(model.Answer{GradedFile: source, WasCommentProcessed: 1})
 
 		fileCount++
 	}
