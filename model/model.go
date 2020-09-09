@@ -1839,7 +1839,7 @@ type RowsToProcessResult struct {
 func RowsToProcess(assignmentID int) ([]RowsToProcessResult, error) {
 
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-	Db.LogMode(true)
+	// Db.LogMode(true)
 	query := Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID, QuestionID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
@@ -1864,7 +1864,7 @@ func RowsToProcess(assignmentID int) ([]RowsToProcessResult, error) {
 		results = append(results, r)
 	}
 
-	Db.LogMode(false)
+	// Db.LogMode(false)
 	return results, nil
 }
 

@@ -687,7 +687,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 
 func testRowsToProcess(t *testing.T) {
 
-	rows, _ := model.RowsToProcess()
+	rows, _ := model.RowsToProcess(-1)
 
 	for _, r := range rows {
 		if !strings.HasSuffix(r.FileName, ".xlsx") {
