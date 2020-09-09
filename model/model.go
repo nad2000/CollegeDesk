@@ -1836,16 +1836,22 @@ type RowsToProcessResult struct {
 }
 
 // RowsToProcess returns answer file sources
-func RowsToProcess() ([]RowsToProcessResult, error) {
+func RowsToProcess(assignmentID int) ([]RowsToProcessResult, error) {
 
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-	rows, err := Db.Table("FileSources").
+	Db.LogMode(true)
+	query := Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID, QuestionID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
-		Where("StudentAnswers.was_xl_processed = ?", 0).Rows()
+		Where("StudentAnswers.was_xl_processed = ?", 0)
+	if assignmentID > -1 {
+		query = query.Joins("JOIN StudentAssignments ON StudentAssignments.StudentAssignmentID  = StudentAnswers.StudentAssignmentID").
+			Where("StudentAssignments.AssignmentID = ?", assignmentID)
+	}
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -1858,6 +1864,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 		results = append(results, r)
 	}
 
+	Db.LogMode(false)
 	return results, nil
 }
 

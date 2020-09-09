@@ -22,7 +22,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -47,11 +46,6 @@ the new file will be stored with the given name.`,
 		debugCmd(cmd)
 
 		var err error
-		assignmentID, err = strconv.Atoi(flagString(cmd, "assignment"))
-		if err != nil {
-			log.Error(err)
-			assignmentID = -1
-		}
 
 		Db, err = model.OpenDb(url)
 		if err != nil {
@@ -75,7 +69,7 @@ the new file will be stored with the given name.`,
 func init() {
 	RootCmd.AddCommand(commentCmd)
 	flags := commentCmd.Flags()
-	flags.IntP("assignment", "a", -1, "The assignment ID to process.")
+	flags.IntVarP(&assignmentID, "assignment", "a", -1, "The assignment ID to process (-1 - process all assignments)")
 }
 
 // AddComments addes comments to the given file from the DB and stores file with the given name
@@ -311,7 +305,8 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 							comments[bcCol] = make([]commentEntry, 0)
 						}
 						address = model.CellAddress(row, col)
-						commentText = bc.CommentText
+
+						commentText = fmt.Sprintf("Points = %.2f. %s", bc.Marks, bc.CommentText)
 						if cc, ok := cellCommentMap[address]; ok {
 							if commentText != "" {
 								commentText += "\n"
@@ -319,10 +314,8 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 							commentText += cc.CommentText
 						}
 
-						if bc.Marks > 0.000001 {
-							commentText = fmt.Sprintf("Points = %.2f. %s", bc.Marks, commentText)
-						}
 						log.Debugf("COMMENT: %q, %q, %q", sheet.Name, address, commentText)
+
 						if commentText != "" {
 							comments[bcCol] = append(comments[bcCol],
 								commentEntry{address, row, col, commentText, -1})

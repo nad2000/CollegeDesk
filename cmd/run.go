@@ -49,6 +49,7 @@ func init() {
 
 	flags.BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	flags.StringP("color", "c", defaultColor, "The block filling color.")
+	flags.IntVarP(&assignmentID, "assignment", "a", -1, "The assignment ID to process (-1 - process all assignments)")
 
 	viper.BindPFlag("color", flags.Lookup("color"))
 	viper.BindPFlag("force", flags.Lookup("force"))
@@ -105,7 +106,8 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 func HandleAnswers(manager s3.FileManager) error {
 
 	model.ModelAnswerUserID = modelAnswerUserID
-	rows, err := model.RowsToProcess()
+	rows, err := model.RowsToProcess(assignmentID)
+
 	if err != nil {
 		log.WithError(err).Fatalf("Failed to retrieve list of source files to process.")
 	}

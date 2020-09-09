@@ -123,6 +123,7 @@ func init() {
 	viper.BindEnv("aws-region", "AWS_REGION")
 	viper.BindEnv("aws-access-key-id", "AWS_ACCESS_KEY_ID")
 	viper.BindEnv("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
+	viper.BindEnv("url", "DATABASE_URL")
 	viper.SetDefault("aws-region", "ap-south-1")
 	viper.SetDefault("dest", os.TempDir())
 	viper.SetDefault("is-plagiarised-comment-id", 12345)
