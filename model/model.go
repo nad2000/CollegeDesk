@@ -2134,7 +2134,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
 				Where("ExcelBlocks.is_reference").
 				Where("WorkSheets.workbook_id = ?", q.ReferenceID).
-				Where("WorkSheets.order_num = ?", orderNum).
+				// Where("WorkSheets.order_num = ?", orderNum).
+				Where("WorkSheets.name = ?", sheet.Name).
 				Find(&references).Error
 			if err != nil {
 				log.WithError(err).Errorln("Failed to fetch reference blocks for the question:", q)
