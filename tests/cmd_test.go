@@ -729,27 +729,27 @@ func testHandleAnswers(t *testing.T) {
 	}
 	// Add missing rubric entries for all cells
 	if err := db.Exec(`
-		INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
-		SELECT
-			a.QuestionID, b.ExcelBlockID, b.BlockCellRange,
-			(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
-		FROM StudentAnswers AS a
-		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
-		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-		JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
-		WHERE r.id IS NULL`).Error; err != nil {
+				INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+				SELECT
+					a.QuestionID, b.ExcelBlockID, b.BlockCellRange,
+					(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+				FROM StudentAnswers AS a
+				JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+				JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+				LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
+				WHERE r.id IS NULL`).Error; err != nil {
 		t.Error(err)
 	}
 	// Add marking data:
 	db.Exec("UPDATE Rubrics SET item1=1./id, item2=1./id, item3=1./id, item4=1./id, item5=1./id")
 	// Auto-commenting
 	if err := db.Exec(`
-INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
-SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
-FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
-WHERE ae.cell_id IS NULL
-`).Error; err != nil {
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL
+		`).Error; err != nil {
 		t.Error(err)
 		return
 	}
@@ -765,7 +765,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("FindBlocksInside", testFindBlocksInside)
 	t.Run("ImportFile", testImportFile)
-	t.Run("HandleAnswers", testHandleAnswers)
+	// t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("HandleNotcoloredQ3", testHandleNotcoloredQ3)
 	t.Run("S3Downloading", testS3Downloading)
