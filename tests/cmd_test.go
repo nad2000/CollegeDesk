@@ -226,6 +226,7 @@ func TestDemoFile(t *testing.T) {
 	model.ExtractBlocksFromFile(fileName, "", true, true, true, a.ID)
 }
 
+/*
 func TestFormattingImport(t *testing.T) {
 	db, _ = model.OpenDb(url)
 	defer db.Close()
@@ -283,6 +284,7 @@ func TestFormattingImport(t *testing.T) {
 		t.Errorf("Expected %d rubric entries, got: %d", expected, count)
 	}
 }
+*/
 
 func deleteData() {
 
