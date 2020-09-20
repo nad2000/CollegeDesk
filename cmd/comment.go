@@ -178,8 +178,19 @@ type commentEntry struct {
 	boxRow      int
 }
 
+type commentEntries []commentEntry
+
+func (entries commentEntries) IncludesCell(row, col int) bool {
+	for _, e := range entries {
+		if e.col == col && e.row == row {
+			return true
+		}
+	}
+	return false
+}
+
 // addCommentsToWorksheet
-func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[int][]commentEntry) {
+func addCommentsToWorksheet(file *excelize.File, sheetName string, comments map[int]commentEntries) {
 	cols := make([]int, 0)
 	for c, column := range comments {
 		if column != nil {
@@ -290,7 +301,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 			cellCommentMap[cc.Range] = cc
 		}
 
-		comments := make(map[int][]commentEntry)
+		comments := make(map[int]commentEntries)
 
 		for bcCol, bcInCol := range blockComments {
 
@@ -302,7 +313,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 				for col := bc.LCol; col <= bc.RCol; col++ {
 					for row := bc.TRow; row <= bc.BRow; row++ {
 						if comments[bcCol] == nil {
-							comments[bcCol] = make([]commentEntry, 0)
+							comments[bcCol] = make(commentEntries, 0)
 						}
 						address = model.CellAddress(row, col)
 
@@ -322,6 +333,22 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 						}
 					}
 				}
+			}
+		}
+		// Add cell comments that done't have block comments
+		for _, cc := range cellComments {
+			if cc.CommentText == "" {
+				continue
+			}
+			bcs, ok := comments[cc.Col]
+			if !ok || !bcs.IncludesCell(cc.Row, cc.Col) {
+				if comments[cc.Col] == nil {
+					comments[cc.Col] = make(commentEntries, 0)
+				}
+				comments[cc.Col] = append(
+					comments[cc.Col],
+					commentEntry{
+						model.CellAddress(cc.Row, cc.Col), cc.Row, cc.Col, commentText, -1})
 			}
 		}
 		log.Debug("*** Collected comments:", comments)
