@@ -1453,7 +1453,7 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 			}
 			if b.questionID > 0 {
 				var commentID int
-				Db.Raw(`
+				if err := Db.Raw(`
 					SELECT c.CommentID
 					FROM Cells AS c
 						JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
@@ -1465,7 +1465,9 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 						AND c.cell_range = ?
 						AND b.BlockCellRange = ?
 						AND b.BlockFormula= ?
-				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula).Scan(&commentID)
+				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula).Scan(&commentID).Error; err != nil {
+					log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
+				}
 				if commentID > 0 {
 					cell.CommentID = NewNullInt64(commentID)
 				}
@@ -2355,6 +2357,15 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 	// Insert block -> comment mapping:
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
+		-- comments linked from similar cells
+		SELECT ws.StudentAnswerID, c.CommentID
+		FROM Cells AS c
+			JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+			JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+		WHERE
+			c.CommentID IS NOT NULL
+			AND ws.StudentAnswerID = ?
+		UNION
 		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (
 			SELECT
 				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
@@ -2382,7 +2393,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 			AND sacm.CommentID IS NULL
 			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
 		) AS c`
-	_, err = Db.DB().Exec(sql, answerID)
+	_, err = Db.DB().Exec(sql, answerID, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
 		log.WithError(err).Errorln("Failed to insert block -> comment mapping.")
