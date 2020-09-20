@@ -1091,6 +1091,7 @@ type Worksheet struct {
 	Idx              int
 	IsPlagiarised    bool   // sql.NullBool
 	Cells            []Cell `gorm:"foreignkey:WorksheetID"`
+	questionID       int    `gorm:"-"`
 }
 
 // TableName overrides default table name for the model
@@ -1227,6 +1228,7 @@ type Block struct {
 	PivotID         sql.NullInt64                `gorm:"type:int"`
 	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
 	isEmpty         bool                         `gorm:"-"` // All block cells are empty
+	questionID      int                          `gorm:"-"`
 }
 
 // TableName overrides default table name for the model
@@ -1440,15 +1442,35 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 	b.Range = b.Address()
 	for r := b.TRow; r <= b.BRow; r++ {
 		for c := b.LCol; c <= b.RCol; c++ {
-			cell := sheet.Cell(r, c)
-			updatedFormula := ChangeFormula(cell.Formula())
-			err := Db.Create(&Cell{
+			wsCell := sheet.Cell(r, c)
+			updatedFormula := ChangeFormula(wsCell.Formula())
+			cell := Cell{
 				BlockID:     NewNullInt64(b.ID),
 				WorksheetID: b.WorksheetID,
 				Formula:     updatedFormula,
-				Value:       cellValue(cell),
+				Value:       cellValue(wsCell),
 				Range:       CellAddress(r, c),
-			}).Error
+			}
+			if b.questionID > 0 {
+				var commentID int
+				Db.Raw(`
+					SELECT c.CommentID
+					FROM Cells AS c
+						JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+						JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+						JOIN StudentAnswers AS sa ON sa.StudentAnswerID = ws.StudentAnswerID
+					WHERE
+						sa.QuestionID = ?
+						AND c.Value = ?
+						AND c.cell_range = ?
+						AND b.BlockCellRange = ?
+						AND b.BlockFormula= ?
+				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula).Scan(&commentID)
+				if commentID > 0 {
+					cell.CommentID = NewNullInt64(commentID)
+				}
+			}
+			err := Db.Create(&cell).Error
 			if err != nil {
 				log.WithError(err).Error("Failed to create a cell.")
 			}
@@ -1974,6 +1996,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 					LCol:            c,
 					Formula:         formula,
 					RelativeFormula: RelativeFormula(r, c, formula),
+					questionID:      ws.questionID,
 				}
 				if !DryRun {
 					Db.Create(&b)
@@ -2120,6 +2143,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
 				IsPlagiarised:    isPlagiarised,
+				questionID:       q.ID,
 			}).Error
 			if err != nil {
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)

@@ -13,6 +13,7 @@ package s3
 
 import (
 	"os"
+	"path"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
@@ -26,6 +27,19 @@ import (
 type FileManager interface {
 	Download(fileName, containerName, sourceName, destinationName string) (string, error)
 	Upload(fileName, containerName, key string) (string, error)
+}
+
+// LocalManager - local file system file manages (for testing)
+type LocalManager struct{ SourceDirectory, DestinationDirctory string }
+
+// Download simulates download from the SourceDirectory
+func (m LocalManager) Download(sourceName, s3BucketName, s3Key, dest string) (string, error) {
+	return path.Join(m.SourceDirectory, sourceName), nil
+}
+
+// Upload upload file into DestinationDirctory
+func (m LocalManager) Upload(sourceName, s3BucketName, s3Key string) (string, error) {
+	return path.Join(m.DestinationDirctory, sourceName), nil
 }
 
 // Manager AWS S3 file downloader
