@@ -317,13 +317,16 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 						}
 						address = model.CellAddress(row, col)
 
-						commentText = fmt.Sprintf("Points = %.2f. %s", bc.Marks, bc.CommentText)
+						commentText = bc.CommentText
+						marks := bc.Marks
 						if cc, ok := cellCommentMap[address]; ok {
 							if commentText != "" {
 								commentText += "\n"
 							}
 							commentText += cc.CommentText
+							marks += cc.Marks
 						}
+						commentText = fmt.Sprintf("Points = %.2f. %s", marks, commentText)
 
 						log.Debugf("COMMENT: %q, %q, %q", sheet.Name, address, commentText)
 
@@ -345,6 +348,7 @@ func AddCommentsToFile(answerID int, fileName, outputName string, deleteComments
 				if comments[cc.Col] == nil {
 					comments[cc.Col] = make(commentEntries, 0)
 				}
+				commentText = fmt.Sprintf("Points = %.2f. %s", cc.Marks, cc.CommentText)
 				comments[cc.Col] = append(
 					comments[cc.Col],
 					commentEntry{
