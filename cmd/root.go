@@ -41,6 +41,8 @@ var (
 	awsRegion              string
 	awsSecretAccessKey     string
 	cfgFile                string
+	sourceDir              string
+	destinationDir         string
 	color                  = defaultColor
 	debug                  bool
 	skipHidden             bool
@@ -103,6 +105,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	flags := RootCmd.PersistentFlags()
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
+	flags.StringVar(&sourceDir, "source-dir", "", "Source directory of input files for testing")
+	flags.StringVar(&destinationDir, "destination-dir", "", "Destination directory of output files for testing")
 	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
 	flags.BoolVarP(&skipHidden, "skip-hidden", "", false, "Skip hidden worksheets.")
 	flags.CountVarP(&debugLevel, "debug", "d", "Show full stack trace on error.")

@@ -57,6 +57,7 @@ func init() {
 
 func extractBlocks(cmd *cobra.Command, args []string) {
 
+	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
 	getConfig()
 	debugCmd(cmd)
 
@@ -95,7 +96,7 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, skipHidden, a.ID)
 		}
 	} else {
-		manager := createS3Manager()
+		manager := createManager()
 		HandleAnswers(manager)
 	}
 }

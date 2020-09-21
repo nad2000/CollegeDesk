@@ -1465,10 +1465,12 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 						AND c.cell_range = ?
 						AND b.BlockCellRange = ?
 						AND b.BlockFormula= ?
+					LIMIT 1
 				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula).Scan(&commentID).Error; err != nil {
 					log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
 				}
 				if commentID > 0 {
+					log.Debugf("Linked comment ID: %d to range: %q", commentID, cell.Range)
 					cell.CommentID = NewNullInt64(commentID)
 				}
 			}

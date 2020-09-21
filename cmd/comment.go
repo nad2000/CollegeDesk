@@ -58,7 +58,7 @@ the new file will be stored with the given name.`,
 		}
 
 		if len(args) == 0 {
-			manager := createS3Manager()
+			manager := createManager()
 			AddCommentsInBatch(manager)
 		} else {
 			AddComments(args...)

@@ -17,7 +17,13 @@ func parseTime(str string) *time.Time {
 	return &t
 }
 
-func createS3Manager() (d s3.Manager) {
+func createManager() (d s3.FileManager) {
+	if sourceDir != "" {
+		if destinationDir == "" {
+			destinationDir = sourceDir
+		}
+		return s3.LocalManager{SourceDirectory: sourceDir, DestinationDirctory: destinationDir}
+	}
 	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {
 		return s3.NewManager(awsRegion, awsProfile)
 	} else if awsAccessKeyID != "" && awsSecretAccessKey != "" {

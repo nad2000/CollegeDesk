@@ -43,7 +43,7 @@ func processQuestions(cmd *cobra.Command, args []string) {
 	}
 	defer Db.Close()
 
-	manager := createS3Manager()
+	manager := createManager()
 	HandleQuestions(manager)
 }
 
