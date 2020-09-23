@@ -712,6 +712,11 @@ func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, err
 	return sourceName, nil
 }
 
+func (m testManager) List(
+	bucket, prefix string) ([]s3.Entry, error) {
+	return []s3.Entry{}, nil
+}
+
 func testHandleAnswers(t *testing.T) {
 
 	var countBefore, countAfter int
