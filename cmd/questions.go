@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // questionsCmd represents the questions command
@@ -95,4 +96,7 @@ func HandleQuestions(manager s3.FileManager) error {
 
 func init() {
 	RootCmd.AddCommand(questionsCmd)
+	flags := questionsCmd.Flags()
+	flags.StringVarP(&color, "color", "c", defaultColor, "The block filling color")
+	viper.BindPFlag("color", flags.Lookup("color"))
 }

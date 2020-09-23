@@ -70,6 +70,20 @@ func RelCellAddress(address string, rowIncrement, colIncrement int) (string, err
 	return xlsx.GetCellIDStringFromCoords(colIndex+colIncrement, rowIndex+rowIncrement), nil
 }
 
+func getMaxMinFromDimensionRef(ref string) (minx, miny, maxx, maxy int, err error) {
+	var parts []string
+	parts = strings.Split(ref, ":")
+	minx, miny, err = xlsx.GetCoordsFromCellIDString(parts[0])
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+	maxx, maxy, err = xlsx.GetCoordsFromCellIDString(parts[1])
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+	return
+}
+
 // RelativeCellAddress converts cell ID into a relative R1C1 representation
 func RelativeCellAddress(rowIndex, colIndex int, cellID string) string {
 	x, y, err := xlsx.GetCoordsFromCellIDString(cellID)
@@ -1162,6 +1176,9 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	for rows.Next() {
 		r := BlockCommentRow{}
 		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		if r.TRow == 0 && r.LCol == 0 && r.BRow == 0 && r.RCol == 0 {
+			r.LCol, r.TRow, r.RCol, r.BRow, _ = getMaxMinFromDimensionRef(r.Range)
+		}
 		if r.LCol != col {
 			col = r.LCol
 			res[col] = make([]BlockCommentRow, 1)
@@ -1198,6 +1215,9 @@ func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
 	for rows.Next() {
 		r := CellCommentRow{}
 		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.Row, &r.Col)
+		if r.Row == 0 && r.Col == 0 {
+			r.Col, r.Row, _ = xlsx.GetCoordsFromCellIDString(r.Range)
+		}
 		res = append(res, r)
 	}
 	return
@@ -1452,26 +1472,29 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 				Range:       CellAddress(r, c),
 			}
 			if b.questionID > 0 {
-				var commentID int
+				var result struct {
+					CommentID int `gorm:"column:CommentID"`
+				}
 				if err := Db.Raw(`
-					SELECT c.CommentID
+					SELECT c.CommentID AS CommentID
 					FROM Cells AS c
-						JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+						-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
 						JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
 						JOIN StudentAnswers AS sa ON sa.StudentAnswerID = ws.StudentAnswerID
 					WHERE
 						sa.QuestionID = ?
 						AND c.Value = ?
 						AND c.cell_range = ?
-						AND b.BlockCellRange = ?
-						AND b.BlockFormula= ?
+						-- AND b.BlockCellRange = ?
+						-- AND b.BlockFormula= ?
+						AND ws.name = ?
 					LIMIT 1
-				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula).Scan(&commentID).Error; err != nil {
+				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula, sheet.Name).Scan(&result).Error; err != nil && !gorm.IsRecordNotFoundError(err) {
 					log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
 				}
-				if commentID > 0 {
-					log.Debugf("Linked comment ID: %d to range: %q", commentID, cell.Range)
-					cell.CommentID = NewNullInt64(commentID)
+				if result.CommentID > 0 {
+					log.Debugf("Linked comment ID: %d to range: %q", result.CommentID, cell.Range)
+					cell.CommentID = NewNullInt64(result.CommentID)
 				}
 			}
 			err := Db.Create(&cell).Error
@@ -1906,6 +1929,7 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 		q = q.Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID")
 	}
 	q = q.Where("was_comment_processed = ?", 0).
+		Where("was_xl_processed = ?", 1).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
@@ -1967,14 +1991,40 @@ func (ws *Worksheet) createEmptyCellBlock(sheet *xlsx.Sheet, r, c int) (err erro
 	if err := Db.Create(&block).Error; err != nil {
 		return nil
 	}
-	return Db.Create(&Cell{
+	cell := Cell{
 		BlockID:     NewNullInt64(block.ID),
 		WorksheetID: ws.ID,
 		Row:         r,
 		Col:         c,
 		Range:       address,
 		Value:       cellValue(sheet.Cell(r, c)),
-	}).Error
+	}
+	{
+		var result struct {
+			CommentID int `gorm:"column:CommentID"`
+		}
+		// `gorm:"column:CommentID"`
+		if err := Db.Raw(`
+		SELECT c.CommentID AS CommentID
+		FROM Cells AS c
+			-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+			JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+			JOIN StudentAnswers AS sa ON sa.StudentAnswerID = ws.StudentAnswerID
+		WHERE
+			sa.QuestionID = ?
+			AND c.Value = ?
+			AND c.cell_range = ?
+			AND ws.name = ?
+		LIMIT 1
+	`, ws.questionID, cell.Value, cell.Range, sheet.Name).Scan(&result).Error; err != nil && !gorm.IsRecordNotFoundError(err) {
+			log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
+		}
+		if result.CommentID > 0 {
+			log.Debugf("Linked comment ID: %d to range: %q", result.CommentID, cell.Range)
+			cell.CommentID = NewNullInt64(result.CommentID)
+		}
+	}
+	return Db.Create(&cell).Error
 }
 
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
@@ -2147,12 +2197,12 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
 				IsPlagiarised:    isPlagiarised,
-				questionID:       q.ID,
 			}).Error
 			if err != nil {
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
 			}
 		}
+		ws.questionID = q.ID // track internally the question
 		wbReferences[sheet.Name] = references
 		sheetIDs[orderNum] = ws.ID
 
@@ -2362,7 +2412,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bo
 		-- comments linked from similar cells
 		SELECT ws.StudentAnswerID, c.CommentID
 		FROM Cells AS c
-			JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+			-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
 			JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
 		WHERE
 			c.CommentID IS NOT NULL

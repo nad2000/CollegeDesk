@@ -80,7 +80,7 @@ func getConfig() {
 	awsAccessKeyID = viper.GetString("aws-access-key-id")
 	awsSecretAccessKey = viper.GetString("aws-secret-access-key")
 	url = viper.GetString("url")
-	color = viper.GetString("color")
+	// color = viper.GetString("color")
 	force = viper.GetBool("force")
 	dest = viper.GetString("dest")
 	skipHidden = viper.GetBool("skip-hidden")
