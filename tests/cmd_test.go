@@ -1748,6 +1748,7 @@ func TestCommenting(t *testing.T) {
 	db.Exec(`
 		UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1
 		WHERE QuestionID IS NULL OR QuestionID = 0`)
+	db.Exec(`UPDATE StudentAnswers SET was_xl_processed = 1 LIMIT 18`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
 		SELECT AssignmentID, QuestionID
