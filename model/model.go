@@ -77,6 +77,9 @@ func getMaxMinFromDimensionRef(ref string) (minx, miny, maxx, maxy int, err erro
 	if err != nil {
 		return -1, -1, -1, -1, err
 	}
+	if len(parts) < 2 {
+		return minx, miny, minx, miny, nil
+	}
 	maxx, maxy, err = xlsx.GetCoordsFromCellIDString(parts[1])
 	if err != nil {
 		return -1, -1, -1, -1, err
