@@ -1176,7 +1176,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	for rows.Next() {
 		r := BlockCommentRow{}
 		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
-		if r.TRow == 0 && r.LCol == 0 && r.BRow == 0 && r.RCol == 0 {
+		if r.TRow == 0 && r.LCol == 0 && r.BRow == 0 && r.RCol == 0 && r.Range != "" {
 			r.LCol, r.TRow, r.RCol, r.BRow, _ = getMaxMinFromDimensionRef(r.Range)
 		}
 		if r.LCol != col {
