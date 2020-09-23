@@ -2173,7 +2173,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 18, len(rows); got != expected {
+	if expected, got := 16, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {
