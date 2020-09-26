@@ -39,7 +39,7 @@ var DryRun bool
 var ModelAnswerUserID = 10000
 
 var (
-	cellIDRe = regexp.MustCompile("\\$?[A-Z]+\\$?[0-9]+")
+	cellIDRe = regexp.MustCompile(`\$?[A-Z]+\$?[0-9]+`)
 )
 
 // SolverNames - solver name mapping
@@ -68,6 +68,23 @@ func RelCellAddress(address string, rowIncrement, colIncrement int) (string, err
 		return "", err
 	}
 	return xlsx.GetCellIDStringFromCoords(colIndex+colIncrement, rowIndex+rowIncrement), nil
+}
+
+func getMaxMinFromDimensionRef(ref string) (minx, miny, maxx, maxy int, err error) {
+	var parts []string
+	parts = strings.Split(ref, ":")
+	minx, miny, err = xlsx.GetCoordsFromCellIDString(parts[0])
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+	if len(parts) < 2 {
+		return minx, miny, minx, miny, nil
+	}
+	maxx, maxy, err = xlsx.GetCoordsFromCellIDString(parts[1])
+	if err != nil {
+		return -1, -1, -1, -1, err
+	}
+	return
 }
 
 // RelativeCellAddress converts cell ID into a relative R1C1 representation
@@ -110,21 +127,29 @@ func RelativeFormula(rowIndex, colIndex int, formula string) string {
 type QuestionType string
 
 // Scan - workaround for MySQL EMUM(...)
-func (qt *QuestionType) Scan(value interface{}) error { *qt = QuestionType(value.([]byte)); return nil }
+func (qt *QuestionType) Scan(value interface{}) error {
+	switch v := value.(type) {
+	case string:
+		*qt = QuestionType(v)
+	case []byte:
+		*qt = QuestionType(v)
+	}
+	return nil
+}
 
 // Value - workaround for MySQL EMUM(...)
 func (qt QuestionType) Value() (driver.Value, error) { return string(qt), nil }
 
 // NewNullInt64 - a helper function that makes nullable from a plain int or a string
 func NewNullInt64(value interface{}) sql.NullInt64 {
-	switch value.(type) {
+	switch value := value.(type) {
 	case int:
-		return sql.NullInt64{Valid: true, Int64: int64(value.(int))}
+		return sql.NullInt64{Valid: true, Int64: int64(value)}
 	case string:
-		if value.(string) == "" {
+		if value == "" {
 			return sql.NullInt64{}
 		}
-		v, _ := strconv.Atoi(value.(string))
+		v, _ := strconv.Atoi(value)
 		return sql.NullInt64{Valid: true, Int64: int64(v)}
 	}
 	return sql.NullInt64{}
@@ -151,8 +176,8 @@ type Question struct {
 	IsProcessed        bool `gorm:"column:IsProcessed;default:0"`
 	Source             Source
 	SourceID           sql.NullInt64       `gorm:"column:FileID;type:int"`
-	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
-	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	Answers            []Answer            `gorm:"foreignkey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"foreignkey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
 	IsRubricCreated    bool
@@ -169,7 +194,7 @@ func (q Question) String() string {
 }
 
 // ImportFile imports form Excel file QuestionExcleData
-func (q *Question) ImportFile(fileName, color string, verbose bool) error {
+func (q *Question) ImportFile(fileName, color string, verbose, skipHidden bool) error {
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
 		return err
@@ -219,13 +244,13 @@ func (q *Question) ImportFile(fileName, color string, verbose bool) error {
 		}
 
 	}
-	q.ImportBlocks(file, color, verbose)
+	q.ImportBlocks(file, color, verbose, skipHidden)
 
 	return nil
 }
 
 // ImportBlocks extracts blocks from the given question file and stores in the DB for referencing
-func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb Workbook) {
+func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose, skipHidden bool) (wb Workbook) {
 
 	var source Source
 	Db.Model(&q).Related(&source, "Source")
@@ -234,7 +259,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 		wb = Workbook{FileName: fileName, IsReference: true}
 
 		if err := Db.Create(&wb).Error; err != nil {
-			log.WithError(err).Errorf("Failed to create workbook entry %#v", wb)
+			log.WithError(err).Errorf("failed to create workbook entry %#v", wb)
 			return
 		}
 		if DebugLevel > 1 {
@@ -248,7 +273,7 @@ func (q *Question) ImportBlocks(file *xlsx.File, color string, verbose bool) (wb
 
 	for orderNum, sheet := range file.Sheets {
 
-		if sheet.Hidden {
+		if skipHidden && sheet.Hidden {
 			log.Infof("Skipping hidden worksheet %q", sheet.Name)
 			continue
 		}
@@ -363,13 +388,45 @@ type Source struct {
 	FileName     string     `gorm:"column:FileName;size:100"`
 	ContentType  string     `gorm:"column:ContentType;size:100"`
 	FileSize     int64      `gorm:"column:FileSize"`
-	Answers      []Answer   `gorm:"ForeignKey:FileID"`
-	Questions    []Question `gorm:"ForeignKey:FileID"`
+	Answers      []Answer   `gorm:"foreignkey:FileID"`
+	Questions    []Question `gorm:"foreignkey:FileID"`
 }
 
 // TableName overrides default table name for the model
 func (Source) TableName() string {
 	return "FileSources"
+}
+
+// QuestionFile - TODO: ...
+type QuestionFile struct {
+	ID         int
+	SourceID   int    `gorm:"column:FileID;type:int;index"`
+	Source     Source `gorm:"foreignkey:SourceID"`
+	QuestionID int    `gorm:"column:QuestionID;index"`
+	Question   *Question
+}
+
+// TableName overrides default table name for the model
+func (QuestionFile) TableName() string {
+	return "QuestionFiles"
+}
+
+// QuestionFileSheet - TODO: ...
+type QuestionFileSheet struct {
+	ID             int
+	Sequence       int    `gorm:"column:Sheet_Sequence"`
+	Name           string `gorm:"column:Sheet_Name"`
+	QuestionFileID int    `gorm:"column:QuestionFileID;type:int;index"`
+	QuestionFile   *QuestionFile
+	ProblemSheetID int `gorm:"column:ProblemWorkSheetsID;type:int;index"`
+	ProblemSheet   *ProblemSheet
+	ProblemID      int      `gorm:"index"`
+	Problem        *Problem `gorm:"foreignkey:ProblemID"`
+}
+
+// TableName overrides default table name for the model
+func (QuestionFileSheet) TableName() string {
+	return "QuestionFileWorkSheets"
 }
 
 // DownloadTo - download and store source file to a specified directory
@@ -382,7 +439,7 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 		s.FileName, s.S3BucketName, s.S3Key, destinationName)
 	if err != nil {
 		err = fmt.Errorf(
-			"Failed to retrieve file %q from %q into %q: %s",
+			"failed to retrieve file %q from %q into %q: %s",
 			s.S3Key, s.S3BucketName, destinationName, err.Error())
 	}
 	return
@@ -392,21 +449,24 @@ func (s Source) DownloadTo(manager s3.FileManager, dest string) (fileName string
 type Answer struct {
 	ID                  int `gorm:"column:StudentAnswerID;primary_key:true;AUTO_INCREMENT"`
 	Assignment          Assignment
-	StudentAssignmentID int           `gorm:"column:StudentAssignmentID"`
-	MCQOptionID         sql.NullInt64 `gorm:"column:MCQOptionID;type:int"`
-	ShortAnswer         string        `gorm:"column:ShortAnswerText;type:text"`
-	Marks               float64       `gorm:"column:Marks;type:float"`
-	SubmissionTime      time.Time     `gorm:"column:SubmissionTime;default:NULL"`
-	Worksheets          []Worksheet   `gorm:"ForeignKey:AnswerID"`
-	Source              Source        `gorm:"Association_ForeignKey:FileID"`
-	SourceID            sql.NullInt64 `gorm:"column:FileID;type:int"`
+	StudentAssignment   StudentAssignment `gorm:"association_foreignkey:StudentAssignmentID;foreignkey:StudentAssignmentID"`
+	StudentAssignmentID int               `gorm:"column:StudentAssignmentID"`
+	MCQOptionID         sql.NullInt64     `gorm:"column:MCQOptionID;type:int"`
+	ShortAnswer         string            `gorm:"column:ShortAnswerText;type:text"`
+	Marks               float64           `gorm:"column:Marks;type:float"`
+	SubmissionTime      time.Time         `gorm:"column:SubmissionTime;default:NULL"`
+	Worksheets          []Worksheet       `gorm:"foreignkey:AnswerID"`
+	Source              Source            `gorm:"Association_foreignkey:FileID"`
+	SourceID            sql.NullInt64     `gorm:"column:FileID;type:int"`
 	Question            Question
 	QuestionID          sql.NullInt64 `gorm:"column:QuestionID;type:int"`
 	WasCommentProcessed uint8         `gorm:"type:tinyint(1);default:0"`
 	WasXLProcessed      uint8         `gorm:"type:tinyint(1);default:0"`
 	WasAutocommented    bool
-	AnswerComments      []AnswerComment     `gorm:"ForeignKey:AnswerID"`
-	XLQTransformations  []XLQTransformation `gorm:"ForeignKey:QuestionID"`
+	GradedFile          Source              `gorm:"Association_foreignkey:FileID"`
+	GradedFileID        sql.NullInt64       `gorm:"column:GradedFileID;type:int"`
+	AnswerComments      []AnswerComment     `gorm:"foreignkey:AnswerID"`
+	XLQTransformations  []XLQTransformation `gorm:"foreignkey:QuestionID"`
 }
 
 // TableName overrides default table name for the model
@@ -422,7 +482,7 @@ type Assignment struct {
 	// StartDateAndTime   time.Time `gorm:"column:StartDateAndTime"`
 	// DueDateAndTime     time.Time `gorm:"column:DueDateAndTime"`
 	// UpdateTime         time.Time `gorm:"column:UpdateTime"`
-	// IsHidden           int8      `gorm:"type:tinyint(4)"`
+	// IsHidden           bool
 	// TotalMarks         float64   `gorm:"column:TotalMarks;type:float"`
 	// TotalQuestion      int       `gorm:"column:TotalQuestion"`
 	// CourseID           int      `gorm:"column:CourseID"`
@@ -495,7 +555,7 @@ func (wb *Workbook) ImportComments(fileName string) (err error) {
 
 	xlsx, err := excelize.OpenFile(fileName)
 	if err != nil {
-		return fmt.Errorf("Failed to open file %q: %s", fileName, err.Error())
+		return fmt.Errorf("failed to open file %q: %s", fileName, err.Error())
 	}
 	for name, comments := range xlsx.GetComments() {
 		var ws Worksheet
@@ -541,11 +601,11 @@ func GetSharedStrings(file *excelize.File) SharedStrings {
 // Get returns a shared string
 func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
 	var id int
-	switch idx.(type) {
+	switch idx := idx.(type) {
 	case string:
-		id, _ = strconv.Atoi(idx.(string))
+		id, _ = strconv.Atoi(idx)
 	case int:
-		id = idx.(int)
+		id = idx
 	}
 	if sharedStrings != nil && id < len(sharedStrings) && id >= 0 {
 		ss = sharedStrings[id]
@@ -558,7 +618,7 @@ func (sharedStrings SharedStrings) Get(idx interface{}) (ss string) {
 func (wb *Workbook) ImportWorksheets(fileName string) {
 	file, err := excelize.OpenFile(fileName)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to open file %q", fileName)
+		log.WithError(err).Errorf("failed to open file %q", fileName)
 		return
 	}
 
@@ -1038,16 +1098,17 @@ type Worksheet struct {
 	ID               int
 	Name             string
 	WorkbookFileName string
-	Blocks           []Block       `gorm:"ForeignKey:WorksheetID"`
-	Answer           Answer        `gorm:"ForeignKey:AnswerID"`
+	Blocks           []Block       `gorm:"foreignkey:WorksheetID"`
+	Answer           Answer        `gorm:"foreignkey:AnswerID"`
 	AnswerID         sql.NullInt64 `gorm:"column:StudentAnswerID;index;type:int"`
-	Workbook         Workbook      `gorm:"ForeignKey:WorkbookId"`
+	Workbook         Workbook      `gorm:"foreignkey:WorkbookId"`
 	WorkbookID       int           `gorm:"index"`
 	IsReference      bool
 	OrderNum         int
 	Idx              int
 	IsPlagiarised    bool   // sql.NullBool
-	Cells            []Cell `gorm:"ForeignKey:WorksheetID"`
+	Cells            []Cell `gorm:"foreignkey:WorksheetID"`
+	questionID       int    `gorm:"-"`
 }
 
 // TableName overrides default table name for the model
@@ -1068,7 +1129,7 @@ func (ws *Worksheet) AddAuxBlock(b *Block, cellType string) {
 		"Chart":      7,
 		"Sorting":    9,
 	}[cellType]; !ok {
-		log.Errorf("Incorrect cell type value: %q", cellType)
+		log.Errorf("incorrect cell type value: %q", cellType)
 	}
 	b.WorksheetID = ws.ID
 	Db.Create(b)
@@ -1086,6 +1147,7 @@ func (ws *Worksheet) AddAuxBlock(b *Block, cellType string) {
 type BlockCommentRow struct {
 	Range                  string
 	CommentText            string
+	Marks                  float64
 	TRow, LCol, BRow, RCol int
 }
 
@@ -1100,6 +1162,7 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	rows, err := Db.Raw(`SELECT
 	  b.BlockCellRange,
 	  c.CommentText,
+	  c.Marks,
 	  b.t_row, b.l_col, b.b_row, b.r_col
     FROM ExcelBlocks AS b
       LEFT JOIN BlockCommentMapping AS bc ON bc.ExcelBlockID = b.ExcelBlockID
@@ -1115,7 +1178,10 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 	col := -1
 	for rows.Next() {
 		r := BlockCommentRow{}
-		rows.Scan(&r.Range, &r.CommentText, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.TRow, &r.LCol, &r.BRow, &r.RCol)
+		if r.TRow == 0 && r.LCol == 0 && r.BRow == 0 && r.RCol == 0 && r.Range != "" {
+			r.LCol, r.TRow, r.RCol, r.BRow, _ = getMaxMinFromDimensionRef(r.Range)
+		}
 		if r.LCol != col {
 			col = r.LCol
 			res[col] = make([]BlockCommentRow, 1)
@@ -1132,12 +1198,14 @@ func (ws *Worksheet) GetBlockComments() (res map[int][]BlockCommentRow, err erro
 type CellCommentRow struct {
 	Range       string
 	CommentText string
+	Marks       float64
 	Row, Col    int
 }
 
 // GetCellComments retrieves all block comments in a form of a map
 func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
-	rows, err := Db.Raw(`SELECT cell.cell_range, c.CommentText, cell.row, cell.col
+	rows, err := Db.Raw(
+		`SELECT cell.cell_range, c.CommentText, c.Marks, cell.row, cell.col
     FROM Cells AS cell JOIN Comments AS c ON c.CommentID = cell.CommentID
     WHERE  cell.worksheet_id = ?
 	ORDER BY cell.col, cell."row"`, ws.ID).Rows()
@@ -1149,7 +1217,10 @@ func (ws *Worksheet) GetCellComments() (res []CellCommentRow, err error) {
 	res = make([]CellCommentRow, 0)
 	for rows.Next() {
 		r := CellCommentRow{}
-		rows.Scan(&r.Range, &r.CommentText, &r.Row, &r.Col)
+		rows.Scan(&r.Range, &r.CommentText, &r.Marks, &r.Row, &r.Col)
+		if r.Row == 0 && r.Col == 0 {
+			r.Col, r.Row, _ = xlsx.GetCoordsFromCellIDString(r.Range)
+		}
 		res = append(res, r)
 	}
 	return
@@ -1163,11 +1234,11 @@ type Block struct {
 	Range           string                       `gorm:"column:BlockCellRange"`
 	Formula         string                       `gorm:"column:BlockFormula"` // first block cell formula
 	RelativeFormula string                       // first block cell relative formula formula
-	Cells           []Cell                       `gorm:"ForeignKey:BlockID"`
-	Worksheet       Worksheet                    `gorm:"ForeignKey:WorksheetID"`
+	Cells           []Cell                       `gorm:"foreignkey:BlockID"`
+	Worksheet       Worksheet                    `gorm:"foreignkey:WorksheetID"`
 	WorksheetID     int                          `gorm:"index"`
-	CommentMappings []BlockCommentMapping        `gorm:"ForeignKey:ExcelBlockID"`
-	Chart           Chart                        `gorm:"ForeignKey:ChartId"`
+	CommentMappings []BlockCommentMapping        `gorm:"foreignkey:ExcelBlockID"`
+	Chart           Chart                        `gorm:"foreignkey:ChartId"`
 	ChartID         sql.NullInt64                `grom:"type:int;index"`
 	IsReference     bool                         // the block is used for referencing the expected bloks
 	TRow            int                          `gorm:"index"` // Top row
@@ -1180,6 +1251,7 @@ type Block struct {
 	PivotID         sql.NullInt64                `gorm:"type:int"`
 	i               struct{ sr, sc, er, ec int } `gorm:"-"` // "Inner" block - the block containing values
 	isEmpty         bool                         `gorm:"-"` // All block cells are empty
+	questionID      int                          `gorm:"-"`
 }
 
 // TableName overrides default table name for the model
@@ -1253,18 +1325,6 @@ func (b *Block) Address() string {
 // InnerAddress - the block "inner" range excluding empty cells
 func (b *Block) InnerAddress() string {
 	return CellAddress(b.i.sr, b.i.sc) + ":" + CellAddress(b.i.er, b.i.ec)
-}
-
-//  getCellComment returns cell comment text value
-func getCellComment(file *xlsx.File, cellID string) string {
-	if file.Comments != nil {
-		for _, c := range file.Comments {
-			if cellID == c.Ref {
-				return c.Text
-			}
-		}
-	}
-	return ""
 }
 
 // cellValue returns cell value
@@ -1405,16 +1465,42 @@ func (b *Block) findWholeWithin(sheet *xlsx.Sheet, rb Block, importFormatting bo
 	b.Range = b.Address()
 	for r := b.TRow; r <= b.BRow; r++ {
 		for c := b.LCol; c <= b.RCol; c++ {
-			cell := sheet.Cell(r, c)
-			var updatedFormula string
-			updatedFormula = ChangeFormula(cell.Formula())
-			err := Db.Create(&Cell{
+			wsCell := sheet.Cell(r, c)
+			updatedFormula := ChangeFormula(wsCell.Formula())
+			cell := Cell{
 				BlockID:     NewNullInt64(b.ID),
 				WorksheetID: b.WorksheetID,
 				Formula:     updatedFormula,
-				Value:       cellValue(cell),
+				Value:       cellValue(wsCell),
 				Range:       CellAddress(r, c),
-			}).Error
+			}
+			if b.questionID > 0 {
+				var result struct {
+					CommentID int `gorm:"column:CommentID"`
+				}
+				if err := Db.Raw(`
+					SELECT c.CommentID AS CommentID
+					FROM Cells AS c
+						-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+						JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+						JOIN StudentAnswers AS sa ON sa.StudentAnswerID = ws.StudentAnswerID
+					WHERE
+						sa.QuestionID = ?
+						AND c.Value = ?
+						AND c.cell_range = ?
+						-- AND b.BlockCellRange = ?
+						-- AND b.BlockFormula= ?
+						AND ws.name = ?
+					LIMIT 1
+				`, b.questionID, cell.Value, cell.Range, b.Range, b.Formula, sheet.Name).Scan(&result).Error; err != nil && !gorm.IsRecordNotFoundError(err) {
+					log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
+				}
+				if result.CommentID > 0 {
+					log.Debugf("Linked comment ID: %d to range: %q", result.CommentID, cell.Range)
+					cell.CommentID = NewNullInt64(result.CommentID)
+				}
+			}
+			err := Db.Create(&cell).Error
 			if err != nil {
 				log.WithError(err).Error("Failed to create a cell.")
 			}
@@ -1480,7 +1566,7 @@ func (b *Block) IsInside(r, c int) bool {
 // Cell - a single cell of the block
 type Cell struct {
 	ID                    int
-	Block                 Block         `gorm:"ForeignKey:BlockID"`
+	Block                 Block         `gorm:"foreignkey:BlockID"`
 	BlockID               sql.NullInt64 `gorm:"index;type:int"`
 	Worksheet             Worksheet
 	WorksheetID           int    `gorm:"index"`
@@ -1540,11 +1626,14 @@ func OpenDb(url string) (db *gorm.DB, err error) {
 		log.Fatalf("Unsupported driver: %q. It should be either 'mysql' or 'sqlite'.", parts[0])
 	}
 	db, err = gorm.Open(parts[0], parts[1])
-	if parts[0] == "mysql" {
+	switch parts[0] {
+	case "mysql":
 		db.Set("gorm:table_options", "collation_connection=utf8_bin")
 		if err := db.Exec("SET @@sql_mode='ANSI'").Error; err != nil {
 			log.Error(err)
 		}
+	case "sqlite3":
+		db.Exec("PRAGMA foreign_keys = ON")
 	}
 	if err != nil {
 		log.Error(err)
@@ -1570,9 +1659,9 @@ type MySQLQuestion struct {
 	AuthorUserID       int                 `gorm:"column:AuthorUserID;not null"`
 	WasCompared        bool                `gorm:"default:0"`
 	IsProcessed        bool                `gorm:"column:IsProcessed;default:0"`
-	Source             Source              `gorm:"ForeignKey:FileID"`
-	Answers            []Answer            `gorm:"ForeignKey:QuestionID"`
-	QuestionExcelDatas []QuestionExcelData `gorm:"ForeignKey:QuestionID"`
+	Source             Source              `gorm:"foreignkey:FileID"`
+	Answers            []Answer            `gorm:"foreignkey:QuestionID"`
+	QuestionExcelDatas []QuestionExcelData `gorm:"foreignkey:QuestionID"`
 	ReferenceID        sql.NullInt64       `gorm:"index;type:int"`
 	IsFormatting       bool
 	IsRubricCreated    bool
@@ -1588,8 +1677,8 @@ type Comment struct {
 	ID              int                   `gorm:"column:CommentID;primary_key:true;AUTO_INCREMENT"`
 	Text            string                `gorm:"column:CommentText"`
 	Marks           float64               `gorm:"column:Marks;type:float"`
-	CommentMappings []BlockCommentMapping `gorm:"ForeignKey:ExcelCommentID"`
-	AnswerComments  []AnswerComment       `gorm:"ForeignKey:CommentID"`
+	CommentMappings []BlockCommentMapping `gorm:"foreignkey:ExcelCommentID"`
+	AnswerComments  []AnswerComment       `gorm:"foreignkey:CommentID"`
 }
 
 // TableName overrides default table name for the model
@@ -1720,6 +1809,11 @@ func SetDb() {
 	Db.AutoMigrate(&AutoEvaluation{})
 	Db.AutoMigrate(&Rubric{})
 	Db.AutoMigrate(&DefinedName{})
+	Db.AutoMigrate(&Problem{})
+	Db.AutoMigrate(&ProblemSheet{})
+	Db.AutoMigrate(&ProblemSheetData{})
+	Db.AutoMigrate(&QuestionFile{})
+	Db.AutoMigrate(&QuestionFileSheet{})
 	if isMySQL {
 		// Add some foreing key constraints to MySQL DB:
 		log.Debug("Adding a constraint to Wroksheets -> Answers...")
@@ -1745,9 +1839,11 @@ func SetDb() {
 		Db.Model(&Filter{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
 		Db.Model(&DateGroupItem{}).AddForeignKey("filter_id", "Filters(id)", "CASCADE", "CASCADE")
 		Db.Model(&PivotTable{}).AddForeignKey("DataSourceID", "DataSources(id)", "CASCADE", "CASCADE")
+
 		Db.Model(&XLQTransformation{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&XLQTransformation{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
-		// Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&XLQTransformation{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+
 		Db.Model(&AutoEvaluation{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("UserID", "Users(UserID)", "CASCADE", "CASCADE")
 		Db.Model(&StudentAssignment{}).AddForeignKey("AssignmentID", "CourseAssignments(AssignmentID)", "CASCADE", "CASCADE")
@@ -1755,6 +1851,17 @@ func SetDb() {
 		Db.Model(&Rubric{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("worksheet_id", "WorkSheets(id)", "CASCADE", "CASCADE")
 		Db.Model(&DefinedName{}).AddForeignKey("cell_id", "Cells(id)", "CASCADE", "CASCADE")
+		Db.Model(&Problem{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&ProblemSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&ProblemSheetData{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&ProblemSheetData{}).AddForeignKey("ProblemWorkSheet_ID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
+
+		Db.Model(&QuestionFile{}).AddForeignKey("FileID", "FileSources(FileID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFile{}).AddForeignKey("QuestionID", "Questions(QuestionID)", "CASCADE", "CASCADE")
+
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("Problem_ID", "Problems(ID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("ProblemWorkSheetsID", "ProblemWorkSheets(ID)", "CASCADE", "CASCADE")
+		Db.Model(&QuestionFileSheet{}).AddForeignKey("QuestionFileID", "QuestionFiles(ID)", "CASCADE", "CASCADE")
 	}
 }
 
@@ -1781,21 +1888,26 @@ type RowsToProcessResult struct {
 }
 
 // RowsToProcess returns answer file sources
-func RowsToProcess() ([]RowsToProcessResult, error) {
+func RowsToProcess(assignmentID int) ([]RowsToProcessResult, error) {
 
 	// TODO: select file links from StudentAnswers and download them form S3 buckets..."
-	rows, err := Db.Table("FileSources").
+	// Db.LogMode(true)
+	query := Db.Table("FileSources").
 		Select("FileSources.FileID, S3BucketName, S3Key, FileName, StudentAnswerID, QuestionID").
 		Joins("JOIN StudentAnswers ON StudentAnswers.FileID = FileSources.FileID").
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
-		Where("StudentAnswers.was_xl_processed = ?", 0).Rows()
-	defer rows.Close()
-
+		Where("StudentAnswers.was_xl_processed = ?", 0)
+	if assignmentID > -1 {
+		query = query.Joins("JOIN StudentAssignments ON StudentAssignments.StudentAssignmentID  = StudentAnswers.StudentAssignmentID").
+			Where("StudentAssignments.AssignmentID = ?", assignmentID)
+	}
+	rows, err := query.Rows()
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var results []RowsToProcessResult
 	for rows.Next() {
@@ -1804,6 +1916,7 @@ func RowsToProcess() ([]RowsToProcessResult, error) {
 		results = append(results, r)
 	}
 
+	// Db.LogMode(false)
 	return results, nil
 }
 
@@ -1819,6 +1932,7 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 		q = q.Joins("JOIN CourseAssignments ON CourseAssignments.AssignmentID = QuestionAssignmentMapping.AssignmentID")
 	}
 	q = q.Where("was_comment_processed = ?", 0).
+		Where("was_xl_processed = ?", 1).
 		Where("FileName IS NOT NULL").
 		Where("FileName != ?", "").
 		Where("FileName LIKE ?", "%.xlsx").
@@ -1835,11 +1949,10 @@ func RowsToComment(assignmentID int) ([]RowsToProcessResult, error) {
 		q = q.Where("QuestionAssignmentMapping.AssignmentID = ?", assignmentID)
 	}
 	rows, err := q.Rows()
-	defer rows.Close()
-
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var results []RowsToProcessResult
 	for rows.Next() {
@@ -1881,14 +1994,40 @@ func (ws *Worksheet) createEmptyCellBlock(sheet *xlsx.Sheet, r, c int) (err erro
 	if err := Db.Create(&block).Error; err != nil {
 		return nil
 	}
-	return Db.Create(&Cell{
+	cell := Cell{
 		BlockID:     NewNullInt64(block.ID),
 		WorksheetID: ws.ID,
 		Row:         r,
 		Col:         c,
 		Range:       address,
 		Value:       cellValue(sheet.Cell(r, c)),
-	}).Error
+	}
+	{
+		var result struct {
+			CommentID int `gorm:"column:CommentID"`
+		}
+		// `gorm:"column:CommentID"`
+		if err := Db.Raw(`
+		SELECT c.CommentID AS CommentID
+		FROM Cells AS c
+			-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+			JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+			JOIN StudentAnswers AS sa ON sa.StudentAnswerID = ws.StudentAnswerID
+		WHERE
+			sa.QuestionID = ?
+			AND c.Value = ?
+			AND c.cell_range = ?
+			AND ws.name = ?
+		LIMIT 1
+	`, ws.questionID, cell.Value, cell.Range, sheet.Name).Scan(&result).Error; err != nil && !gorm.IsRecordNotFoundError(err) {
+			log.WithError(err).Errorf("Failed to select a matching cell: %#v.", cell)
+		}
+		if result.CommentID > 0 {
+			log.Debugf("Linked comment ID: %d to range: %q", result.CommentID, cell.Range)
+			cell.CommentID = NewNullInt64(result.CommentID)
+		}
+	}
+	return Db.Create(&cell).Error
 }
 
 // FindBlocksInside - find answer blocks within the reference block (rb) and store them
@@ -1914,6 +2053,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 					LCol:            c,
 					Formula:         formula,
 					RelativeFormula: RelativeFormula(r, c, formula),
+					questionID:      ws.questionID,
 				}
 				if !DryRun {
 					Db.Create(&b)
@@ -1941,7 +2081,7 @@ func (ws *Worksheet) FindBlocksInside(sheet *xlsx.Sheet, rb Block, importFormatt
 }
 
 // ExtractBlocksFromFile extracts blocks from the given file and stores in the DB
-func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerIDs ...int) (wb Workbook, err error) {
+func ExtractBlocksFromFile(fileName, color string, force, verbose, skipHidden bool, answerIDs ...int) (wb Workbook, err error) {
 	var (
 		answerID int
 		answer   Answer
@@ -1949,18 +2089,18 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	if len(answerIDs) > 0 {
 		answerID = answerIDs[0]
 	} else {
-		err = errors.New("Missing AnswerID")
+		err = errors.New("missing AnswerID")
 		return
 	}
 	res := Db.First(&answer, answerID)
 	if res.RecordNotFound() {
-		err = fmt.Errorf("Answer (ID: %d) not found", answerID)
+		err = fmt.Errorf("answer (ID: %d) not found", answerID)
 		return
 	}
 
 	file, err := xlsx.OpenFile(fileName)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to open the file %q (AnswerID: %d), file might be corrupt.",
+		log.WithError(err).Errorf("failed to open the file %q (AnswerID: %d), file might be corrupt.",
 			fileName, answerID)
 
 		if err := Db.Model(&answer).Updates(map[string]interface{}{
@@ -1975,7 +2115,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	result := Db.First(&wb, Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)})
 	if !result.RecordNotFound() {
 		if !force {
-			log.Errorf("File %q was already processed.", fileName)
+			log.Errorf("file %q was already processed.", fileName)
 			return
 		}
 		log.Warnf("File %q was already processed.", fileName)
@@ -1988,7 +2128,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			wb = Workbook{FileName: fileName, AnswerID: NewNullInt64(answerID)}
 
 			if err = Db.Create(&wb).Error; err != nil {
-				log.WithError(err).Errorf("Failed to create workbook entry %#v", wb)
+				log.WithError(err).Errorf("failed to create workbook entry %#v", wb)
 				return
 			}
 			if DebugLevel > 1 {
@@ -1998,7 +2138,6 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	} else if err = result.Error; err != nil {
 		return
 	}
-
 	if verbose {
 		log.Infof("*** Processing workbook: %s", fileName)
 	}
@@ -2016,13 +2155,23 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		log.Infof("*** Processing the answer ID: %d for the question %s", answerID, q)
 	}
 
+	var sa StudentAssignment
+	if err = Db.Model(&answer).Related(&sa, "StudentAssignmentID").Error; err != nil {
+		log.WithError(err).Errorf("missing student assignment for the answer (ID: %d)", answer.ID)
+	}
+
+	GAEntries, err := q.GetGAEntries(file, sa.UserID)
+	if err != nil {
+		return
+	}
+
 	allSheets := file.Sheets
 	sheetIDs := make([]int, len(allSheets))
 	wbReferences := make(map[string]blockList)
 	for orderNum, sheet := range allSheets {
 
-		if sheet.Hidden {
-			log.Infof("Skipping hidden worksheet %q", sheet.Name)
+		if (skipHidden && sheet.Hidden) || sheet.Name == gradingAssistanceSheetName {
+			log.Infof("Skipping hidden worksheet %q or GA sheet", sheet.Name)
 			continue
 		}
 
@@ -2033,17 +2182,30 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 		var ws Worksheet
 		var references []Block
 		if !DryRun {
+			var isPlagiarised bool
+			GAEntry, ok := GAEntries[orderNum+1]
+			isPlagiarised = !(ok && GAEntry.isNotPlagiarised)
+			if isPlagiarised {
+				if ok {
+					log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d) based on GA entry: %#v", sheet.Name, orderNum+1, GAEntries)
+				} else {
+					log.Infof("Detected plagiarisation for the spreadsheet %q (No.%d), missing GA entry.", sheet.Name, orderNum+1)
+				}
+			}
+
 			err = Db.FirstOrCreate(&ws, Worksheet{
 				Name:             sheet.Name,
 				WorkbookID:       wb.ID,
 				WorkbookFileName: wb.FileName,
 				AnswerID:         NewNullInt64(answerID),
 				OrderNum:         orderNum,
+				IsPlagiarised:    isPlagiarised,
 			}).Error
 			if err != nil {
 				log.WithError(err).Errorln("*** Failed to create worksheet entry: ", sheet.Name)
 			}
 		}
+		ws.questionID = q.ID // track internally the question
 		wbReferences[sheet.Name] = references
 		sheetIDs[orderNum] = ws.ID
 
@@ -2053,7 +2215,8 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				Joins("JOIN WorkSheets ON WorkSheets.id = ExcelBlocks.worksheet_id").
 				Where("ExcelBlocks.is_reference").
 				Where("WorkSheets.workbook_id = ?", q.ReferenceID).
-				Where("WorkSheets.order_num = ?", orderNum).
+				// Where("WorkSheets.order_num = ?", orderNum).
+				Where("WorkSheets.name = ?", sheet.Name).
 				Find(&references).Error
 			if err != nil {
 				log.WithError(err).Errorln("Failed to fetch reference blocks for the question:", q)
@@ -2133,10 +2296,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	wb.ImportWorksheets(fileName)
 
 	// Add missing blocks and cells from the model:
-	var sa StudentAssignment
-	if err := Db.Where("StudentAssignmentID = ?", answer.StudentAssignmentID).First(&sa).Error; err != nil {
-		log.WithError(err).Errorf("Failed to find the stuedent assignemt for the answer (AnswerID: %d)", answerID)
-	} else if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
+	if sa.UserID != ModelAnswerUserID { // Skip it is a model answer
 		var ma Answer
 		if res := Db.
 			Joins("JOIN StudentAssignments AS msa ON msa.StudentAssignmentID = StudentAnswers.StudentAssignmentID").
@@ -2169,9 +2329,9 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 				log.WithError(err).Errorln("Failed to add cells from the model answer.")
 			}
 		} else if res.RecordNotFound() {
-			log.Errorf("A model answer for the current anser (AnswerID: %d) doesn't exist.", answerID)
+			log.Errorf("a model answer for the current anser (AnswerID: %d) doesn't exist.", answerID)
 		} else {
-			log.WithError(res.Error).Errorf("Failed to find the model answer for the current anser (AnserID: %d)", answerID)
+			log.WithError(res.Error).Errorf("failed to find the model answer for the current anser (AnserID: %d)", answerID)
 		}
 	}
 
@@ -2180,42 +2340,69 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 			UPDATE StudentAnswers
 			SET was_xl_processed = 1
 			WHERE StudentAnswerID = ?`, answerID); err != nil {
-		log.WithError(err).Errorf("Failed to update the answer entry.")
+		log.WithError(err).Errorf("failed to update the answer entry.")
 	}
 
 	// Comments that should be linked with the file:
-	const commentsToMapSQL = `
-	SELECT
-		nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
-	-- Newly added/processed answers
-	FROM StudentAnswers AS nsa
-	JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
-	JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
-	JOIN ExcelBlocks AS nb
-	ON nb.worksheet_id = nws.id
-	-- Existing asnwers with mapped comments
-	JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
-		AND sa.was_xl_processed != 0
-		AND sa.StudentAnswerID != nsa.StudentAnswerID
-	JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
-	JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
-	JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-		AND b.BlockCellRange = nb.BlockCellRange
-		AND b.BlockFormula = nb.BlockFormula
-	JOIN BlockCommentMapping AS bc
-	ON bc.ExcelBlockID = b.ExcelBlockID
-	-- Make sure the newly added block isn't mapped already
-	LEFT OUTER JOIN BlockCommentMapping AS nbc
-	ON nbc.ExcelBlockID = nb.ExcelBlockID
-	WHERE nwb.StudentAnswerID = ?
-	AND nbc.ExcelCommentID IS NULL
-	GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
+	/*
+		const commentsToMapSQL = `
+		SELECT
+			nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+		-- Newly added/processed answers
+		FROM StudentAnswers AS nsa
+		JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+		JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+		JOIN ExcelBlocks AS nb
+		ON nb.worksheet_id = nws.id
+		-- Existing asnwers with mapped comments
+		JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+			AND sa.was_xl_processed != 0
+			AND sa.StudentAnswerID != nsa.StudentAnswerID
+		JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+		JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+			AND b.BlockCellRange = nb.BlockCellRange
+			AND b.BlockFormula = nb.BlockFormula
+		JOIN BlockCommentMapping AS bc
+		ON bc.ExcelBlockID = b.ExcelBlockID
+		-- Make sure the newly added block isn't mapped already
+		LEFT OUTER JOIN BlockCommentMapping AS nbc
+		ON nbc.ExcelBlockID = nb.ExcelBlockID
+		WHERE nwb.StudentAnswerID = ?
+		AND nbc.ExcelCommentID IS NULL
+		GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID`
+	*/
 
 	// Insert block -> comment mapping:
 	sql := `
 		INSERT INTO BlockCommentMapping(ExcelBlockID, ExcelCommentID)
-		SELECT ExcelBlockID, ExcelCommentID FROM (` +
-		commentsToMapSQL + ") AS c"
+		SELECT ExcelBlockID, ExcelCommentID FROM (
+			SELECT
+				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+			-- Newly added/processed answers
+			FROM StudentAnswers AS nsa
+			JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+			JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+			JOIN ExcelBlocks AS nb
+			ON nb.worksheet_id = nws.id
+			-- Existing asnwers with mapped comments
+			JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+				AND sa.was_xl_processed != 0
+				AND sa.StudentAnswerID != nsa.StudentAnswerID
+			JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+			JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				AND b.BlockCellRange = nb.BlockCellRange
+				AND b.BlockFormula = nb.BlockFormula
+			JOIN BlockCommentMapping AS bc
+			ON bc.ExcelBlockID = b.ExcelBlockID
+			-- Make sure the newly added block isn't mapped already
+			LEFT OUTER JOIN BlockCommentMapping AS nbc
+			ON nbc.ExcelBlockID = nb.ExcelBlockID
+			WHERE nwb.StudentAnswerID = ?
+			AND nbc.ExcelCommentID IS NULL
+			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
+	) AS c`
 	_, err = Db.DB().Exec(sql, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
@@ -2225,9 +2412,43 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 	// Insert block -> comment mapping:
 	sql = `
 		INSERT INTO StudentAnswerCommentMapping(StudentAnswerID, CommentID)
-		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (` +
-		commentsToMapSQL + ") AS c"
-	_, err = Db.DB().Exec(sql, answerID)
+		-- comments linked from similar cells
+		SELECT ws.StudentAnswerID, c.CommentID
+		FROM Cells AS c
+			-- JOIN ExcelBlocks AS b ON b.ExcelBlockID = c.block_id
+			JOIN WorkSheets AS ws ON ws.id = c.worksheet_id
+		WHERE
+			c.CommentID IS NOT NULL
+			AND ws.StudentAnswerID = ?
+		UNION
+		SELECT DISTINCT StudentAnswerID, ExcelCommentID FROM (
+			SELECT
+				nsa.StudentAnswerID, nb.ExcelBlockID, MAX(bc.ExcelCommentID) AS ExcelCommentID
+			-- Newly added/processed answers
+			FROM StudentAnswers AS nsa
+			JOIN WorkBooks AS nwb ON nwb.StudentAnswerID = nsa.StudentAnswerID
+			JOIN WorkSheets AS nws ON nws.workbook_id = nwb.id
+			JOIN ExcelBlocks AS nb
+			ON nb.worksheet_id = nws.id
+			-- Existing asnwers with mapped comments
+			JOIN StudentAnswers AS sa ON sa.QuestionID = nsa.QuestionID
+				AND sa.was_xl_processed != 0
+				AND sa.StudentAnswerID != nsa.StudentAnswerID
+			JOIN WorkBooks AS wb ON wb.StudentAnswerID = sa.StudentAnswerID
+			JOIN WorkSheets AS ws ON ws.workbook_id = wb.id
+			JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				AND b.BlockCellRange = nb.BlockCellRange
+				AND b.BlockFormula = nb.BlockFormula
+			JOIN BlockCommentMapping AS bc
+			ON bc.ExcelBlockID = b.ExcelBlockID
+			-- Make sure the newly added block isn't mapped already
+			LEFT OUTER JOIN StudentAnswerCommentMapping AS sacm
+			ON sacm.CommentID = nb.ExcelBlockID
+			WHERE nwb.StudentAnswerID = ?
+			AND sacm.CommentID IS NULL
+			GROUP BY nsa.StudentAnswerID, nb.ExcelBlockID
+		) AS c`
+	_, err = Db.DB().Exec(sql, answerID, answerID)
 	if err != nil {
 		log.Info("SQL: ", sql)
 		log.WithError(err).Errorln("Failed to insert block -> comment mapping.")
@@ -2256,7 +2477,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 					numFmts := ss.NumFmts.NumFmt
 					for orderNum, sheet := range allSheets {
 
-						if sheet.Hidden {
+						if skipHidden && sheet.Hidden {
 							log.Infof("Skipping hidden worksheet %q", sheet.Name)
 							continue
 						}
@@ -2280,7 +2501,7 @@ func ExtractBlocksFromFile(fileName, color string, force, verbose bool, answerID
 						rows, err := Db.Raw(`SELECT cell_range, c.id
 							FROM Cells AS c WHERE c.worksheet_id = ?`, ws.ID).Rows()
 						if err != nil {
-							log.WithError(err).Errorf("Failed to retrieve the cells for worksheet %q", ws.Name)
+							log.WithError(err).Errorf("failed to retrieve the cells for worksheet %q", ws.Name)
 						} else {
 							cells := make(map[string]int)
 							var r string
@@ -2425,7 +2646,7 @@ FROM "Users" AS u
 	JOIN Questions AS q ON q.QuestionID = a.QuestionID
 WHERE q.is_rubric_created = 0 AND u.UserID = ?
 `, ModelAnswerUserID).Error; err != nil {
-			log.WithError(err).Errorf("Failed to insert rubrics for UserID=%d.", ModelAnswerUserID)
+			log.WithError(err).Errorf("failed to insert rubrics for UserID=%d.", ModelAnswerUserID)
 		}
 		if err := Db.Exec(`
 UPDATE Questions SET is_rubric_created = 1
@@ -2497,13 +2718,13 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 							CellID:      cell.ID,
 						}).Error; err != nil {
 							log.WithError(result.Error).Errorf(
-								"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+								"failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
 								dn, cell.WorksheetID, dn.Data, cell.ID)
 						}
 					}
 				} else {
 					log.WithError(result.Error).Errorf(
-						"Failed to create an error for %#v, worksheet ID: %d, value: %q",
+						"failed to create an error for %#v, worksheet ID: %d, value: %q",
 						dn, worksheetID, modifiedValue)
 				}
 			}
@@ -2543,7 +2764,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 			if strings.HasPrefix(dn.Name, "solver_") {
 				cell, ok := cells[dn.LocalSheetID]
 				if !ok {
-					log.Errorf("Missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
+					log.Errorf("missing cell data for 'solver_opt' of LocalSheetID: %d", dn.LocalSheetID)
 					continue
 				}
 
@@ -2557,7 +2778,7 @@ WHERE is_rubric_created = 0 AND QuestionID IN (SELECT QuestionID FROM Rubrics)
 					Description: descriptions[i],
 				}).Error; err != nil {
 					log.WithError(result.Error).Errorf(
-						"Failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
+						"failed to create an error for %#v, worksheet ID: %d, value: %q, cell ID: %d",
 						dn, cell.WorksheetID, dn.Data, cell.ID)
 				}
 			}
@@ -2683,14 +2904,18 @@ func (ConditionalFormatting) TableName() string {
 
 // XLQTransformation - XLQ Transformations
 type XLQTransformation struct {
-	ID            int
-	CellReference string    `gorm:"type:varchar(10);not null"`
-	TimeStamp     time.Time `gorm:"not null"`
-	UserID        int       `gorm:"column:UserID;not null;index"`
-	Question      Question
-	QuestionID    int `gorm:"column:QuestionID;not null;index"`
-	// Source        Source
-	// SourceID      int `gorm:"column:FileID;not null;index"`
+	ID             int
+	CellReference  string    `gorm:"type:varchar(10);not null"`
+	TimeStamp      time.Time `gorm:"not null"`
+	UserID         int       `gorm:"column:UserID;not null;index"`
+	User           *User
+	QuestionID     int `gorm:"column:QuestionID;not null;index"`
+	Question       Question
+	SourceID       int       `gorm:"column:FileID;not null;index"`
+	Source         *Source   `gorm:"foreignkey:SourceID"`
+	QuestionFileID int       `gorm:"column:questionfile_id;not null;index"`
+	QuestionFile   *Question `gorm:"foreignkey:questionfile_id"`
+	Randomstring   string
 }
 
 // TableName overrides default table name for the model
@@ -2917,13 +3142,13 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 		// List of all keys. In case there were multiple downloads
 		keys := make(map[string]string)
 		for _, t := range transformations {
-			keys[t.CellReference] = t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+			// keys[t.CellReference] = t.TimeStamp.UTC().Format(time.UnixDate) + " | " + strconv.Itoa(t.UserID)
+			keys[t.CellReference] = t.Randomstring
 		}
 		for _, ws := range worksheets {
 			for r, k := range keys {
 				value := file.GetCellValue(ws.Name, r)
 				if value == k {
-					ws.IsPlagiarised = false
 					goto MATCH
 				}
 				if VerboseLevel > 0 {
@@ -2937,8 +3162,8 @@ func (wb *Workbook) MatchPlagiarismKeys(file *excelize.File) {
 				log.Infof("No match found among %v", transformations)
 			}
 			ws.IsPlagiarised = true
-		MATCH:
 			Db.Save(&ws)
+		MATCH:
 		}
 	}
 }

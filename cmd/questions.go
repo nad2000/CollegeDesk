@@ -20,6 +20,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // questionsCmd represents the questions command
@@ -43,7 +44,7 @@ func processQuestions(cmd *cobra.Command, args []string) {
 	}
 	defer Db.Close()
 
-	manager := createS3Manager()
+	manager := createManager()
 	HandleQuestions(manager)
 }
 
@@ -72,7 +73,7 @@ func HandleQuestions(manager s3.FileManager) error {
 		}
 		log.Infof("Processing %q", fileName)
 
-		if err := q.ImportFile(fileName, color, verbose); err != nil {
+		if err := q.ImportFile(fileName, color, verbose, skipHidden); err != nil {
 			log.WithError(err).Errorf("Failed to import %q for the question %#v", fileName, q)
 			continue
 		}
@@ -95,4 +96,7 @@ func HandleQuestions(manager s3.FileManager) error {
 
 func init() {
 	RootCmd.AddCommand(questionsCmd)
+	flags := questionsCmd.Flags()
+	flags.StringVarP(&color, "color", "c", defaultColor, "The block filling color")
+	viper.BindPFlag("color", flags.Lookup("color"))
 }

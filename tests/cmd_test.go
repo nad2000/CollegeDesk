@@ -118,16 +118,28 @@ func TestDemoFile(t *testing.T) {
 		AnswerExplanation: sql.NullString{String: "DUMMY", Valid: true},
 		MaxScore:          999.99,
 	}
-	db.FirstOrCreate(&q, &q)
+	db.FirstOrCreate(&q, q)
+	var u model.User
+	db.FirstOrCreate(&u, u)
+	assignment := model.Assignment{
+		Title: "TestDemoFile...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	a := model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2019-12-13 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, &a)
 
 	t.Log("+++ Start extration")
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 
 	result := db.First(&wb, "file_name = ?", fileName)
 	if result.Error != nil {
@@ -204,15 +216,17 @@ func TestDemoFile(t *testing.T) {
 	}
 	db.FirstOrCreate(&q, q)
 	a = model.Answer{
-		ShortAnswer:    fileName,
-		SubmissionTime: *parseTime("2017-01-01 14:42"),
-		QuestionID:     model.NewNullInt64(q.ID),
+		ShortAnswer:         fileName,
+		SubmissionTime:      *parseTime("2019-12-13 14:42"),
+		QuestionID:          model.NewNullInt64(q.ID),
+		StudentAssignmentID: sa.ID,
 	}
 	db.FirstOrCreate(&a, a)
 
-	model.ExtractBlocksFromFile(fileName, "", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "", true, true, true, a.ID)
 }
 
+/*
 func TestFormattingImport(t *testing.T) {
 	db, _ = model.OpenDb(url)
 	defer db.Close()
@@ -263,13 +277,14 @@ func TestFormattingImport(t *testing.T) {
 	}
 	db.FirstOrCreate(&a, a)
 
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 	var count int
 	db.Model(&model.Rubric{}).Count(&count)
 	if expected := 116; count != expected {
 		t.Errorf("Expected %d rubric entries, got: %d", expected, count)
 	}
 }
+*/
 
 func deleteData() {
 
@@ -327,7 +342,7 @@ func createTestDB() *gorm.DB {
 	cmd.Db = db
 
 	deleteData()
-	for _, uid := range []int{4951, 4952, 4953, 10000} {
+	for _, uid := range []int{-1, 4951, 4952, 4953, 10000} {
 		db.Create(&model.User{ID: uid})
 	}
 	assignment := model.Assignment{
@@ -403,7 +418,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
-				// SourceID:      f.ID,
+				SourceID:      f.ID,
 			})
 		}
 		if fn == "partial.xlsx" {
@@ -413,6 +428,7 @@ func createTestDB() *gorm.DB {
 				UserID:        4951,
 				TimeStamp:     t,
 				QuestionID:    q.ID,
+				SourceID:      f.ID,
 			})
 		}
 	}
@@ -449,6 +465,9 @@ func createTestDB() *gorm.DB {
 		})
 
 	}
+	db.Exec(`
+		INSERT INTO Problems (Number_of_sheets, Name, Category, FileID, IsProcessed)
+		SELECT 1, 'ABC123', 'CATEGORY', FileID, 1 FROM FileSources`)
 
 	return db
 }
@@ -497,7 +516,7 @@ func testImportFile(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	q.ImportFile("question.xlsx", "FFFFFF00", true, true)
 
 	var (
 		count int
@@ -528,7 +547,7 @@ func testHandleNotcolored(t *testing.T) {
 		WasCompared:      true,
 	}
 	db.Create(&q)
-	q.ImportFile("question.xlsx", "FFFFFF00", true)
+	q.ImportFile("question.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes...",
 		State: "READY_FOR_GRADING",
@@ -538,6 +557,13 @@ func testHandleNotcolored(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
+
 	for _, fn := range []string{"answer.xlsx", "answer.nocolor.xlsx"} {
 		f := model.Source{
 			FileName:     fn,
@@ -546,12 +572,13 @@ func testHandleNotcolored(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-14 14:42"),
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-14 14:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(fn, "FFFFFF00", true, true, true, a.ID)
 	}
 
 	// var count int
@@ -570,7 +597,7 @@ func testHandleNotcolored(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true)
+	q.ImportFile("Q1 Question different color.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes #2...",
 		State: "READY_FOR_GRADING",
@@ -591,7 +618,7 @@ func testHandleNotcolored(t *testing.T) {
 		SubmissionTime: *parseTime("2018-09-30 12:42"),
 	}
 	db.Create(&a)
-	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(f.FileName, "FFFFFF00", true, true, true, a.ID)
 }
 
 func testHandleNotcoloredQ3(t *testing.T) {
@@ -611,7 +638,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		IsFormatting:     true,
 	}
 	db.Create(&q)
-	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true)
+	q.ImportFile("Q3 Compounding1.xlsx", "FFFFFF00", true, true)
 	assignment = model.Assignment{
 		Title: "Test handle answers without the colorcodes #3...",
 		State: "READY_FOR_GRADING",
@@ -621,6 +648,12 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, r := range []struct {
 		fn                     string
 		blockCount, emptyCount int
@@ -630,12 +663,13 @@ func testHandleNotcoloredQ3(t *testing.T) {
 		{"Answer stud 3 Q3 Compounding1.xlsx", 3, 97},
 	} {
 		a = model.Answer{
-			Source:         model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-30 12:42"),
+			Source:              model.Source{FileName: r.fn, S3BucketName: "studentanswers"},
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-30 12:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, a.ID)
+		wb, err := model.ExtractBlocksFromFile(r.fn, "FFFFFF00", true, true, true, a.ID)
 		if err != nil {
 			t.Error(err)
 		}
@@ -655,7 +689,7 @@ func testHandleNotcoloredQ3(t *testing.T) {
 
 func testRowsToProcess(t *testing.T) {
 
-	rows, _ := model.RowsToProcess()
+	rows, _ := model.RowsToProcess(-1)
 
 	for _, r := range rows {
 		if !strings.HasSuffix(r.FileName, ".xlsx") {
@@ -668,14 +702,19 @@ func testRowsToProcess(t *testing.T) {
 
 }
 
-type testManager struct{}
+type testManager struct{ SourceDirectory string }
 
 func (m testManager) Download(sourceName, s3BucketName, s3Key, dest string) (string, error) {
-	return sourceName, nil
+	return path.Join(m.SourceDirectory, sourceName), nil
 }
 
 func (m testManager) Upload(sourceName, s3BucketName, s3Key string) (string, error) {
 	return sourceName, nil
+}
+
+func (m testManager) List(
+	bucket, prefix string) ([]s3.Entry, error) {
+	return []s3.Entry{}, nil
 }
 
 func testHandleAnswers(t *testing.T) {
@@ -697,27 +736,27 @@ func testHandleAnswers(t *testing.T) {
 	}
 	// Add missing rubric entries for all cells
 	if err := db.Exec(`
-		INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
-		SELECT
-			a.QuestionID, b.ExcelBlockID, b.BlockCellRange,
-			(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
-		FROM StudentAnswers AS a
-		JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
-		JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
-		JOIN Cells AS c ON c.block_id = b.ExcelBlockID
-		LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
-		WHERE r.id IS NULL`).Error; err != nil {
+				INSERT INTO Rubrics(QuestionID, ExcelBlockID, block_cell_range, num_cell)
+				SELECT
+					a.QuestionID, b.ExcelBlockID, b.BlockCellRange,
+					(b.b_row-b.t_row+1)*(b.r_col-b.l_col+1) AS num_cell
+				FROM StudentAnswers AS a
+				JOIN WorkSheets AS ws ON ws.StudentAnswerID = a.StudentAnswerID
+				JOIN ExcelBlocks AS b ON b.worksheet_id = ws.id
+				JOIN Cells AS c ON c.block_id = b.ExcelBlockID
+				LEFT JOIN Rubrics AS r ON r.QuestionID = a.QuestionID AND r.block_cell_range = b.BlockCellRange
+				WHERE r.id IS NULL`).Error; err != nil {
 		t.Error(err)
 	}
 	// Add marking data:
 	db.Exec("UPDATE Rubrics SET item1=1./id, item2=1./id, item3=1./id, item4=1./id, item5=1./id")
 	// Auto-commenting
 	if err := db.Exec(`
-INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
-SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
-FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
-WHERE ae.cell_id IS NULL
-`).Error; err != nil {
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%2 = 0, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL
+		`).Error; err != nil {
 		t.Error(err)
 		return
 	}
@@ -733,7 +772,7 @@ func TestProcessing(t *testing.T) {
 	t.Run("RowsToProcess", testRowsToProcess)
 	t.Run("FindBlocksInside", testFindBlocksInside)
 	t.Run("ImportFile", testImportFile)
-	t.Run("HandleAnswers", testHandleAnswers)
+	// t.Run("HandleAnswers", testHandleAnswers)
 	t.Run("HandleNotcolored", testHandleNotcolored)
 	t.Run("HandleNotcoloredQ3", testHandleNotcoloredQ3)
 	t.Run("S3Downloading", testS3Downloading)
@@ -742,12 +781,128 @@ func TestProcessing(t *testing.T) {
 	t.Run("HandleQuestions", testHandleQuestions)
 	t.Run("CurruptedFiles", testCorruptedFiles)
 	t.Run("ImportQuestionFile", testImportQuestionFile)
-	t.Run("CWA175", testCWA175)
+	// t.Run("CWA175", testCWA175)
 	t.Run("ImportWorksheets", testImportWorksheets)
 	t.Run("POI", testPOI)
-	t.Run("FullCycle", testFullCycle)
+	// t.Run("FullCycle", testFullCycle)
 	t.Run("ChangeFormula", testChangeFormula)
-	t.Run("DefinedNames", testDefinedNames)
+	// t.Run("DefinedNames", testDefinedNames)
+	t.Run("HandleProblems", testHandleProblems)
+	t.Run("GradingAssistanceData", testGradingAssistanceData)
+	t.Run("CWA380", testCWA380)
+}
+
+func testCWA380(t *testing.T) {
+
+	assignment := model.Assignment{
+		Title: "CWA-380 Testing...",
+		State: "READY_FOR_GRADING",
+	}
+	db.Create(&assignment)
+	var questionFileName = "tests/data/CWA-380/MiniCase2.xlsx"
+
+	qs := model.Source{
+		FileName:     questionFileName,
+		S3BucketName: "studentanswers",
+		S3Key:        questionFileName,
+	}
+	db.Create(&qs)
+	q := model.Question{
+		SourceID:     model.NewNullInt64(qs.ID),
+		QuestionType: model.QuestionType("FileUpload"),
+		QuestionText: questionFileName,
+		MaxScore:     1010.88,
+		AuthorUserID: 123456789,
+		WasCompared:  false,
+		IsFormatting: true,
+	}
+	if err := db.Create(&q).Error; err != nil {
+		t.Error(err)
+	}
+
+	qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+	if err := db.Create(&qf).Error; err != nil {
+		t.Error(err)
+	}
+
+	p := model.Problem{SourceID: qs.ID}
+	if err := db.Create(&p).Error; err != nil {
+		t.Error(err)
+	}
+
+	for sequence := 1; sequence <= 5; sequence++ {
+		sheetName := "Sheet" + strconv.Itoa(sequence)
+		ps := model.ProblemSheet{
+			ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
+		if err := db.Create(&ps).Error; err != nil {
+			t.Error(err)
+		}
+		qss := model.QuestionFileSheet{
+			Sequence:       sequence,
+			Name:           sheetName,
+			QuestionFileID: qf.ID,
+			ProblemSheetID: ps.ID,
+			ProblemID:      p.ID}
+		if err := db.Create(&qss).Error; err != nil {
+			t.Error(err)
+
+		}
+	}
+
+	q.ImportFile(questionFileName, "FFFFFF00", true, true)
+	sa := model.StudentAssignment{
+		UserID:       4951,
+		AssignmentID: assignment.ID,
+	}
+	db.Create(&sa)
+
+	for _, answerFileName := range []string{"data/CWA-380/MC2_12329_stud1.xlsx", "data/CWA-380/MC3_12368_MiniCase3_12368.xlsx"} {
+
+		// answer
+		af := model.Source{FileName: answerFileName, S3BucketName: "studentanswers"}
+		db.Create(&af)
+		a := model.Answer{
+			SourceID:            model.NewNullInt64(af.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2020-08-30 12:42"),
+			StudentAssignmentID: sa.ID,
+		}
+		db.Create(&a)
+		model.ExtractBlocksFromFile(answerFileName, "FFFFFF00", true, true, true, a.ID)
+		// Test if is marked plagiarised and DN counts:
+		{
+			var ws model.Worksheet
+			db.Where("workbook_file_name = ?", answerFileName).First(&ws)
+			var count int
+			db.Model(&model.DefinedName{}).Where("worksheet_id = ?", ws.ID).Count(&count)
+
+		}
+	}
+
+	// Auto-commenting
+	if err := db.Exec(`
+		INSERT INTO AutoEvaluation (cell_id, IsValueCorrect, IsFormulaCorrect, is_hardcoded)
+		SELECT c.id, c.id%3 = 1, c.id%3 = 0, c.id%4 =0
+		FROM Cells AS c LEFT OUTER JOIN AutoEvaluation AS ae ON ae.cell_id = c.id
+		WHERE ae.cell_id IS NULL AND c.id % 3 != 2
+	`).Error; err != nil {
+		t.Error(err)
+	}
+	var countBefore int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countBefore).Error; err != nil {
+		t.Error(err)
+	}
+	model.AutoCommentAnswerCells(12345, 10000)
+
+	var countAfter int
+	if err := db.Model(&model.AutoEvaluation{}).Count(&countAfter).Error; err != nil {
+		t.Error(err)
+	}
+	if countAfter != countBefore {
+		t.Errorf(
+			"Exected unchanged rowcount of AutoEvaluation table. Expected: %d, got: %d",
+			countBefore, countAfter)
+	}
 }
 
 func testChangeFormula(t *testing.T) {
@@ -791,25 +946,28 @@ func testFullCycle(t *testing.T) {
 		State: "READY_FOR_GRADING",
 	}
 	db.Create(&assignment)
-	for _, r := range []struct {
-		questionFileName, anserFileName, cr, ts string
+	for fileNo, r := range []struct {
+		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
 	}{
-		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "2018-12-27 19:18:05", 4951, false},
-		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "2018-12-27 19:51:29", 4952, true},
-		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "2018-12-28 07:59:21", 4953, true},
+		{"Question_Stud1_4951.xlsx", "Answer_stud1_NOT_PLAGIARISED.xlsx", "KE4423", "RND111", 4951, false},
+		{"Question_Stud2_4952.xlsx", "Answer_stud2_PLAGIARISED.xlsx", "LI7010", "RND222", 4952, true},
+		{"Question_Stud3_4953.xlsx", "Answer_stud3_PLAGIARISED.xlsx", "AIP5821", "RND333", 4953, true},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", -1, true}, // "missing download"
 	} {
 
-		qf := model.Source{
+		qs := model.Source{
 			FileName:     r.questionFileName,
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qf)
+		if err := db.Create(&qs).Error; err != nil {
+			t.Error(err)
+		}
+
 		q := model.Question{
-			SourceID:     model.NewNullInt64(qf.ID),
+			SourceID:     model.NewNullInt64(qs.ID),
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
@@ -820,48 +978,80 @@ func testFullCycle(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
-		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+
+		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+		if err := db.Create(&qf).Error; err != nil {
+			t.Error(err)
+		}
+
+		p := model.Problem{SourceID: qs.ID}
+		if err := db.Create(&p).Error; err != nil {
+			t.Error(err)
+		}
+
+		ps := model.ProblemSheet{ProblemID: p.ID, Name: "Sheet1", SequenceNumber: 1, ID: (fileNo + 1) * 1000}
+		if err := db.Create(&ps).Error; err != nil {
+			t.Error(err)
+		}
+
+		qss := model.QuestionFileSheet{Sequence: 1, Name: "Sheet1", QuestionFileID: qf.ID, ProblemSheetID: ps.ID, ProblemID: p.ID}
+		if err := db.Create(&qss).Error; err != nil {
+			t.Error(err)
+		}
+
+		q.ImportFile(r.questionFileName, "FFFFFF00", true, true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
 		}
-		db.Create(&sa)
+		if err := db.Create(&sa).Error; err != nil {
+			t.Error(err)
+		}
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
-		db.Create(&af)
+		if err := db.Create(&af).Error; err != nil {
+			t.Error(err)
+		}
 		a := model.Answer{
 			SourceID:            model.NewNullInt64(af.ID),
 			QuestionID:          model.NewNullInt64(q.ID),
 			SubmissionTime:      *parseTime("2018-09-30 12:42"),
 			StudentAssignmentID: sa.ID,
 		}
-		db.Create(&a)
+		if err := db.Create(&a).Error; err != nil {
+			t.Error(err)
+		}
 		if r.uid > 0 {
 			db.Create(&model.XLQTransformation{
-				CellReference: r.cr,
-				UserID:        r.uid,
-				TimeStamp:     *parseTime(r.ts),
-				QuestionID:    q.ID,
+				CellReference:  r.cr,
+				UserID:         r.uid,
+				Randomstring:   r.rs,
+				QuestionID:     q.ID,
+				SourceID:       af.ID,
+				QuestionFileID: qf.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
 				for i := 1; i < 10; i++ {
 					db.Create(&model.XLQTransformation{
-						CellReference: "A" + strconv.Itoa(i),
-						UserID:        r.uid,
-						TimeStamp:     *parseTime(r.ts),
-						QuestionID:    q.ID,
+						CellReference:  "A" + strconv.Itoa(i),
+						UserID:         r.uid,
+						Randomstring:   r.rs,
+						QuestionID:     q.ID,
+						SourceID:       af.ID,
+						QuestionFileID: qf.ID,
 					})
 				}
 			}
 		}
-		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, true, a.ID)
 		// Test if is marked plagiarised:
 		{
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+				t.Errorf("Exected that %#v will get marked as %s.", ws,
+					map[bool]string{true: "plagiarised", false: "not plagiarised"}[r.isPlagiarised])
 			}
 		}
 	}
@@ -898,25 +1088,25 @@ func testDefinedNames(t *testing.T) {
 		State: "READY_FOR_GRADING",
 	}
 	db.Create(&assignment)
-	for _, r := range []struct {
-		questionFileName, anserFileName, cr, ts string
+	for fileNo, r := range []struct {
+		questionFileName, anserFileName, cr, rs string
 		uid                                     int
 		isPlagiarised                           bool
 		DNCount                                 int
 	}{
-		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 33},
-		{"Solver Simple Question.xlsx", "stud2-solver-multi-sheet.xlsx", "D11", "2018-12-27 19:18:05", 4951, false, 36},
+		{"Solver Simple Question.xlsx", "Stud1 Solver Simple.xlsx", "D11", "TMP111", 4951, false, 33},
+		{"Solver Simple Question.xlsx", "stud2-solver-multi-sheet.xlsx", "D11", "TMP222", 4951, false, 36},
 		{"Question_Stud1_4951.xlsx", "demo.xlsx", "", "", 4953, true, 0}, // "missing download"
 	} {
 
-		qf := model.Source{
+		qs := model.Source{
 			FileName:     r.questionFileName,
 			S3BucketName: "studentanswers",
 			S3Key:        r.questionFileName,
 		}
-		db.Create(&qf)
+		db.Create(&qs)
 		q := model.Question{
-			SourceID:     model.NewNullInt64(qf.ID),
+			SourceID:     model.NewNullInt64(qs.ID),
 			QuestionType: model.QuestionType("FileUpload"),
 			QuestionText: r.questionFileName,
 			MaxScore:     1010.88,
@@ -927,12 +1117,44 @@ func testDefinedNames(t *testing.T) {
 		if err := db.Create(&q).Error; err != nil {
 			t.Error(err)
 		}
-		q.ImportFile(r.questionFileName, "FFFFFF00", true)
+
+		qf := model.QuestionFile{SourceID: qs.ID, QuestionID: q.ID}
+		if err := db.Create(&qf).Error; err != nil {
+			t.Error(err)
+		}
+
+		p := model.Problem{SourceID: qs.ID}
+		if err := db.Create(&p).Error; err != nil {
+			t.Error(err)
+		}
+
+		for sequence := 1; sequence <= 5; sequence++ {
+			sheetName := "Sheet" + strconv.Itoa(sequence)
+			ps := model.ProblemSheet{
+				ID:        (fileNo+1)*1000 + sequence,
+				ProblemID: p.ID, Name: sheetName, SequenceNumber: sequence}
+			if err := db.Create(&ps).Error; err != nil {
+				t.Error(err)
+			}
+			qss := model.QuestionFileSheet{
+				Sequence:       sequence,
+				Name:           sheetName,
+				QuestionFileID: qf.ID,
+				ProblemSheetID: ps.ID,
+				ProblemID:      p.ID}
+			if err := db.Create(&qss).Error; err != nil {
+				t.Error(err)
+
+			}
+		}
+
+		q.ImportFile(r.questionFileName, "FFFFFF00", true, true)
 		sa := model.StudentAssignment{
 			UserID:       r.uid,
 			AssignmentID: assignment.ID,
 		}
 		db.Create(&sa)
+
 		// answer
 		af := model.Source{FileName: r.anserFileName, S3BucketName: "studentanswers"}
 		db.Create(&af)
@@ -943,32 +1165,40 @@ func testDefinedNames(t *testing.T) {
 			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
-		if r.uid > 0 && r.ts != "" {
+		if r.uid > 0 && r.rs != "" {
 			db.Create(&model.XLQTransformation{
-				CellReference: r.cr,
-				UserID:        r.uid,
-				TimeStamp:     *parseTime(r.ts),
-				QuestionID:    q.ID,
+				CellReference:  r.cr,
+				UserID:         r.uid,
+				Randomstring:   r.rs,
+				QuestionID:     q.ID,
+				SourceID:       af.ID,
+				QuestionFileID: qf.ID,
 			})
 			// Create extar entries for  non-pagiarised examples
 			if !r.isPlagiarised {
 				for i := 1; i < 10; i++ {
 					db.Create(&model.XLQTransformation{
-						CellReference: "A" + strconv.Itoa(i),
-						UserID:        r.uid,
-						TimeStamp:     *parseTime(r.ts),
-						QuestionID:    q.ID,
+						CellReference:  "A" + strconv.Itoa(i),
+						UserID:         r.uid,
+						Randomstring:   r.rs,
+						QuestionID:     q.ID,
+						SourceID:       af.ID,
+						QuestionFileID: qf.ID,
 					})
 				}
 			}
 		}
-		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, a.ID)
+		model.ExtractBlocksFromFile(r.anserFileName, "FFFFFF00", true, true, true, a.ID)
 		// Test if is marked plagiarised and DN counts:
 		{
 			var ws model.Worksheet
 			db.Where("workbook_file_name = ?", r.anserFileName).First(&ws)
 			if ws.IsPlagiarised != r.isPlagiarised {
-				t.Errorf("Exected that %#v will get marked as plagiarised.", ws)
+				if r.isPlagiarised {
+					t.Errorf("Expected that %#v will get marked as plagiarised.", ws)
+				} else {
+					t.Errorf("Expected that %#v will get marked as NOT plagiarised.", ws)
+				}
 			}
 			var count int
 			db.Model(&model.DefinedName{}).Where("worksheet_id = ?", ws.ID).Count(&count)
@@ -1034,7 +1264,7 @@ func testPOI(t *testing.T) {
 		AssignmentID: assignment.ID,
 	}
 	db.Create(&sa)
-	q.ImportFile(fileName, "FFFFFF00", true)
+	q.ImportFile(fileName, "FFFFFF00", true, true)
 
 	// Answer
 	fileName = "POI Q1_4951_null.xlsx"
@@ -1054,7 +1284,7 @@ func testPOI(t *testing.T) {
 		TimeStamp:     ts,
 		QuestionID:    q.ID,
 	})
-	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, a.ID)
+	model.ExtractBlocksFromFile(fileName, "FFFFFF00", true, true, true, a.ID)
 
 	var ws model.Worksheet
 	db.Where("workbook_file_name = ?", fileName).First(&ws)
@@ -1174,6 +1404,12 @@ func testCWA175(t *testing.T) {
 		Worksheet:   ws,
 	}
 	db.Create(&rb)
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, r := range []struct {
 		fn       string
 		expected int
@@ -1192,9 +1428,10 @@ func testCWA175(t *testing.T) {
 				S3BucketName: "studentanswers",
 				S3Key:        r.fn,
 			},
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&answer)
-		model.ExtractBlocksFromFile(r.fn, "", true, true, answer.ID)
+		model.ExtractBlocksFromFile(r.fn, "", true, true, true, answer.ID)
 
 		var wb model.Workbook
 
@@ -1314,7 +1551,7 @@ func testImportQuestionFile(t *testing.T) {
 	if result.Error != nil {
 		t.Error(result.Error)
 	}
-	q.ImportFile(fileName, "FFFFFF00", true)
+	q.ImportFile(fileName, "FFFFFF00", true, true)
 }
 
 func testCorruptedFiles(t *testing.T) {
@@ -1338,6 +1575,12 @@ func testCorruptedFiles(t *testing.T) {
 		QuestionID:   q.ID,
 		AssignmentID: assignment.ID,
 	})
+	var u model.User
+	db.First(&u)
+	sa := model.StudentAssignment{UserID: u.ID, AssignmentID: assignment.ID}
+	if err := db.Create(&sa).Error; err != nil {
+		t.Error(err)
+	}
 	for _, fn := range []string{"corrupt1.xlsx", "corrupt2.xlsx", "demo.xlsx"} {
 		f := model.Source{
 			FileName:     fn,
@@ -1346,9 +1589,10 @@ func testCorruptedFiles(t *testing.T) {
 		}
 		db.Create(&f)
 		a := model.Answer{
-			SourceID:       model.NewNullInt64(f.ID),
-			QuestionID:     model.NewNullInt64(q.ID),
-			SubmissionTime: *parseTime("2018-09-14 14:42"),
+			SourceID:            model.NewNullInt64(f.ID),
+			QuestionID:          model.NewNullInt64(q.ID),
+			SubmissionTime:      *parseTime("2018-09-14 14:42"),
+			StudentAssignmentID: sa.ID,
 		}
 		db.Create(&a)
 	}
@@ -1504,6 +1748,7 @@ func TestCommenting(t *testing.T) {
 	db.Exec(`
 		UPDATE StudentAnswers SET QuestionID = StudentAnswerID%9+1
 		WHERE QuestionID IS NULL OR QuestionID = 0`)
+	db.Exec(`UPDATE StudentAnswers SET was_xl_processed = 1`)
 	db.Exec(`
 		INSERT INTO QuestionAssignmentMapping(AssignmentID, QuestionID)
 		SELECT AssignmentID, QuestionID
@@ -1872,9 +2117,9 @@ func testCellComments(t *testing.T) {
 	}
 	db.Create(&block)
 	comments := []model.Comment{
-		{Text: "cell comment 40 1742"},
-		{Text: "cell comment 40 1743"},
-		{Text: "block comment 1101"},
+		{Text: "cell comment 40 1742", Marks: 1.2},
+		{Text: "cell comment 40 1743", Marks: 4.3},
+		{Text: "block comment 1101", Marks: 5.5},
 	}
 	for i := range comments {
 		db.Create(&comments[i])
@@ -1901,7 +2146,7 @@ func testCellComments(t *testing.T) {
 	comments = []model.Comment{
 		{Text: "CELL COMMENT #1"},
 		{Text: "CELL COMMENT #2"},
-		{Text: "BLOCK COMMENT"},
+		{Text: "BLOCK COMMENT", Marks: 5},
 	}
 	for i := range comments {
 		db.Create(&comments[i])
@@ -1928,7 +2173,7 @@ func testRowsToComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if expected, got := 18, len(rows); got != expected {
+	if expected, got := 16, len(rows); got != expected {
 		t.Errorf("Expected to select %d files to comment, got: %d", expected, got)
 	}
 	if t.Failed() {

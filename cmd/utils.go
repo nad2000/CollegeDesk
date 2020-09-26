@@ -17,7 +17,13 @@ func parseTime(str string) *time.Time {
 	return &t
 }
 
-func createS3Manager() (d s3.Manager) {
+func createManager() (d s3.FileManager) {
+	if sourceDir != "" {
+		if destinationDir == "" {
+			destinationDir = sourceDir
+		}
+		return s3.LocalManager{SourceDirectory: sourceDir, DestinationDirctory: destinationDir}
+	}
 	if awsAccessKeyID == "" && awsProfile != "" || awsProfile != "default" {
 		return s3.NewManager(awsRegion, awsProfile)
 	} else if awsAccessKeyID != "" && awsSecretAccessKey != "" {
@@ -39,38 +45,6 @@ func flagString(cmd *cobra.Command, name string) string {
 		return ""
 	}
 	return conf.(string)
-}
-
-func flagStringSlice(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringSlice(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagStringArray(cmd *cobra.Command, name string) (val []string) {
-	val, err := cmd.Flags().GetStringArray(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagBool(cmd *cobra.Command, name string) (val bool) {
-	val, err := cmd.Flags().GetBool(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
-}
-
-func flagInt(cmd *cobra.Command, name string) (val int) {
-	val, err := cmd.Flags().GetInt(name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return
 }
 
 func debugCmd(cmd *cobra.Command) {

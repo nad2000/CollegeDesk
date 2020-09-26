@@ -41,12 +41,14 @@ var (
 	awsRegion              string
 	awsSecretAccessKey     string
 	cfgFile                string
+	sourceDir              string
+	destinationDir         string
 	color                  = defaultColor
 	debug                  bool
+	skipHidden             bool
 	debugLevel             int
 	dest                   string
 	force                  bool
-	region                 string
 	testing                bool
 	url                    string
 	verbose                bool
@@ -67,7 +69,7 @@ Conditions that define Cell Formula Block -
   (iii) The formula in the range of cells should be the same except the changes due to relative cell references.
 
 Connection should be defined using connection URL notation: DRIVER://CONNECIONT_PARAMETERS,
-where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@/dbname?charset=utf8&parseTime=True&loc=Local.
+where DRIVER is either "mysql" or "sqlite", e.g., mysql://user:password@tcp(SERVER:PORT)/dbname?charset=utf8&parseTime=True&loc=Local.
 More examples on connection parameter you can find at: https://github.com/go-sql-driver/mysql#examples.`,
 	// Run: func(c *cobra.Command, args []Args) {},
 }
@@ -78,9 +80,10 @@ func getConfig() {
 	awsAccessKeyID = viper.GetString("aws-access-key-id")
 	awsSecretAccessKey = viper.GetString("aws-secret-access-key")
 	url = viper.GetString("url")
-	color = viper.GetString("color")
+	// color = viper.GetString("color")
 	force = viper.GetBool("force")
 	dest = viper.GetString("dest")
+	skipHidden = viper.GetBool("skip-hidden")
 	isPlagiarisedCommentID = viper.GetInt("is-plagiarised-comment-id")
 	modelAnswerUserID = viper.GetInt("model-answer-user-id")
 	if !strings.HasPrefix(dest, "/") {
@@ -102,7 +105,10 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	flags := RootCmd.PersistentFlags()
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.extract-blocks.yaml)")
+	flags.StringVar(&sourceDir, "source-dir", "", "Source directory of input files for testing")
+	flags.StringVar(&destinationDir, "destination-dir", "", "Destination directory of output files for testing")
 	flags.BoolVarP(&testing, "test", "t", false, "Run in testing ignoring 'StudentAnswers'.")
+	flags.BoolVarP(&skipHidden, "skip-hidden", "", false, "Skip hidden worksheets.")
 	flags.CountVarP(&debugLevel, "debug", "d", "Show full stack trace on error.")
 	flags.CountVarP(&verboseLevel, "verbose", "v", "Verbose mode. Produce more output about what the program does.")
 	flags.BoolVarP(&model.DryRun, "dry", "D", false, "Dry run, run commands without performing and DB update or file changes.")
@@ -121,10 +127,12 @@ func init() {
 	viper.BindEnv("aws-region", "AWS_REGION")
 	viper.BindEnv("aws-access-key-id", "AWS_ACCESS_KEY_ID")
 	viper.BindEnv("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
+	viper.BindEnv("url", "DATABASE_URL")
 	viper.SetDefault("aws-region", "ap-south-1")
 	viper.SetDefault("dest", os.TempDir())
 	viper.SetDefault("is-plagiarised-comment-id", 12345)
 	viper.SetDefault("model-answer-user-id", 10000)
+	viper.SetDefault("skip-hidden", false)
 }
 
 // initConfig reads in config file and ENV variables if set.

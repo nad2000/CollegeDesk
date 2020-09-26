@@ -49,6 +49,7 @@ func init() {
 
 	flags.BoolP("force", "f", false, "Repeat extraction if files were already handle.")
 	flags.StringP("color", "c", defaultColor, "The block filling color.")
+	flags.IntVarP(&assignmentID, "assignment", "a", -1, "The assignment ID to process (-1 - process all assignments)")
 
 	viper.BindPFlag("color", flags.Lookup("color"))
 	viper.BindPFlag("force", flags.Lookup("force"))
@@ -56,6 +57,7 @@ func init() {
 
 func extractBlocks(cmd *cobra.Command, args []string) {
 
+	model.DebugLevel, model.VerboseLevel = debugLevel, verboseLevel
 	getConfig()
 	debugCmd(cmd)
 
@@ -91,10 +93,10 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 			if !model.DryRun {
 				Db.FirstOrCreate(&a, &a)
 			}
-			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, a.ID)
+			model.ExtractBlocksFromFile(excelFileName, color, force, verbose, skipHidden, a.ID)
 		}
 	} else {
-		manager := createS3Manager()
+		manager := createManager()
 		HandleAnswers(manager)
 	}
 }
@@ -105,7 +107,8 @@ func extractBlocks(cmd *cobra.Command, args []string) {
 func HandleAnswers(manager s3.FileManager) error {
 
 	model.ModelAnswerUserID = modelAnswerUserID
-	rows, err := model.RowsToProcess()
+	rows, err := model.RowsToProcess(assignmentID)
+
 	if err != nil {
 		log.WithError(err).Fatalf("Failed to retrieve list of source files to process.")
 	}
@@ -129,7 +132,7 @@ func HandleAnswers(manager s3.FileManager) error {
 			continue
 		}
 		log.Infof("Processing %q", fileName)
-		if _, err := model.ExtractBlocksFromFile(fileName, color, force, verbose, r.StudentAnswerID); err != nil {
+		if _, err := model.ExtractBlocksFromFile(fileName, color, force, verbose, skipHidden, r.StudentAnswerID); err != nil {
 			log.WithError(err).Errorln("Failed to process file: ", fileName)
 		} else {
 			fileCount++
